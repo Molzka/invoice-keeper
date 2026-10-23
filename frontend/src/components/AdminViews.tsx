@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, ApiError } from '../api/client';
+import { api, API_MODE, ApiError } from '../api/client';
+import { businessToday } from '../config/demo';
 import type { RecurringPayment, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
+import { PageHeader } from './PageHeader';
 
 export type AdminViewProps = {
   onChanged: () => void;
@@ -26,14 +28,6 @@ function calendarDate(date: string | null) {
   if (!date) return '—';
   const [year, month, day] = date.split('-');
   return `${day}.${month}.${year}`;
-}
-
-function todayMoscow() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(new Date());
-  const value = (type: string) => parts.find(part => part.type === type)?.value ?? '';
-  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function createdDate(value: string) {
@@ -127,10 +121,9 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
   }
 
   return <section aria-labelledby="recurring-heading">
-    <div className="section-head">
-      <div><span className="eyebrow">Повторения под контролем</span><h1 className="page-title" id="recurring-heading" tabIndex={-1}>Регулярные платежи<span className="title-dot">.</span></h1><p className="muted">Правила ежемесячных обязательств и их полная история.</p></div>
+    <PageHeader kind="recurring" id="recurring-heading" title="Регулярные платежи" eyebrow="Повторения под контролем" description="Правила ежемесячных обязательств и их полная история.">
       {isAdmin && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}
-    </div>
+    </PageHeader>
     <div className="panel">
       <div className="toolbar">
         <div className="segmented" role="group" aria-label="Состояние регулярных платежей">
@@ -164,7 +157,7 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<Currency>('RUB');
-  const [firstDueDate, setFirstDueDate] = useState(todayMoscow);
+  const [firstDueDate, setFirstDueDate] = useState(() => businessToday(API_MODE));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<unknown>(null);
   const [uncertain, setUncertain] = useState(false);
@@ -254,7 +247,9 @@ export function UsersView({ onChanged, notify, isAdmin }: AdminViewProps) {
 
   if (!isAdmin) return <Forbidden />;
   return <section aria-labelledby="users-heading">
-    <div className="section-head"><div><span className="eyebrow">Команда и доступ</span><h1 className="page-title" id="users-heading" tabIndex={-1}>Пользователи<span className="title-dot">.</span></h1><p className="muted">Дайте команде доступ к общему списку платежей.</p></div><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div>
+    <PageHeader kind="users" id="users-heading" title="Пользователи" eyebrow="Команда и доступ" description="Дайте команде доступ к общему списку платежей.">
+      <button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button>
+    </PageHeader>
     <div className="panel">
       <div className="toolbar"><h2 className="panel-title">Участники команды</h2><span className="pill">Обычные пользователи</span></div>
       {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем пользователей…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">+</span><h2>Пригласите первого участника</h2><p className="muted">Пользователи смогут смотреть платежи и отмечать оплату каждого периода.</p><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div> : <>
@@ -317,3 +312,4 @@ function UserForm({ user, onClose, onSaved, onCheck }: { user: User | null; onCl
     </form>
   </Drawer>;
 }
+
