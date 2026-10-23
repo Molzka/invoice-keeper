@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node and generated builds
+node_modules/
+dist/
+build/
+
+# Local configuration and private keys
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Logs and editor files
+*.log
+logs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
