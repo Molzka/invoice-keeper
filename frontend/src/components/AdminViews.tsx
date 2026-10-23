@@ -1,0 +1,319 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { api, ApiError } from '../api/client';
+import type { RecurringPayment, User } from '../types/api';
+import { Drawer, ErrorNotice, Pagination } from './UI';
+
+export type AdminViewProps = {
+  onChanged: () => void;
+  onHistory: (id: string, title: string) => void;
+  notify: (message: string) => void;
+  isAdmin: boolean;
+  createRequested?: number;
+  onCreateRequestHandled?: () => void;
+};
+
+type Page<T> = { items: T[]; total: number; limit: number; offset: number };
+type FieldErrors = Record<string, string>;
+type Currency = 'RUB' | 'USD' | 'EUR';
+const PAGE_SIZE = 10;
+
+function money(amount: string, currency: string) {
+  const [whole, decimal = '00'] = amount.split('.');
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0')},${decimal}\u00a0${currency}`;
+}
+
+function calendarDate(date: string | null) {
+  if (!date) return '—';
+  const [year, month, day] = date.split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function todayMoscow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find(part => part.type === type)?.value ?? '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+function createdDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: 'Europe/Moscow', day: '2-digit', month: 'short', year: 'numeric',
+  }).format(new Date(value));
+}
+
+function isCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= days[month - 1];
+}
+
+function fieldsFromError(error: unknown): FieldErrors {
+  if (!(error instanceof ApiError)) return {};
+  return Object.fromEntries(error.details.map(detail => [detail.field, detail.message]));
+}
+
+function resultUncertain(error: unknown) {
+  return error instanceof ApiError && ['TIMEOUT', 'NETWORK_ERROR'].includes(error.code);
+}
+
+function FieldMessage({ id, message }: { id: string; message?: string }) {
+  return message ? <span className="field-error" id={id} role="alert">{message}</span> : null;
+}
+
+function PlusIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
+}
+
+function Forbidden() {
+  return <div className="panel empty-state"><span className="eyebrow">Недостаточно прав</span><h2>Раздел доступен администратору</h2><p className="muted">Для управления пользователями нужна учётная запись администратора.</p></div>;
+}
+
+function UncertainCreate({ onCheck }: { onCheck: () => void }) {
+  return <div className="notice" role="alert"><strong>Результат создания пока неизвестен.</strong><p>Соединение прервалось до ответа сервера. Запись могла сохраниться. Сначала проверьте список, чтобы не создать дубликат.</p><button type="button" className="btn btn-secondary" onClick={onCheck}>Закрыть и проверить список</button></div>;
+}
+
+export function RecurringView({ onChanged, onHistory, notify, isAdmin, createRequested, onCreateRequestHandled }: AdminViewProps) {
+  const [activeFilter, setActiveFilter] = useState<'active' | 'all' | 'stopped'>('active');
+  const [offset, setOffset] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const [page, setPage] = useState<Page<RecurringPayment> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [creating, setCreating] = useState(false);
+  const [stopping, setStopping] = useState<RecurringPayment | null>(null);
+  const [busyStop, setBusyStop] = useState(false);
+  const [stopError, setStopError] = useState<unknown>(null);
+  const stopGuard = useRef(false);
+  useEffect(() => { if (isAdmin && createRequested) { setCreating(true); onCreateRequestHandled?.(); } }, [isAdmin, createRequested, onCreateRequestHandled]);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setLoadError(null);
+    api.listRecurringPayments({
+      limit: PAGE_SIZE, offset,
+      ...(activeFilter !== 'all' ? { is_active: activeFilter === 'active' } : {}),
+    }).then(result => {
+      if (!alive) return;
+      if (offset > 0 && result.items.length === 0 && result.total <= offset) {
+        setOffset(Math.max(0, Math.floor(Math.max(0, result.total - 1) / PAGE_SIZE) * PAGE_SIZE));
+        return;
+      }
+      setPage(result);
+    }).catch(error => { if (alive) setLoadError(error); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [activeFilter, offset, refresh]);
+
+  function reload() { setRefresh(value => value + 1); }
+  function changed() { reload(); onChanged(); }
+
+  async function confirmStop() {
+    if (!stopping || stopGuard.current) return;
+    stopGuard.current = true;
+    setBusyStop(true);
+    setStopError(null);
+    try {
+      await api.stopRecurringPayment(stopping.id);
+      setStopping(null);
+      notify('Повторение прекращено. История и существующие обязательства сохранены.');
+      changed();
+    } catch (error) { setStopError(error); }
+    finally { stopGuard.current = false; setBusyStop(false); }
+  }
+
+  return <section aria-labelledby="recurring-heading">
+    <div className="section-head">
+      <div><span className="eyebrow">Повторения под контролем</span><h1 className="page-title" id="recurring-heading" tabIndex={-1}>Регулярные платежи<span className="title-dot">.</span></h1><p className="muted">Правила ежемесячных обязательств и их полная история.</p></div>
+      {isAdmin && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}
+    </div>
+    <div className="panel">
+      <div className="toolbar">
+        <div className="segmented" role="group" aria-label="Состояние регулярных платежей">
+          {([['active', 'Активные'], ['all', 'Все платежи'], ['stopped', 'Прекращённые']] as const).map(([value, label]) => <button key={value} type="button" className={activeFilter === value ? 'segment active' : 'segment'} aria-pressed={activeFilter === value} onClick={() => { setOffset(0); setActiveFilter(value); }}>{label}</button>)}
+        </div>
+        <span className="muted">Ежемесячно · по МСК</span>
+      </div>
+      {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем регулярные платежи…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">↻</span><h2>{activeFilter === 'stopped' ? 'Прекращённых платежей пока нет' : 'Здесь появятся регулярные платежи'}</h2><p className="muted">{activeFilter === 'stopped' ? 'Когда повторение будет прекращено, его история останется доступна.' : isAdmin ? 'Добавьте аренду, сервер или подписку — система создаст отдельные периоды оплаты.' : 'Администратор может добавить ежемесячные обязательства команды.'}</p>{isAdmin && activeFilter !== 'stopped' && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}</div> : <>
+        <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма в месяц</th><th scope="col">Следующий срок</th><th scope="col">Состояние</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(payment => <tr key={payment.id}>
+          <td><div className="payment-title">{payment.title}</div><span className="muted table-caption">С {calendarDate(payment.first_due_date)} · {payment.anchor_day}-го числа</span></td>
+          <td className={`money ${payment.amount.split('.')[0].length > 9 ? 'money-large' : ''}`} data-label="Сумма в месяц">{money(payment.amount, payment.currency)}</td>
+          <td className="date-cell" data-label="Следующий срок">{calendarDate(payment.next_due_date)}<span className="muted table-caption">{payment.is_active ? 'Плановая дата' : 'Повторение остановлено'}</span></td>
+          <td data-label="Состояние"><span className={`status ${payment.is_active ? 'status-success' : 'status-neutral'}`}><span className="status-dot" />{payment.is_active ? 'Активен' : 'Прекращён'}</span></td>
+          <td><div className="inline-actions"><button className="btn btn-secondary btn-small" onClick={() => onHistory(payment.id, payment.title)} aria-label={`История платежа «${payment.title}»`}>История <span aria-hidden="true">↗</span></button>{isAdmin && payment.is_active && <button className="icon-button danger-text" title="Прекратить повторение" aria-label={`Прекратить повторение «${payment.title}»`} onClick={() => { setStopError(null); setStopping(payment); }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" stroke="currentColor" strokeWidth="1.6" /></svg></button>}</div></td>
+        </tr>)}</tbody></table></div>
+        <Pagination total={page.total} limit={page.limit} offset={page.offset} onPage={setOffset} />
+      </>}
+    </div>
+    <p className="section-note">Прекращение повторения сохраняет историю. Уже созданные периоды остаются в списке платежей и в сводке.</p>
+    {creating && <RecurringForm onClose={() => setCreating(false)} onCreated={() => { setCreating(false); setOffset(0); notify('Регулярный платёж добавлен. Периоды оплаты уже созданы.'); changed(); }} onCheck={() => { setCreating(false); setActiveFilter('all'); setOffset(0); reload(); }} />}
+    {stopping && <Drawer title="Прекратить повторение?" subtitle={stopping.title} onClose={() => { if (!busyStop) setStopping(null); }}>
+      <div className="notice"><strong>История сохранится.</strong><p>Новые периоды и напоминания по этому правилу больше не будут создаваться. Уже созданные периоды останутся в истории и сводке; их оплату по-прежнему можно исправлять.</p></div>
+      <p className="muted">Прекращение повторения не списывает существующие обязательства. Возобновить это правило через интерфейс v1 нельзя.</p>
+      {stopError != null && <ErrorNotice error={stopError} />}
+      <div className="form-actions"><button className="btn btn-secondary" disabled={busyStop} onClick={() => setStopping(null)}>Отмена</button><button className="btn btn-danger" disabled={busyStop} onClick={confirmStop}>{busyStop ? 'Прекращаем…' : 'Прекратить повторение'}</button></div>
+    </Drawer>}
+  </section>;
+}
+
+function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; onCreated: () => void; onCheck: () => void }) {
+  const [title, setTitle] = useState('');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<Currency>('RUB');
+  const [firstDueDate, setFirstDueDate] = useState(todayMoscow);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [error, setError] = useState<unknown>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const guard = useRef(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (guard.current || uncertain) return;
+    const nextErrors: FieldErrors = {};
+    if (!title.trim() || title.trim().length > 200) nextErrors.title = 'Введите название от 1 до 200 символов.';
+    if (!/^\d{1,12}\.\d{2}$/.test(amount) || /^0+\.00$/.test(amount)) nextErrors.amount = 'Введите сумму от 0.01 до 999999999999.99 с двумя знаками после точки.';
+    if (!isCalendarDate(firstDueDate)) nextErrors.first_due_date = 'Выберите действительную дату первого срока.';
+    setErrors(nextErrors);
+    setError(null);
+    if (Object.keys(nextErrors).length) return;
+    guard.current = true;
+    setBusy(true);
+    try {
+      await api.createRecurringPayment({ title: title.trim(), amount, currency, first_due_date: firstDueDate, periodicity: 'monthly' });
+      onCreated();
+    } catch (caught) {
+      setErrors(fieldsFromError(caught));
+      setError(caught);
+      setUncertain(resultUncertain(caught));
+    } finally { guard.current = false; setBusy(false); }
+  }
+
+  return <Drawer title="Новый регулярный платёж" subtitle="Добавьте обязательство один раз — дальше каждый месяц." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
+    <form onSubmit={submit} noValidate className="form-grid">
+      <label className="field" htmlFor="recurring-title"><span>Название платежа</span><input id="recurring-title" name="title" value={title} onChange={event => setTitle(event.target.value)} maxLength={200} placeholder="Например, аренда офиса" disabled={busy || uncertain} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? 'recurring-title-error' : undefined} required /><FieldMessage id="recurring-title-error" message={errors.title} /></label>
+      <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000.00" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Два знака после точки</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><select id="recurring-currency" value={currency} onChange={event => setCurrency(event.target.value as Currency)} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}><option value="RUB">RUB · рубль</option><option value="USD">USD · доллар</option><option value="EUR">EUR · евро</option></select><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
+      <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><input id="recurring-date" type="date" value={firstDueDate} onChange={event => setFirstDueDate(event.target.value)} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
+      <div className="field"><span>Периодичность</span><div className="static-field">↻ Каждый месяц</div><span className="field-hint">Если в месяце нет выбранного числа, сроком станет его последний день.</span><FieldMessage id="recurring-periodicity-error" message={errors.periodicity} /></div>
+      <div className="notice"><strong>Напоминания в Telegram</strong><p>Неоплаченные периоды будут напоминать о себе за 3 дня до срока. Для уже близкого или прошедшего срока напоминание готовится сразу.</p></div>
+      {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}
+      <div className="form-actions"><button className="btn btn-secondary" type="button" disabled={busy} onClick={() => uncertain ? onCheck() : onClose()}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Создаём…' : 'Добавить платёж'}</button></div>
+    </form>
+  </Drawer>;
+}
+
+export function UsersView({ onChanged, notify, isAdmin }: AdminViewProps) {
+  const [offset, setOffset] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const [page, setPage] = useState<Page<User> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [editing, setEditing] = useState<User | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
+  const [busyDelete, setBusyDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<unknown>(null);
+  const deleteGuard = useRef(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    setLoading(true);
+    setLoadError(null);
+    api.listUsers({ limit: PAGE_SIZE, offset }).then(result => {
+      if (!alive) return;
+      if (offset > 0 && result.items.length === 0 && result.total <= offset) {
+        setOffset(Math.max(0, Math.floor(Math.max(0, result.total - 1) / PAGE_SIZE) * PAGE_SIZE));
+        return;
+      }
+      setPage(result);
+    }).catch(error => { if (alive) setLoadError(error); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [isAdmin, offset, refresh]);
+
+  function reload() { setRefresh(value => value + 1); }
+  function changed() { reload(); onChanged(); }
+
+  async function confirmDelete() {
+    if (!deleting || deleteGuard.current) return;
+    deleteGuard.current = true;
+    setBusyDelete(true);
+    setDeleteError(null);
+    try {
+      await api.deleteUser(deleting.id);
+      setDeleting(null);
+      notify('Пользователь удалён. Платёжная история сохранена.');
+      changed();
+    } catch (error) { setDeleteError(error); }
+    finally { deleteGuard.current = false; setBusyDelete(false); }
+  }
+
+  if (!isAdmin) return <Forbidden />;
+  return <section aria-labelledby="users-heading">
+    <div className="section-head"><div><span className="eyebrow">Команда и доступ</span><h1 className="page-title" id="users-heading" tabIndex={-1}>Пользователи<span className="title-dot">.</span></h1><p className="muted">Дайте команде доступ к общему списку платежей.</p></div><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div>
+    <div className="panel">
+      <div className="toolbar"><h2 className="panel-title">Участники команды</h2><span className="pill">Обычные пользователи</span></div>
+      {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем пользователей…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">+</span><h2>Пригласите первого участника</h2><p className="muted">Пользователи смогут смотреть платежи и отмечать оплату каждого периода.</p><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div> : <>
+        <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Пользователь</th><th scope="col">Доступ</th><th scope="col">Дата создания</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(user => <tr key={user.id}><td><div className="user-cell"><span className="avatar" aria-hidden="true">{user.username.slice(0, 2).toUpperCase()}</span><strong className="payment-title">{user.username}</strong></div></td><td data-label="Доступ"><span className="status status-neutral">Пользователь</span><span className="muted table-caption">Просмотр и отметка оплаты</span></td><td className="date-cell" data-label="Дата создания">{createdDate(user.created_at)}</td><td><div className="inline-actions"><button className="btn btn-secondary btn-small" aria-label={`Изменить пользователя ${user.username}`} onClick={() => setEditing(user)}>Изменить</button><button className="icon-button danger-text" title="Удалить пользователя" aria-label={`Удалить пользователя ${user.username}`} onClick={() => { setDeleteError(null); setDeleting(user); }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button></div></td></tr>)}</tbody></table></div>
+        <Pagination total={page.total} limit={page.limit} offset={page.offset} onPage={setOffset} />
+      </>}
+    </div>
+    <p className="section-note">Учётная запись администратора задаётся в конфигурации сервера и защищена от изменения в этом разделе.</p>
+    {editing != null && <UserForm key={editing === 'new' ? 'new' : editing.id} user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { notify(editing === 'new' ? 'Пользователь добавлен.' : 'Изменения пользователя сохранены.'); setEditing(null); changed(); }} onCheck={() => { setEditing(null); setOffset(0); reload(); }} />}
+    {deleting && <Drawer title="Удалить пользователя?" subtitle={deleting.username} onClose={() => { if (!busyDelete) setDeleting(null); }}><div className="notice"><strong>Доступ будет отозван сразу.</strong><p>Все сессии пользователя завершатся. Его удаление не затронет платежи, отметки об оплате или историю команды.</p></div>{deleteError != null && <ErrorNotice error={deleteError} />}<div className="form-actions"><button className="btn btn-secondary" disabled={busyDelete} onClick={() => setDeleting(null)}>Отмена</button><button className="btn btn-danger" disabled={busyDelete} onClick={confirmDelete}>{busyDelete ? 'Удаляем…' : 'Удалить пользователя'}</button></div></Drawer>}
+  </section>;
+}
+
+function UserForm({ user, onClose, onSaved, onCheck }: { user: User | null; onClose: () => void; onSaved: () => void; onCheck: () => void }) {
+  const [username, setUsername] = useState(user?.username ?? '');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const guard = useRef(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (guard.current || uncertain) return;
+    const nextErrors: FieldErrors = {};
+    if (!/^[a-z0-9_.-]{3,64}$/.test(username)) nextErrors.username = 'От 3 до 64 символов: латинские строчные буквы, цифры, _, . и -.';
+    if ((!user || password !== '') && (password.length < 8 || password.length > 128)) nextErrors.password = 'Пароль должен содержать от 8 до 128 символов.';
+    if (user && username === user.username && password === '') nextErrors.username = 'Измените логин или укажите новый пароль.';
+    setErrors(nextErrors);
+    setError(null);
+    if (Object.keys(nextErrors).length) return;
+    guard.current = true;
+    setBusy(true);
+    try {
+      if (user) {
+        await api.updateUser(user.id, { ...(username !== user.username ? { username } : {}), ...(password !== '' ? { password } : {}) });
+      } else {
+        await api.createUser({ username, password });
+      }
+      setPassword('');
+      onSaved();
+    } catch (caught) {
+      const apiFields = fieldsFromError(caught);
+      if (caught instanceof ApiError && caught.code === 'USERNAME_TAKEN' && !apiFields.username) apiFields.username = 'Этот логин уже занят. Выберите другой.';
+      setErrors(apiFields);
+      setError(caught);
+      setUncertain(!user && resultUncertain(caught));
+    } finally { guard.current = false; setBusy(false); }
+  }
+
+  return <Drawer title={user ? 'Изменить пользователя' : 'Новый пользователь'} subtitle={user ? `Настройки доступа для ${user.username}` : 'Участник сможет просматривать платежи и отмечать оплату.'} onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
+    <form className="form-grid" noValidate onSubmit={submit}>
+      <label className="field" htmlFor="user-username"><span>Логин</span><input id="user-username" name="username" autoComplete="off" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} maxLength={64} placeholder="ivan.petrov" disabled={busy || uncertain} aria-invalid={Boolean(errors.username)} aria-describedby={errors.username ? 'user-username-error' : 'user-username-hint'} required /><span id="user-username-hint" className="field-hint">3–64 символа: a–z, 0–9, _, . и -</span><FieldMessage id="user-username-error" message={errors.username} /></label>
+      <label className="field" htmlFor="user-password"><span>{user ? 'Новый пароль' : 'Пароль'}</span><div className="password-field"><input id="user-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} maxLength={128} placeholder={user ? 'Оставьте пустым, чтобы сохранить' : 'Не менее 8 символов'} disabled={busy || uncertain} aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'user-password-error' : 'user-password-hint'} required={!user} /><button type="button" className="password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'} aria-pressed={showPassword}>{showPassword ? 'Скрыть' : 'Показать'}</button></div><span id="user-password-hint" className="field-hint">{user ? 'При смене пароля все текущие сессии этого пользователя завершатся.' : 'От 8 до 128 символов. Пробелы и регистр сохраняются.'}</span><FieldMessage id="user-password-error" message={errors.password} /></label>
+      <div className="notice"><strong>Доступ обычного пользователя</strong><p>Просмотр общего списка, истории и сводки; подтверждение, отмена и исправление даты оплаты. Управление правилами и участниками доступно администратору.</p></div>
+      {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}
+      <div className="form-actions"><button type="button" className="btn btn-secondary" onClick={() => uncertain ? onCheck() : onClose()} disabled={busy}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Сохраняем…' : user ? 'Сохранить изменения' : 'Добавить пользователя'}</button></div>
+    </form>
+  </Drawer>;
+}
