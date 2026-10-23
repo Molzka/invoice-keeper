@@ -24,6 +24,11 @@ build/
 id_rsa
 id_ed25519
 
+# Local database archives
+/backups/
+*.dump
+*.dump.partial
+
 # Logs and editor files
 *.log
 logs/

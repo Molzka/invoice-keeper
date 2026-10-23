@@ -85,6 +85,52 @@ jobs:
           test "$(sql 'SELECT marker FROM compose_check;')" = "$marker"
           echo "New container reused the same volume and preserved the row"
 
+      - name: Check database backup and restore
+        run: |
+          sql() {
+            docker compose --env-file .env.example exec -T postgres sh -c \
+              'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$1" -w -X -At -v ON_ERROR_STOP=1' sh "$1" <<< "$2"
+          }
+          backup() {
+            python3 scripts/db_backup.py --env-file .env.example "$@"
+          }
+
+          sql "$POSTGRES_DB" "CREATE TABLE backup_check (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, title text NOT NULL, amount numeric(14,2), due_date date, created_at timestamptz);
+            INSERT INTO backup_check (title, amount, due_date, created_at) VALUES ('Аренда, € и ₽', 45000.50, '2026-10-31', '2026-10-23T12:34:56Z');"
+          expected=$(sql "$POSTGRES_DB" 'SELECT row_to_json(t) FROM backup_check t ORDER BY id;')
+          archive=$(backup backup)
+          test -s "$archive"
+          git check-ignore "$archive"
+
+          sql "$POSTGRES_DB" "INSERT INTO backup_check (title) VALUES ('Added after backup');"
+          backup restore "$archive" invoice_keeper_restore
+          test "$(sql invoice_keeper_restore 'SELECT row_to_json(t) FROM backup_check t ORDER BY id;')" = "$expected"
+          test "$(sql invoice_keeper_restore "INSERT INTO backup_check (title) VALUES ('Sequence check') RETURNING id;" | head -n 1)" = "2"
+
+          if backup restore "$archive" invoice_keeper_restore > "$RUNNER_TEMP/restore-existing.log" 2>&1; then
+            echo "Restore accepted an existing database"
+            exit 1
+          fi
+          grep -q 'already exists' "$RUNNER_TEMP/restore-existing.log"
+          if backup restore "$archive" "$POSTGRES_DB" > "$RUNNER_TEMP/restore-working.log" 2>&1; then
+            echo "Restore accepted the working database"
+            exit 1
+          fi
+          grep -q 'Refusing to restore' "$RUNNER_TEMP/restore-working.log"
+
+          printf 'not-a-postgresql-archive' > "$RUNNER_TEMP/invalid.dump"
+          if backup restore "$RUNNER_TEMP/invalid.dump" invalid_restore > "$RUNNER_TEMP/restore-invalid.log" 2>&1; then
+            echo "Restore accepted an invalid archive"
+            exit 1
+          fi
+          grep -q 'valid archive' "$RUNNER_TEMP/restore-invalid.log"
+          test "$(sql "$POSTGRES_DB" "SELECT count(*) FROM pg_database WHERE datname = 'invalid_restore';")" = "0"
+          test "$(sql "$POSTGRES_DB" 'SELECT count(*) FROM backup_check;')" = "2"
+          test "$(sql invoice_keeper_restore 'SELECT count(*) FROM backup_check;')" = "2"
+          test "$(sql "$POSTGRES_DB" 'SELECT row_to_json(t) FROM backup_check t WHERE id = 1;')" = "$expected"
+          test -z "$(find backups -name '*.partial' -print)"
+          echo "Backup, restored values, sequence and refusal checks passed"
+
       - name: Show PostgreSQL logs on failure
         if: failure()
         run: |
