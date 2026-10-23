@@ -1,0 +1,13 @@
+node_modules
+dist
+docs
+README.md
+.git
+.codex
+.agents
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.log
+**/*.tsbuildinfo
