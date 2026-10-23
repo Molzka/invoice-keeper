@@ -1,9 +1,9 @@
 # Графика
 
-`public/glass-calendar.png` — PNG с прозрачным фоном, 1280×1280, созданный ImageGen для этого интерфейса. Используется локально, внешней загрузки изображений или шрифтов нет.
+Все иллюстрации интерфейса теперь построены как native SVG в `src/components/SectionArt.tsx`. Это единая серия бумажных документов: инвойсы, повторения, журнал, карточки доступа и защищённый вход. Белая бумага, графитовые линии, чёрные печати и маленький светло-бирюзовый акцент. Растровый стеклянный календарь из первой версии больше не используется.
 
-Промпт:
+Логотип выполнен HTML/CSS с буквой é и чёрной иконкой ReceiptText из Lucide. При наведении или клавиатурном фокусе название раскрывается по словам. Поддерживаются касание и prefers-reduced-motion.
 
-> One exquisitely polished 3D transparent cyan glass calendar with two dark charcoal binder rings and a floating charcoal checkmark receipt tucked near its lower right edge; thick transparent aqua glass slab; rounded corners; faint calendar grid; no text or numbers; slight isometric view; luxury tech product render; genuine transparent background; bright clear studio lighting.
+Иллюстрации и шрифты не загружаются с внешних адресов. Шрифтовой стек: Inter / Segoe UI / Arial. Скриншоты в `docs/screenshots/v2/` получены из работающего обновлённого интерфейса.
 
-Логотип выполнен средствами HTML/CSS с буквой é и чёрной иконкой ReceiptText из Lucide. Интерфейс использует компоненты Lucide и системный шрифтовой стек Inter / Segoe UI / Arial. Растровые скриншоты в `docs/screenshots` получены из работающего интерфейса в браузере.
+Файл `public/glass-calendar.png` сохранён для совместимости существующей HTTP-проверки Docker в общем репозитории. В экранах v2 он не используется.
