@@ -13,7 +13,8 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test src/config/demo.test.mjs"
   },
   "dependencies": {
     "lucide-react": "1.61.0",
