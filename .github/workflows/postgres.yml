@@ -1,0 +1,99 @@
+name: PostgreSQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres:
+    name: PostgreSQL / Compose
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      COMPOSE_PROJECT_NAME: invoice-keeper-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_DB: invoice_keeper_ci
+      POSTGRES_USER: invoice_keeper_ci
+      POSTGRES_PORT: "0"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate temporary database password
+        run: |
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+
+      - name: Validate Compose configuration
+        run: |
+          docker compose --env-file .env.example config --quiet
+          if POSTGRES_PASSWORD="" docker compose --env-file .env.example config --quiet 2> "$RUNNER_TEMP/postgres-config.log"; then
+            echo "Compose accepted an empty password"
+            exit 1
+          fi
+          grep -q 'POSTGRES_PASSWORD' "$RUNNER_TEMP/postgres-config.log"
+
+      - name: Start PostgreSQL
+        run: docker compose --env-file .env.example up -d --wait --wait-timeout 90 postgres
+
+      - name: Check SQL authentication and data persistence
+        run: |
+          sql() {
+            docker compose --env-file .env.example exec -T postgres sh -c \
+              'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -w -X -At -v ON_ERROR_STOP=1' <<< "$1"
+          }
+
+          test "$(sql "SELECT current_database(), current_user, current_setting('TimeZone');")" = "invoice_keeper_ci|invoice_keeper_ci|UTC"
+
+          if docker compose --env-file .env.example exec -T postgres sh -c \
+            'PGPASSWORD=incorrect-password exec psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -w -X -At -v ON_ERROR_STOP=1 -c "SELECT 1"' \
+            > "$RUNNER_TEMP/postgres-auth.log" 2>&1; then
+            echo "PostgreSQL accepted an incorrect password"
+            exit 1
+          fi
+          grep -q 'password authentication failed' "$RUNNER_TEMP/postgres-auth.log"
+          echo "SQL connection and password checks passed"
+
+          before=$(docker compose --env-file .env.example ps -q postgres)
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$before")" = "healthy"
+          volume=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql"}}{{.Name}}{{end}}{{end}}' "$before")
+          test "$volume" = "${COMPOSE_PROJECT_NAME}_postgres_data"
+
+          marker=$(openssl rand -hex 16)
+          sql "CREATE TABLE compose_check (marker text NOT NULL); INSERT INTO compose_check VALUES ('$marker');"
+          docker compose --env-file .env.example down
+          docker compose --env-file .env.example up -d --wait --wait-timeout 90 postgres
+
+          after=$(docker compose --env-file .env.example ps -q postgres)
+          test "$before" != "$after"
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql"}}{{.Name}}{{end}}{{end}}' "$after")" = "$volume"
+          test "$(sql 'SELECT marker FROM compose_check;')" = "$marker"
+          echo "New container reused the same volume and preserved the row"
+
+      - name: Show PostgreSQL logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env.example ps -a
+          docker compose --env-file .env.example logs --no-color --tail=80 postgres
+
+      - name: Remove temporary database
+        if: always()
+        run: |
+          docker compose --env-file .env.example down --volumes --timeout 10
+          test -z "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
+          test -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
