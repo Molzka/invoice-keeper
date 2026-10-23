@@ -1,5 +1,8 @@
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+load_dotenv(Path(__file__).parent / ".env")
+
 import asyncio
 from reminders import send_reminder
 
@@ -11,8 +14,11 @@ CASES = [
     ("<b>bold</b> & _italic_ *star* [link](http://x) `code` #tag", "1", "USD", "2026-11-20"),
 ]
 
+
 async def main():
     for case in CASES:
         print(await send_reminder(*case))
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+    asyncio.run(main())
