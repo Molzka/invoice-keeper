@@ -2,7 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, ChevronLeft, ChevronRight, Inbox, X } from 'lucide-react'
-import { ApiError } from '../api/client'
+import { ApiError, isMissingPaymentRoute } from '../api/client'
+
 
 export function Drawer({ title, subtitle, children, onClose, canClose = true }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; canClose?: boolean }) {
   const titleId = useId()
@@ -69,9 +70,22 @@ export function ErrorNotice({ error, onRetry }: { error: unknown; onRetry?: () =
   const apiError = error instanceof ApiError ? error : null
   const forbidden = apiError?.status === 403
   const waiting = apiError?.code === 'PERIODS_NOT_READY'
-  const title = waiting ? 'Сводка ещё не готова' : forbidden ? 'Недостаточно прав' : 'Не удалось выполнить запрос'
-  const message = waiting ? 'Сервер восстанавливает периоды платежей. Итоги появятся после завершения — сейчас они не равны нулю.' : error instanceof Error ? error.message : 'Попробуйте повторить запрос.'
-  return <div className={waiting ? 'summary-error' : 'error-banner'} role="alert"><AlertCircle size={20} aria-hidden="true"/><div><h3>{title}</h3><p>{message}</p>{apiError?.details.length ? <ul>{apiError.details.map((item, index) => <li key={index}>{item.message}</li>)}</ul> : null}{onRetry && <button type="button" className="btn btn-secondary btn-small" onClick={onRetry}>Повторить загрузку</button>}</div></div>
+  const missingPaymentApi = isMissingPaymentRoute(error)
+  const title = waiting ? 'Сводка ещё не готова' : forbidden ? 'Недостаточно прав' : missingPaymentApi ? 'Платёжный API недоступен' : 'Не удалось выполнить запрос'
+  const message = waiting
+    ? 'Сервер восстанавливает периоды платежей. Итоги появятся после завершения — сейчас они не равны нулю.'
+    : missingPaymentApi
+      ? 'Сервер не нашёл маршрут этого раздела. Проверьте подключение платёжного модуля и адрес API. Данные и итоги сейчас недоступны.'
+      : error instanceof Error ? error.message : 'Попробуйте повторить запрос.'
+  return <div className={waiting ? 'summary-error' : 'error-banner'} role="alert">
+    <AlertCircle size={20} aria-hidden="true"/>
+    <div>
+      <h3>{title}</h3><p>{message}</p>
+      {missingPaymentApi && apiError?.request && <details className="api-request-detail"><summary>Технические детали</summary><code>{apiError.request.method} {apiError.request.path} · HTTP {apiError.status}</code></details>}
+      {apiError?.details.length ? <ul>{apiError.details.map((item, index) => <li key={index}>{item.message}</li>)}</ul> : null}
+      {onRetry && <button type="button" className="btn btn-secondary btn-small" onClick={onRetry}>Повторить загрузку</button>}
+    </div>
+  </div>
 }
 export function Pagination({ total, limit, offset, onPage }: { total: number; limit: number; offset: number; onPage: (offset: number) => void }) {
   const start = total ? offset + 1 : 0
