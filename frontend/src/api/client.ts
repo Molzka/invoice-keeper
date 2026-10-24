@@ -1,6 +1,7 @@
+import type { PaymentsBudget, PaymentReceipt, ReceiptListFilters, ReceiptPage, OneTimePaymentRequest } from '../types/extras'
 import type { AuditFilters, AuditPage } from '../types/activity'
 import type {
-  AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
+  AmountCurrencyUpdateRequest, RecurringAmountUpdateResponse, AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
   RecurringPayment, RecurringPaymentFilters, SummaryParams, UpdateOccurrenceRequest, UpdateUserRequest, User,
   LoginResponse, MfaMethod, MfaFactor, SecurityState, SecurityMutation, TotpSetup, TelegramSetup, TelegramSetupStatus, ReauthRequest, RegistrationRequest, RegistrationStatus, RegistrationPayload,
@@ -44,21 +45,23 @@ function retryAfterSeconds(response: Response): number | undefined {
   if (value === null || !/^\d+$/.test(value)) return undefined
   return Math.min(Number(value), 86400)
 }
-async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+async function request<T>(path: string, method = 'GET', body?: unknown, options: { file?: File; blob?: boolean } = {}): Promise<T> {
   const requestContext = { method: method.toUpperCase(), path: path.split(/[?#]/, 1)[0] }
   const expectedUser = sessionUser
   const pendingAuth = path.startsWith('/auth/mfa/')
   const headers = new Headers({ Accept: 'application/json' })
   if (body !== undefined) headers.set('Content-Type', 'application/json')
+  if (options.file) { headers.set('Content-Type', options.file.type); headers.set('X-Filename', encodeURIComponent(options.file.name)) }
   const token = pendingAuth ? pendingCsrf : csrfToken
-  if (['POST', 'PATCH', 'DELETE'].includes(method) && path !== '/auth/login' && token) headers.set('X-CSRF-Token', token)
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && path !== '/auth/login' && token) headers.set('X-CSRF-Token', token)
   const abort = new AbortController()
   const timeout = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS)
   try {
     // Exactly one attempt. Creating POSTs cannot be safely replayed after an unknown outcome.
     const response = await transport(BASE_URL + path, { method, headers, credentials: 'include', signal: abort.signal,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }), cache: 'no-store' })
+      ...(options.file ? { body: options.file } : body === undefined ? {} : { body: JSON.stringify(body) }), cache: 'no-store' })
     if (response.status === 204) return undefined as T
+    if (response.ok && options.blob) return await response.blob() as T
     let payload: unknown
     try { payload = await response.json() } catch (error) {
       if (response.status === 401 && !pendingAuth && sessionUser === expectedUser) clearSession()
@@ -72,7 +75,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       if (response.status === 401 && !pendingAuth && sessionUser === expectedUser && !(path === '/auth/login' && error.code === 'INVALID_CREDENTIALS')) {
         clearSession()
       }
-      if (response.status === 403 && error.code === 'CSRF_FAILED' && expectedUser && sessionUser === expectedUser && ['POST', 'PATCH', 'DELETE'].includes(method)) {
+      if (response.status === 403 && error.code === 'CSRF_FAILED' && expectedUser && sessionUser === expectedUser && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
         await recoverCsrfSession(expectedUser, requestContext)
         throw new ApiError(403, 'CSRF_RECOVERED', 'Сессия обновлена. Действие не выполнено — повторите его вручную.', [], requestContext)
       }
@@ -81,7 +84,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     return payload as T
   } catch (error) {
     if (error instanceof ApiError) throw error
-    if (abort.signal.aborted) throw new ApiError(0, 'TIMEOUT', 'Сервер не ответил вовремя. Перед повторным созданием проверьте список: запись могла сохраниться.', [], requestContext)
+    if (abort.signal.aborted) throw new ApiError(0, 'TIMEOUT', method === 'GET' ? 'Сервер не ответил вовремя. Повторите загрузку.' : 'Сервер не ответил вовремя. Изменение могло сохраниться — проверьте актуальные данные перед повторной попыткой.', [], requestContext)
     throw new ApiError(0, 'NETWORK_ERROR', 'Нет связи с сервером. Проверьте подключение и попробуйте ещё раз.', [], requestContext)
   } finally { clearTimeout(timeout) }
 }
@@ -111,6 +114,17 @@ async function recoverCsrfSession(expectedUser: AuthResponse['user'], context: {
 }
 
 export const api = {
+  getBudget: (params: { year: number; month?: number }) => request<PaymentsBudget>('/payments/budget' + query(params)),
+  listReceipts: (filters: ReceiptListFilters = {}) => request<ReceiptPage>('/payment-receipts' + query(filters)),
+  getReceipt: (id: string) => request<PaymentReceipt | null>('/payment-occurrences/' + encodeURIComponent(id) + '/receipt'),
+  saveReceiptLink: (id: string, url: string) => request<PaymentReceipt>('/payment-occurrences/' + encodeURIComponent(id) + '/receipt', 'PUT', { url }),
+  saveReceiptFile: (id: string, file: File) => request<PaymentReceipt>('/payment-occurrences/' + encodeURIComponent(id) + '/receipt', 'PUT', undefined, { file }),
+  deleteReceipt: (id: string) => request<void>('/payment-occurrences/' + encodeURIComponent(id) + '/receipt', 'DELETE'),
+  downloadReceipt: (id: string) => request<Blob>('/payment-occurrences/' + encodeURIComponent(id) + '/receipt/file', 'GET', undefined, { blob: true }),
+  receiptFileUrl: (id: string) => BASE_URL + '/payment-occurrences/' + encodeURIComponent(id) + '/receipt/file',
+  createOneTimePayment: (payload: OneTimePaymentRequest) => request<PaymentOccurrence>('/one-time-payments', 'POST', payload),
+  deleteOccurrence: (id: string) => request<void>('/payment-occurrences/' + encodeURIComponent(id), 'DELETE'),
+  archiveRecurringPayment: (id: string) => request<void>('/recurring-payments/' + encodeURIComponent(id) + '/archive', 'POST'),
   listAuditEvents: (filters: AuditFilters): Promise<AuditPage> => request<AuditPage>('/audit-events' + query(filters)),
   async login(payload: LoginRequest): Promise<LoginResponse> { const data = await request<LoginResponse>('/auth/login', 'POST', payload); if ('mfa_required' in data) { pendingCsrf = data.csrf_token; csrfToken = null; sessionUser = null } else installSession(data); return data },
   async verifyMfa(method: MfaMethod, code: string): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/mfa/verify', 'POST', { method, code }); installSession(data); return data },
@@ -137,6 +151,8 @@ export const api = {
   listOccurrences: (filters: OccurrenceFilters = {}) => request<Page<PaymentOccurrence>>('/payment-occurrences' + query(filters)),
   getOccurrence: (id: string) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id)),
   updateOccurrence: (id: string, payload: UpdateOccurrenceRequest) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id), 'PATCH', payload),
+  updateOccurrenceAmount: (id: string, payload: AmountCurrencyUpdateRequest) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id) + '/amount', 'PATCH', { amount: payload.amount, currency: payload.currency }),
+  updateRecurringAmount: (id: string, payload: AmountCurrencyUpdateRequest) => request<RecurringAmountUpdateResponse>('/recurring-payments/' + encodeURIComponent(id), 'PATCH', { amount: payload.amount, currency: payload.currency }),
   listRecurringPayments: (filters: RecurringPaymentFilters = {}) => request<Page<RecurringPayment>>('/recurring-payments' + query(filters)),
   createRecurringPayment: (payload: CreateRecurringPaymentRequest) => request<RecurringPayment>('/recurring-payments', 'POST', payload),
   stopRecurringPayment: (id: string) => request<void>('/recurring-payments/' + encodeURIComponent(id), 'DELETE'),

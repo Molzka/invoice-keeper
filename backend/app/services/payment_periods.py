@@ -14,6 +14,8 @@ from app.services.payment_calendar import monthly_due_dates, next_due_date
 
 
 def active_generation_end(payment: RecurringPayment, today: date) -> date:
+    if payment.periodicity == "once":
+        return payment.first_due_date
     month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
     return max(month_end, next_due_date(payment.first_due_date, payment.anchor_day, today))
 
@@ -24,7 +26,11 @@ async def create_missing_periods(
     through: date,
     timezone_name: str = DEFAULT_TIMEZONE,
 ) -> None:
-    due_dates = monthly_due_dates(payment.first_due_date, payment.anchor_day, through)
+    due_dates = (
+        ([payment.first_due_date] if through >= payment.first_due_date else [])
+        if payment.periodicity == "once"
+        else monthly_due_dates(payment.first_due_date, payment.anchor_day, through)
+    )
     if not due_dates:
         return
     existing = set(
@@ -46,6 +52,9 @@ async def create_missing_periods(
                         "id": uuid4(),
                         "recurring_payment_id": payment.id,
                         "due_date": due_date,
+                        "amount": payment.amount,
+                        "currency": payment.currency,
+                        "amount_is_custom": False,
                         "status": "unpaid",
                     }
                     for due_date in batch

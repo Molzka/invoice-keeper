@@ -1,0 +1,69 @@
+/* Aeza 2026: official palette and typography; semantic red is the user-requested exception. */
+@font-face { font-family: 'Exo 2'; src: url('/fonts/Exo2-Variable.ttf') format('truetype'); font-style: normal; font-weight: 100 900; font-display: swap; }
+@font-face { font-family: Inter; src: url('/fonts/Inter-Variable.ttf') format('truetype'); font-style: normal; font-weight: 100 900; font-display: swap; }
+:root {
+  font-family: 'Exo 2', 'Segoe UI', sans-serif;
+  color-scheme: light;
+  color: var(--ink); background: var(--bg);
+  --ink: #000; --bg: #f4f4f4; --surface: #fff; --cyan: #4cc6f1;
+  --navy: #182d48; --pink: #eccfdb; --orange: #e97c35;
+  --accent-ink: #182d48; --tone-depth: #000;
+  --solid: #000; --on-solid: #fff;
+  --muted: color-mix(in srgb, var(--ink) 65%, var(--surface));
+  --surface-muted: var(--bg);
+  --line: color-mix(in srgb, var(--ink) 13%, var(--surface));
+  --green: var(--accent-ink); --green-bg: color-mix(in srgb, var(--cyan) 12%, var(--surface));
+  --amber: color-mix(in srgb, var(--orange) 60%, var(--tone-depth)); --amber-bg: color-mix(in srgb, var(--orange) 10%, var(--surface));
+  --red: #a52936; --red-bg: color-mix(in srgb, var(--red) 8%, var(--surface));
+  --shadow: 0 7px 26px #00000004;
+}
+.page-title, .section-head h2, .drawer-head h2 { font-family: 'Exo 2', sans-serif; font-weight: 800; }
+.page-title { letter-spacing: -.045em; }
+.eyebrow, .field > label, .field > .label, .field small, .payment-period,
+.data-table th, .footer-note, .summary-caption, .summary-navigation-hint {
+  font-family: Inter, 'Segoe UI', sans-serif;
+}
+:focus-visible { outline-color: var(--accent-ink); }
+::selection { color: var(--ink); background: color-mix(in srgb, var(--cyan) 40%, var(--surface)); }
+/* The approved keycap remains fixed. Only the separate product name is disclosed. */
+.brand-slot { width: 260px; flex: 1 1 260px; min-width: 52px; }
+.brand-logo { width: 52px; height: 52px; gap: 30px; border: 0; border-radius: 0; background: transparent; overflow: visible; box-shadow: none; }
+.brand-mark { display: block; width: 52px; height: 52px; object-fit: contain; flex: 0 0 52px; }
+.brand-logo .brand-name { display: flex; gap: 4px; margin-left: 0; max-width: 0; font-family: 'Exo 2', sans-serif; font-size: 17px; letter-spacing: -.04em; }
+.brand-logo:is(:hover, :focus-visible, [data-open='true']) { width: 250px; gap: 30px; }
+.brand-logo:is(:hover, :focus-visible, [data-open='true']) .brand-name { max-width: 168px; opacity: 1; font-size: 17px; }
+.brand-logo .brand-word { white-space: nowrap; }
+.brand-name-dot { color: var(--cyan); }
+/* Eight sections use a clear second row rather than squeezing controls. */
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 30px 24px; padding-top: 30px; padding-bottom: 0; }
+.topbar .user-menu { margin-left: auto; }
+.topbar .main-nav { order: 3; flex: 1 0 100%; min-width: 0; gap: 5px; justify-content: flex-start; padding: 0 0 14px; margin: 0; width: 100%; overflow-x: auto; scrollbar-width: thin; scroll-padding-inline: 12px; }
+.topbar .nav-link { flex: 0 0 auto; padding: 12px 16px; color: var(--muted); }
+.topbar .nav-link.active { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 15%, var(--surface)); }
+.topbar .nav-link:hover { color: var(--ink); background: var(--bg); }
+.user-avatar, .avatar { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }
+.status-success { color: var(--accent-ink); border-color: color-mix(in srgb, var(--cyan) 30%, var(--surface)); background: color-mix(in srgb, var(--cyan) 11%, var(--surface)); }
+.status.status-late { color: var(--accent-ink); border-color: color-mix(in srgb, var(--orange) 24%, var(--surface)); background: color-mix(in srgb, var(--orange) 8%, var(--surface)); }
+.status-check { color: var(--accent-ink); border-color: color-mix(in srgb, var(--navy) 40%, var(--surface)); }
+.status-copy > span { color: color-mix(in srgb, var(--orange) 60%, var(--tone-depth)); }
+.status-warning { color: color-mix(in srgb, var(--orange) 60%, var(--tone-depth)); background: var(--amber-bg); }
+.btn-danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 25%, var(--surface)); background: var(--surface); }
+.btn-danger:hover:not(:disabled) { background: var(--red-bg); border-color: color-mix(in srgb, var(--red) 45%, var(--surface)); }
+.currency-card { --currency-accent: var(--cyan); --currency-soft: color-mix(in srgb, var(--cyan) 10%, var(--surface)); --currency-line: color-mix(in srgb, var(--cyan) 30%, var(--surface)); --currency-ink: var(--navy); }
+.currency-card[data-currency='USD'] { --currency-accent: var(--navy); --currency-soft: color-mix(in srgb, var(--navy) 5%, var(--surface)); --currency-line: color-mix(in srgb, var(--navy) 16%, var(--surface)); --currency-ink: var(--navy); }
+.currency-card[data-currency='EUR'] { --currency-accent: var(--orange); --currency-soft: color-mix(in srgb, var(--orange) 7%, var(--surface)); --currency-line: color-mix(in srgb, var(--orange) 23%, var(--surface)); --currency-ink: color-mix(in srgb, var(--orange) 55%, var(--tone-depth)); }
+.currency-amount { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.calendar-status-legend [data-status='status-success']::before { background: var(--navy); }
+.calendar-status-legend [data-status='status-warning']::before { background: var(--orange); }
+@media (max-width: 1000px) { .topbar .user-menu > div:not(.user-avatar) { display: flex; } }
+@media (max-width: 760px) {
+ .topbar { gap: 30px 12px; padding: 30px 30px 0; }
+ .topbar .brand-slot { flex: 1 1 52px; width: auto; }
+ .topbar .user-menu { gap: 8px; }
+ .topbar .user-menu > div:not(.user-avatar) { display: none; }
+ .topbar .main-nav { flex: 1 0 calc(100% + 60px); width: calc(100% + 60px); margin: 0 -30px; padding: 0 20px 12px; scrollbar-width: none; }
+ .topbar .nav-link { min-height: 44px; padding: 11px 13px; font-size: 12px; }
+ .brand-logo:is(:hover, :focus-visible, [data-open='true']) { width: 240px; z-index: 5; background: var(--surface); }
+ .brand-logo:is(:hover, :focus-visible, [data-open='true']) .brand-name { max-width: 158px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .brand-logo, .brand-logo * { transition: none; animation: none; } }

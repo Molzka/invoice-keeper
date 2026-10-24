@@ -53,6 +53,7 @@ class PaymentSourceAdapter:
             .where(
                 RecurringPayment.id == payment_id,
                 PaymentOccurrence.status == "unpaid",
+                PaymentOccurrence.is_cancelled.is_(False),
             )
             .order_by(PaymentOccurrence.due_date, PaymentOccurrence.id)
         )
@@ -83,9 +84,9 @@ class PaymentSourceAdapter:
             occurrence_id=occurrence.id,
             due_date=occurrence.due_date,
             title=payment.title,
-            amount=payment.amount,
-            currency=payment.currency,
-            is_active=payment.is_active,
+            amount=occurrence.amount,
+            currency=occurrence.currency,
+            is_active=payment.is_active and not occurrence.is_cancelled,
             is_paid=occurrence.status == "paid",
         )
 

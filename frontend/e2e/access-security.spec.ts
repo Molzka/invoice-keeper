@@ -111,6 +111,28 @@ test('заявка с локальной CAPTCHA, одобрение, добро
     await security.getByRole('button', { name: 'Готово', exact: true }).click();
     await expect(security.getByText('Вход защищён', { exact: true })).toBeVisible();
     await capture(page, info, 'security-enabled');
+    // A 5xx can arrive after a mutation. Require a state read before another attempt.
+    const disableRoute = '**/api/v1/auth/security/disable';
+    await page.route(disableRoute, route => route.fulfill({
+      status: 503, contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'API_NOT_AVAILABLE', message: 'API временно недоступен.', details: [] } }),
+    }));
+    try {
+      await security.getByRole('button', { name: 'Отключить дополнительную защиту', exact: true }).click();
+      await security.getByLabel('Текущий пароль', { exact: true }).fill(password);
+      await security.getByLabel('Подтвердить с помощью').selectOption('recovery');
+      await security.getByLabel('Резервный код', { exact: true }).fill(recovery[9]);
+      await responseAfter(page, 'POST', '/auth/security/disable', 503,
+        () => security.getByRole('button', { name: 'Отключить дополнительную защиту', exact: true }).click());
+      await expect(security.getByRole('alert').filter({ hasText: 'Результат действия не подтверждён' })).toBeVisible();
+      await expect(security.getByRole('button', { name: 'Отключить дополнительную защиту', exact: true })).toBeDisabled();
+      await responseAfter(page, 'GET', '/auth/security', 200,
+        () => security.getByRole('button', { name: 'Обновить сведения о защите', exact: true }).click());
+      await expect(security.getByText('Вход защищён', { exact: true })).toBeVisible();
+      await expect(security.getByRole('alert').filter({ hasText: 'Результат действия не подтверждён' })).toHaveCount(0);
+    } finally {
+      await page.unroute(disableRoute);
+    }
     await security.getByRole('button', { name: 'Закрыть панель' }).click();
     await page.getByRole('button', { name: 'Выйти из системы' }).click();
 

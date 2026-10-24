@@ -37,7 +37,9 @@ async def _assert_active_history_complete(
     date_to: date,
 ) -> None:
     expected: dict[UUID, set[date]] = {
-        rule.id: set(monthly_due_dates(rule.first_due_date, rule.anchor_day, date_to))
+        rule.id: ({rule.first_due_date} if rule.first_due_date <= date_to else set())
+        if rule.periodicity == "once"
+        else set(monthly_due_dates(rule.first_due_date, rule.anchor_day, date_to))
         for rule in rules
     }
     expected = {payment_id: dates for payment_id, dates in expected.items() if dates}
@@ -82,18 +84,21 @@ async def get_payments_summary(
     overdue = and_(PaymentOccurrence.status == "unpaid", PaymentOccurrence.due_date < today)
     result = await db.execute(
         select(
-            RecurringPayment.currency,
-            func.sum(RecurringPayment.amount),
-            func.sum(case((PaymentOccurrence.status == "paid", RecurringPayment.amount), else_=0)),
+            PaymentOccurrence.currency,
+            func.sum(PaymentOccurrence.amount),
+            func.sum(case((PaymentOccurrence.status == "paid", PaymentOccurrence.amount), else_=0)),
             func.sum(
-                case((PaymentOccurrence.status == "unpaid", RecurringPayment.amount), else_=0)
+                case((PaymentOccurrence.status == "unpaid", PaymentOccurrence.amount), else_=0)
             ),
-            func.sum(case((overdue, RecurringPayment.amount), else_=0)),
+            func.sum(case((overdue, PaymentOccurrence.amount), else_=0)),
         )
         .select_from(PaymentOccurrence)
         .join(RecurringPayment, RecurringPayment.id == PaymentOccurrence.recurring_payment_id)
-        .where(PaymentOccurrence.due_date.between(date_from, date_to))
-        .group_by(RecurringPayment.currency)
+        .where(
+            PaymentOccurrence.due_date.between(date_from, date_to),
+            PaymentOccurrence.is_cancelled.is_(False),
+        )
+        .group_by(PaymentOccurrence.currency)
     )
     totals = {
         currency: {

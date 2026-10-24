@@ -32,6 +32,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test frontend HTTP verification contract
+        timeout-minutes: 1
+        run: python3 -m unittest discover -s scripts/checks -p test_frontend_http_check.py -v
+
       # Compose validates the PostgreSQL settings even when only frontend starts.
       - name: Generate temporary Compose password
         run: |

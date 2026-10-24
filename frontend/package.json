@@ -14,13 +14,13 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test src/config/demo.test.mjs src/api/client.test.mjs src/lib/recurring-inputs.test.mjs src/lib/payment-route.test.mjs src/lib/password-fields.test.mjs src/mocks/transport.test.mjs src/lib/payment-calendar.test.mjs src/lib/activity-route.test.mjs src/mocks/activity.test.mjs",
+    "test": "node --test src/config/demo.test.mjs src/api/client.test.mjs src/lib/recurring-inputs.test.mjs src/lib/payment-route.test.mjs src/lib/password-fields.test.mjs src/mocks/transport.test.mjs src/lib/payment-calendar.test.mjs src/lib/activity-route.test.mjs src/mocks/activity.test.mjs src/mocks/payment-editing.test.mjs src/lib/receipt-links.test.mjs src/lib/theme.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
     "altcha": "3.5.0",
-    "lucide-react": "1.61.0",
     "qrcode": "1.5.4",
     "react": "19.3.1",
     "react-dom": "19.3.1"

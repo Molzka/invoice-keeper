@@ -1,7 +1,8 @@
 import asyncio
 import json
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from itertools import count
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -15,6 +16,18 @@ from .conftest import PASSWORD
 
 pytestmark = pytest.mark.asyncio
 NEW_PASSWORD = "new-audit-password-456"
+
+
+@pytest.fixture(autouse=True)
+def ordered_audit_clock(monkeypatch):
+    # UUID ties are intentionally arbitrary; isolate mutation assertions from coarse OS clock precision.
+    start = datetime.now(UTC)
+    ticks = count()
+    monkeypatch.setattr(
+        AuditEvent.__table__.c.occurred_at.default,
+        "arg",
+        lambda _context: start + timedelta(microseconds=next(ticks)),
+    )
 
 
 async def events(app):

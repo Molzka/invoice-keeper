@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-25",
+  "stage": "registration-and-MFA-merge",
+  "checks": [
+    {
+      "check": "HTTP regressions",
+      "status": "passed",
+      "seconds": 2.08,
+      "timeout_seconds": 30
+    },
+    {
+      "check": "TypeScript",
+      "status": "passed",
+      "seconds": 7.12,
+      "timeout_seconds": 40
+    },
+    {
+      "check": "ESLint",
+      "status": "passed",
+      "seconds": 4.17,
+      "timeout_seconds": 40
+    },
+    {
+      "check": "Frontend tests",
+      "status": "passed",
+      "seconds": 2.5,
+      "timeout_seconds": 40
+    },
+    {
+      "check": "Real build",
+      "status": "passed",
+      "seconds": 1.58,
+      "timeout_seconds": 40
+    },
+    {
+      "check": "Checker Ruff",
+      "status": "passed",
+      "seconds": 0.36,
+      "timeout_seconds": 20
+    }
+  ],
+  "backend_focused": {
+    "passed": 16,
+    "failed": 0,
+    "seconds": 22.6,
+    "timeout_seconds": 60
+  },
+  "openapi": "passed",
+  "alembic_heads": [
+    "0010_payment_lifecycle"
+  ],
+  "backend_lint_format": "passed",
+  "frontend_unit_tests": 68
+}

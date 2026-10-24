@@ -13,6 +13,7 @@ class Assets(HTMLParser):
     def __init__(self):
         super().__init__()
         self.paths = set()
+        self.icons = set()
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -20,6 +21,8 @@ class Assets(HTMLParser):
             self.paths.add(attrs["src"])
         if tag == "link" and attrs.get("rel") == "stylesheet":
             self.paths.add(attrs.get("href", ""))
+        if tag == "link" and "icon" in attrs.get("rel", "").split():
+            self.icons.add(attrs.get("href", ""))
 
 
 def require(condition, message):
@@ -56,18 +59,41 @@ def check(base_url, api_ready=False):
 
     parser = Assets()
     parser.feed(index.decode("utf-8"))
-    require(any(path.endswith(".js") for path in parser.paths), "No built JavaScript in index.html")
+    require(any(path.startswith("/assets/") and path.endswith(".js") for path in parser.paths),
+            "No built JavaScript in index.html")
     require(any(path.endswith(".css") for path in parser.paths), "No built stylesheet in index.html")
     for path in sorted(parser.paths):
-        require(path.startswith("/assets/") and not urlsplit(path).netloc,
-                f"Expected a local built asset, got {path}")
+        address = urlsplit(path)
+        require((path.startswith("/assets/") or path == "/theme-init.js")
+                and not address.netloc and not address.scheme and not address.query and not address.fragment,
+                f"Expected a local built asset or theme bootstrap, got {path}")
         types = {"text/css"} if path.endswith(".css") else {"text/javascript", "application/javascript"}
         body, headers = fetch(base_url, path, 200, types)
-        require(body and not body.lstrip().startswith(b"<!doctype html>"), f"{path}: missing asset contents")
-        require("immutable" in headers.get("Cache-Control", ""), f"{path}: missing immutable cache policy")
+        require(body and not body.lstrip().lower().startswith(b"<!doctype html"), f"{path}: missing asset contents")
+        cache = headers.get("Cache-Control", "").lower()
+        if path == "/theme-init.js":
+            # This stable URL runs before React; it must revalidate after deployment.
+            require("no-cache" in cache and "immutable" not in cache,
+                    f"{path}: theme bootstrap must revalidate instead of using immutable caching")
+        else:
+            require("immutable" in cache, f"{path}: missing immutable cache policy")
 
-    fetch(base_url, "/favicon.svg", 200, {"image/svg+xml"})
-    fetch(base_url, "/glass-calendar.png", 200, {"image/png"})
+    require(parser.icons, "No favicon in index.html")
+    icon_types = {
+        "png": {"image/png"}, "svg": {"image/svg+xml"}, "webp": {"image/webp"},
+        "ico": {"image/x-icon", "image/vnd.microsoft.icon"},
+        "jpg": {"image/jpeg"}, "jpeg": {"image/jpeg"},
+    }
+    for path in sorted(parser.icons):
+        address = urlsplit(path)
+        require(path.startswith("/") and not address.netloc and not address.scheme
+                and not address.query and not address.fragment,
+                f"Expected a local favicon, got {path}")
+        types = icon_types.get(path.rsplit(".", 1)[-1].lower())
+        require(types, f"Unsupported favicon format: {path}")
+        body, _ = fetch(base_url, path, 200, types)
+        require(body and not body.lstrip().lower().startswith(b"<!doctype html"),
+                f"{path}: missing favicon contents")
     health, _ = fetch(base_url, "/healthz", 200, {"text/plain"})
     require(health == b"ok\n", "Unexpected frontend health response")
 

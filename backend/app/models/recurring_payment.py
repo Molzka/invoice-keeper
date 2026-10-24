@@ -26,7 +26,7 @@ class RecurringPayment(Base):
         CheckConstraint("title ~ '[^[:space:]]'", name="title"),
         CheckConstraint("amount BETWEEN 0.01 AND 999999999999.99", name="amount"),
         CheckConstraint("currency IN ('RUB', 'USD', 'EUR')", name="currency"),
-        CheckConstraint("periodicity = 'monthly'", name="periodicity"),
+        CheckConstraint("periodicity IN ('monthly', 'once')", name="periodicity"),
         CheckConstraint("anchor_day BETWEEN 1 AND 31", name="anchor_day"),
         CheckConstraint(
             "anchor_day = EXTRACT(DAY FROM first_due_date)::integer",
@@ -39,11 +39,15 @@ class RecurringPayment(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    amount_effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     first_due_date: Mapped[date] = mapped_column(Date, nullable=False)
     periodicity: Mapped[str] = mapped_column(String(16), nullable=False)
     anchor_day: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False

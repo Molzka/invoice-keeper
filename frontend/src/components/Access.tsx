@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { FormEvent, ReactNode } from 'react'
-import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import type { FormEvent } from 'react'
+import { ShieldCheck } from './BrandIcons'
 import { api, API_MODE, ApiError, BASE_URL } from '../api/client'
 import type { AuthResponse, MfaChallenge, MfaMethod } from '../types/api'
-import { DEMO_DATE_LABEL } from '../config/demo'
-import { SectionArt } from './SectionArt'
-import { ErrorNotice } from './UI'
+import { BrandLogin } from './BrandLogin'
 
 const methodNames: Record<MfaMethod, string> = { totp: 'Приложение-аутентификатор', telegram: 'Telegram', recovery: 'Резервный код' }
 function subscribeRoute(callback: () => void) { window.addEventListener('hashchange', callback); return () => window.removeEventListener('hashchange', callback) }
@@ -90,24 +88,12 @@ function Challenge({ challenge, onLogin, onCancel }: { challenge: MfaChallenge; 
   return <><h1 className="login-heading">Подтвердите вход</h1><p className="login-caption">Введите код подключённого способа защиты. Рабочее пространство откроется после проверки.</p>{error && <div className="error-banner" role="alert">{error}</div>}{expired ? <p role="alert">Время подтверждения истекло. Вернитесь ко входу и введите пароль заново.</p> : <form onSubmit={e => { e.preventDefault(); void run(async () => onLogin(await api.verifyMfa(method, code.trim())) ) }}><div className="field"><label htmlFor="login-method">Способ подтверждения</label><select id="login-method" value={method} disabled={busy} onChange={e => { setMethod(e.target.value as MfaMethod); setCode(''); setNotice(''); setError('') }}>{challenge.methods.map(item => <option key={item} value={item}>{methodNames[item]}</option>)}</select></div>{method === 'telegram' && <button className="btn btn-secondary access-send" type="button" disabled={busy || now < retryAt} onClick={() => void run(async () => { const sent = await api.sendLoginTelegram(); setRetryAt(Date.now() + sent.retry_after * 1000); setNotice('Код отправлен в личный чат с ботом.') })}>{now < retryAt ? `Отправить снова через ${Math.ceil((retryAt - now) / 1000)} с` : 'Отправить код в Telegram'}</button>}{notice && <p role="status">{notice}</p>}<div className="field"><label htmlFor="login-code">{method === 'recovery' ? 'Резервный код' : 'Код подтверждения'}</label><input id="login-code" value={code} onChange={e => setCode(e.target.value)} autoComplete="one-time-code" inputMode={method === 'recovery' ? 'text' : 'numeric'} required disabled={busy}/><small>{method === 'recovery' ? 'Каждый резервный код можно использовать один раз.' : 'Код действует ограниченное время.'}</small></div><button className="btn btn-primary" type="submit" disabled={busy || now < verifyRetryAt}>{busy ? 'Проверяем…' : now < verifyRetryAt ? `Повторить через ${Math.ceil((verifyRetryAt - now) / 1000)} с` : 'Подтвердить вход'}</button></form>}<button className="text-button access-back" type="button" disabled={busy} onClick={() => void run(async () => { try { await api.cancelMfa() } catch { /* A pending login grants no access and expires on the server; local back must remain usable. */ } onCancel() })}>Вернуться ко входу</button></>
 }
 
-export function Access({ brand, onLogin, restoreError, onRestore }: { brand: ReactNode; onLogin: (session: AuthResponse) => void; restoreError: unknown; onRestore: () => void }) {
+export function Access({ onLogin, restoreError, onRestore }: { onLogin: (session: AuthResponse) => void; restoreError: unknown; onRestore: () => void }) {
   const registration = useSyncExternalStore(subscribeRoute, accessRoute)
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<unknown>(null)
-  const [fields, setFields] = useState<Record<string, string>>({})
   const [challenge, setChallenge] = useState<MfaChallenge | null>(null)
-  const guard = useRef(false)
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    if (guard.current) return
-    guard.current = true; setBusy(true); setError(null); setFields({})
-    try { const data = await api.login({ username, password }); setPassword(''); if ('mfa_required' in data) setChallenge(data); else onLogin(data) }
-    catch (reason) { setError(reason); if (reason instanceof ApiError) setFields(Object.fromEntries(reason.details.map(item => [item.field, item.message]))) }
-    finally { guard.current = false; setBusy(false) }
-  }
-  const back = () => { window.location.hash = 'payments'; setError(null) }
-  return <div className="login-page"><section className="login-art" aria-label="Invoice Keeper">{brand}<SectionArt kind="login" className="login-scene"/><div><p className="eyebrow">Invoice Keeper</p><h2>Платежи<br/>под контролем.</h2><p>Ближайшие сроки, история оплат и напоминания — всё в одном месте.</p></div></section><main className="login-card"><div className="login-brand">{brand}</div><p className="eyebrow">Доступ команды</p>{challenge ? <Challenge challenge={challenge} onLogin={onLogin} onCancel={() => { setChallenge(null); setError(null) }}/> : registration ? <Registration onBack={back}/> : <><h1 className="login-heading">Вход в систему</h1><p className="login-caption">Войдите в свою учётную запись, чтобы управлять регулярными платежами.</p>{restoreError ? <ErrorNotice error={restoreError} onRetry={onRestore}/> : null}{error ? <div className="error-banner" role="alert">{error instanceof Error ? error.message : 'Не удалось войти'}</div> : null}<form onSubmit={submit}><div className="field"><label htmlFor="login-username">Логин</label><input id="login-username" name="username" autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required disabled={busy} aria-invalid={Boolean(fields.username)}/>{fields.username && <span className="field-error">{fields.username}</span>}</div><div className="field"><label htmlFor="login-password">Пароль</label><div className="password-field"><input id="login-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} aria-invalid={Boolean(fields.password)}/><button type="button" className="password-toggle" aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div>{fields.password && <span className="field-error">{fields.password}</span>}</div><button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Входим…' : 'Войти'}</button></form><a className="access-back" href="#request-access" aria-disabled={busy} onClick={event => { if (busy) { event.preventDefault(); return } setPassword(''); setError(null) }}>Нет доступа? Отправить заявку</a>{API_MODE === 'mock' && <aside className="login-demo"><p><strong>Демонстрация интерфейса</strong></p><p>Выберите роль — данные для входа заполнятся автоматически.</p><button type="button" disabled={busy} onClick={() => { setUsername('admin'); setPassword('Admin123!'); setError(null) }}>Администратор</button><button type="button" disabled={busy} onClick={() => { setUsername('ivan'); setPassword('example-password-only'); setError(null) }}>Пользователь</button><p>Демо-данные по состоянию на {DEMO_DATE_LABEL}.</p></aside>}</>}<p className="login-status"><ShieldCheck size={15}/> Доступ только для участников команды</p></main></div>
+  const back = () => { window.location.hash = 'payments' }
+  const content = challenge
+    ? <Challenge challenge={challenge} onLogin={onLogin} onCancel={() => setChallenge(null)}/>
+    : registration ? <Registration onBack={back}/> : undefined
+  return <BrandLogin onLogin={onLogin} onMfaChallenge={setChallenge} accessContent={content} restoreError={restoreError} onRestore={onRestore}/>
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import QRCode from 'qrcode'
-import { Copy, Download, ShieldCheck } from 'lucide-react'
+import { Copy, Download, ShieldCheck } from './BrandIcons'
 import { api, API_MODE, ApiError } from '../api/client'
 import type { MfaFactor, MfaMethod, SecurityMutation, SecurityState, TelegramSetup, TelegramSetupStatus, TotpSetup, User } from '../types/api'
 import { Drawer, ErrorNotice } from './UI'
@@ -48,7 +48,7 @@ export function SecurityDrawer({ user, onClose, onPassword, onChanged }: { user:
   async function run(task: () => Promise<void>) {
     if (guard.current) return
     guard.current = true; setBusy(true); setError(null)
-    try { await task() } catch (reason) { if (mounted.current) { setError(reason); if (reason instanceof ApiError) { if (reason.retryAfterSeconds) { if (reason.code === 'MFA_RESEND_TOO_SOON') setRetryAt(Date.now() + reason.retryAfterSeconds * 1000); else setSubmitRetryAt(Date.now() + reason.retryAfterSeconds * 1000) } if (['TIMEOUT', 'NETWORK_ERROR', 'CSRF_REFRESH_FAILED', 'INVALID_RESPONSE'].includes(reason.code)) setCheckRequired(true) } } }
+    try { await task() } catch (reason) { if (mounted.current) { setError(reason); if (reason instanceof ApiError) { if (reason.retryAfterSeconds) { if (reason.code === 'MFA_RESEND_TOO_SOON') setRetryAt(Date.now() + reason.retryAfterSeconds * 1000); else setSubmitRetryAt(Date.now() + reason.retryAfterSeconds * 1000) } if (reason.status === 0 || reason.status >= 500 || ['TIMEOUT', 'NETWORK_ERROR', 'CSRF_REFRESH_FAILED', 'INVALID_RESPONSE'].includes(reason.code)) setCheckRequired(true) } } }
     finally { guard.current = false; if (mounted.current) setBusy(false) }
   }
   function reset() { setAction(null); setPassword(''); setCode(''); setTotp(null); setQr(''); setTelegram(null); setTelegramStatus(null); setError(null); setNotice('') }

@@ -64,17 +64,21 @@ async def get_payments_budget(
         if occurrence is None:
             continue
         existing_dates[rule.id].add(occurrence.due_date)
-        totals = monthly[occurrence.due_date.month][rule.currency]
-        totals["planned"] += rule.amount
-        totals[occurrence.status] += rule.amount
+        if occurrence.is_cancelled:
+            continue
+        totals = monthly[occurrence.due_date.month][occurrence.currency]
+        totals["planned"] += occurrence.amount
+        totals[occurrence.status] += occurrence.amount
         if occurrence.status == "unpaid" and occurrence.due_date < today:
-            totals["overdue"] += rule.amount
+            totals["overdue"] += occurrence.amount
 
     for rule in rules.values():
         if not rule.is_active:
             continue
         for number in months:
             due_date = due_date_in_month(rule.anchor_day, year, number)
+            if rule.periodicity == "once" and due_date != rule.first_due_date:
+                continue
             if due_date < rule.first_due_date or due_date in existing_dates[rule.id]:
                 continue
             if due_date <= complete_through:

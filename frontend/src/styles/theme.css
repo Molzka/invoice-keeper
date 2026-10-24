@@ -1,0 +1,115 @@
+/* Theme semantics keep the Aeza palette intact while surfaces and text adapt. */
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #000;
+  --surface: color-mix(in srgb, #f4f4f4 7%, #000);
+  --surface-muted: color-mix(in srgb, #f4f4f4 10%, #000);
+  --ink: #f4f4f4;
+  --accent-ink: color-mix(in srgb, #4cc6f1 40%, #f4f4f4);
+  --tone-depth: #f4f4f4;
+  --solid: #f4f4f4;
+  --on-solid: #000;
+  --muted: color-mix(in srgb, var(--ink) 71%, var(--surface));
+  --line: color-mix(in srgb, var(--ink) 17%, var(--surface));
+  --green: var(--accent-ink);
+  --green-bg: color-mix(in srgb, var(--cyan) 10%, var(--surface));
+  --amber: color-mix(in srgb, var(--orange) 65%, #f4f4f4);
+  --amber-bg: color-mix(in srgb, var(--orange) 12%, var(--surface));
+  --red: color-mix(in srgb, #a52936 45%, #eccfdb);
+  --red-bg: color-mix(in srgb, var(--red) 12%, var(--surface));
+  --shadow: 0 8px 30px #00000040;
+}
+html, body { background: var(--bg); color: var(--ink); }
+input, select, textarea { color-scheme: inherit; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+:focus-visible { outline-color: var(--accent-ink); }
+.theme-control { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+.theme-toggle { display: inline-grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface); transition: color 180ms, background-color 180ms, border-color 180ms; }
+.theme-toggle[aria-pressed='true'] { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); border-color: color-mix(in srgb, var(--cyan) 45%, var(--surface)); }
+.theme-toggle:hover:not(:disabled) { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 8%, var(--surface)); border-color: color-mix(in srgb, var(--cyan) 48%, var(--surface)); transform: none; }
+.theme-toggle > svg { width: 19px; height: 19px; }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+/* Primary actions invert as a monochrome pair; their geometry does not change. */
+.btn-primary, :is(.app-shell, .drawer-backdrop) .btn-primary { color: var(--on-solid); background-color: var(--solid); border-color: var(--solid); }
+html[data-theme='dark'] .btn-primary, html[data-theme='dark'] :is(.app-shell, .drawer-backdrop) .btn-primary {
+  color: var(--on-solid);
+  background-color: var(--solid);
+  background-image: linear-gradient(115deg, var(--solid) 0%, var(--solid) 38%, color-mix(in srgb, var(--solid) 85%, var(--cyan)) 65%, var(--solid) 100%);
+  border-color: var(--solid);
+  box-shadow: none;
+}
+html[data-theme='dark'] .btn-primary:is(:hover, :focus-visible):not(:disabled), html[data-theme='dark'] :is(.app-shell, .drawer-backdrop) .btn-primary:is(:hover, :focus-visible):not(:disabled) { color: var(--on-solid); background-color: var(--solid); border-color: var(--cyan); box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 35%, transparent); }
+html[data-theme='dark'] .drawer-backdrop { background: #000000a6; }
+html[data-theme='dark'] .drawer { box-shadow: -16px 0 70px #00000066; }
+html[data-theme='dark'] .ik-field-popover { box-shadow: 0 16px 44px #00000070, 0 3px 10px #00000040; }
+html[data-theme='dark'] .brand-section-icon { color: var(--accent-ink); }
+html[data-theme='dark'] .brand-section-tile { fill: var(--surface); }
+html[data-theme='dark'] .brand-pattern-lines { color: var(--ink); }
+html[data-theme='dark'] .currency-card[data-currency='USD'] { --currency-accent: var(--pink); --currency-soft: color-mix(in srgb, var(--pink) 7%, var(--surface)); --currency-line: color-mix(in srgb, var(--pink) 25%, var(--surface)); --currency-ink: var(--pink); }
+html[data-theme='dark'] .currency-card[data-currency='EUR'] { --currency-ink: var(--amber); }
+html[data-theme='dark'] .summary-error, html[data-theme='dark'] .amount-edit-uncertain { color: var(--amber); }
+html[data-theme='dark'] .error-banner, html[data-theme='dark'] .field-error, html[data-theme='dark'] .query-error { color: var(--red); }
+html[data-theme='dark'] .status-warning, html[data-theme='dark'] .status.status-late, html[data-theme='dark'] .status-copy > span { color: var(--amber); }
+html[data-theme='dark'] .budget-page { --budget-navy: var(--accent-ink); }
+html[data-theme='dark'] :is(.budget-chart-paid, .budget-key-paid, .budget-progress > span) { background: var(--pink); }
+.budget-chart-tooltip { background: var(--solid); color: var(--on-solid); }
+html[data-theme='dark'] .receipt-summary-icon { color: var(--accent-ink); }
+/* Login shares the same semantics; its layout and brand pattern stay in its own stylesheet. */
+.aeza-login { color: var(--ink); background: var(--surface); }
+.aeza-login-story { background: var(--bg); }
+.aeza-login :is(.aeza-login-eyebrow, .aeza-login-story-caption, .aeza-login-story-footer, .aeza-login-story-copy h2 > span, .aeza-login-security svg) { color: var(--accent-ink); }
+.aeza-login :is(.aeza-login-form-heading > p:last-child, .aeza-login-password-toggle, .aeza-login-demo p, .aeza-login-security) { color: var(--muted); }
+.aeza-login-topics > span { border-color: var(--line); background: color-mix(in srgb, var(--surface) 75%, transparent); }
+.aeza-login-field input { color: var(--ink); background: var(--surface); border-color: var(--line); }
+.aeza-login-field input:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ink) 60%, var(--surface)); }
+.aeza-login-field input:focus { border-color: var(--accent-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cyan) 24%, transparent); }
+.aeza-login-field input[aria-invalid='true'] { border-color: var(--red); }
+.aeza-login-field input:disabled, .aeza-login-password-toggle:hover:not(:disabled) { background: var(--bg); }
+.aeza-login-password-toggle:hover:not(:disabled) { color: var(--ink); }
+.aeza-login-submit { color: var(--on-solid); background: var(--solid); border-color: var(--solid); }
+.aeza-login-submit:hover:not(:disabled) { color: var(--on-solid); background: color-mix(in srgb, var(--solid) 85%, var(--cyan)); border-color: var(--solid); }
+.aeza-login button:focus-visible { outline-color: var(--accent-ink); }
+.aeza-login-demo { background: var(--bg); border-color: var(--line); }
+.aeza-login-demo-title > span { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 20%, var(--surface)); }
+.aeza-login-demo-roles button { color: var(--ink); background: var(--surface); border-color: var(--line); }
+.aeza-login-demo-roles button:hover:not(:disabled) { background: var(--surface); border-color: var(--accent-ink); }
+.aeza-login-error { color: var(--red); background: var(--red-bg); border-color: color-mix(in srgb, var(--red) 30%, var(--surface)); }
+.aeza-login-pattern { color: var(--ink); }
+/* Currency art stays anchored; colour feedback replaces the old floating/rotation effect. */
+.currency-card .currency-art-plate, .currency-card:hover .currency-art-plate { transform: none; }
+.currency-card:hover { box-shadow: var(--shadow); }
+@media (prefers-reduced-motion: reduce) { .theme-toggle { transition: none; } }
+
+/* The theme menu stays outside navigation scrolling and is keyboard reachable. */
+.theme-control { position: relative; z-index: 150; }
+.theme-control > summary { list-style: none; cursor: pointer; user-select: none; }
+.theme-control > summary::-webkit-details-marker { display: none; }
+.theme-control[open] > summary { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); border-color: color-mix(in srgb, var(--cyan) 45%, var(--surface)); }
+.theme-options { position: absolute; z-index: 500; top: calc(100% + 10px); right: 0; width: 220px; max-width: calc(100vw - 32px); min-width: 0; margin: 0; padding: 12px 8px 8px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: 0 12px 35px #00000020; }
+.theme-options > legend { float: left; width: 100%; margin: 0 0 10px; padding: 0 8px 9px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: Inter, sans-serif; font-size: 10px; font-weight: 600; line-height: 1.6; }
+.theme-option { display: flex; clear: both; align-items: center; gap: 10px; min-height: 44px; padding: 9px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); cursor: pointer; font-size: 12px; line-height: 1.4; }
+.theme-option + .theme-option { margin-top: 6px; }
+.theme-option > input { appearance: none; -webkit-appearance: none; flex: 0 0 16px; width: 16px; height: 16px; min-width: 16px; margin: 0; padding: 0; border: 1.5px solid color-mix(in srgb, var(--ink) 35%, var(--surface)); border-radius: 50%; background: var(--surface); cursor: pointer; }
+.theme-option > input:checked { border: 5px solid var(--accent-ink); }
+.theme-option > svg { flex: 0 0 18px; width: 18px; height: 18px; }
+.theme-option:not(:has(input:checked)):hover { color: var(--ink); background: var(--surface-muted); border-color: var(--line); }
+.theme-option:has(input:checked) { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 13%, var(--surface)); border-color: color-mix(in srgb, var(--cyan) 52%, var(--line)); }
+.theme-option:has(input:checked):hover { background: color-mix(in srgb, var(--cyan) 17%, var(--surface)); border-color: var(--accent-ink); }
+.theme-option:has(input:focus-visible) { border-color: var(--accent-ink); }
+.theme-option > input:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+.aeza-login-main { position: relative; }
+.aeza-login-theme { position: absolute; top: 24px; right: 24px; z-index: 150; }
+html[data-theme='dark'] .theme-options { box-shadow: 0 12px 35px #00000070; }
+html[data-theme='dark'] .currency-card { --currency-ink: var(--accent-ink); }
+html[data-theme='dark'] .currency-card[data-currency='USD'] { --currency-ink: var(--pink); }
+html[data-theme='dark'] .currency-card[data-currency='EUR'] { --currency-ink: var(--amber); }
+html[data-theme='dark'] .toast { background: var(--solid); color: var(--on-solid); }
+html[data-theme='dark'] :is(.ik-field-trigger, .field input, .field select, .field textarea):is(:focus-visible, :focus, [data-open='true']) { border-color: var(--accent-ink); }
+@media (max-width: 760px) { .aeza-login-theme { top: 14px; right: 20px; } .aeza-login-main { padding-top: 78px; } }
+
+@media (prefers-reduced-motion: no-preference) { .theme-control[open] .theme-options { animation: theme-menu-arrive 160ms ease-out both; transform-origin: top right; } }
+@keyframes theme-menu-arrive { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+.field input::placeholder, .field textarea::placeholder, .aeza-login-field input::placeholder, .ik-date-placeholder { color: var(--muted); }
+
+.user-menu .theme-toggle { width:44px; min-width:44px; height:44px; }

@@ -12,11 +12,13 @@ from app.api.dependencies import (
     require_json_request,
 )
 from app.schemas.payments import (
+    AmountCurrencyUpdate,
     IsoDate,
     PaymentOccurrenceList,
     PaymentOccurrenceRead,
     PaymentsSummary,
     PaymentStateUpdate,
+    RecurringAmountUpdateResponse,
     RecurringPaymentCreate,
     RecurringPaymentList,
     RecurringPaymentRead,
@@ -30,7 +32,9 @@ from app.services.payments import (
     recurring_payment_data,
     stop_recurring_payment,
     today_in_timezone,
+    update_occurrence_amount,
     update_payment_state,
+    update_recurring_amount,
 )
 
 
@@ -96,10 +100,18 @@ async def get_recurring_payments(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     is_active: bool | None = None,
+    periodicity: Literal["monthly", "once"] | None = None,
+    include_archived: bool = False,
 ) -> dict:
     today = today_in_timezone(request.app.state.settings.app_timezone)
     items, total = await list_recurring_payments(
-        db, today, limit=limit, offset=offset, is_active=is_active
+        db,
+        today,
+        limit=limit,
+        offset=offset,
+        is_active=is_active,
+        periodicity=periodicity,
+        include_archived=include_archived,
     )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -142,6 +154,7 @@ async def get_payment_occurrences(
     currency: Literal["RUB", "USD", "EUR"] | None = None,
     recurring_payment_id: UUID | None = None,
     is_overdue: bool | None = None,
+    include_cancelled: bool = False,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict:
@@ -155,6 +168,7 @@ async def get_payment_occurrences(
         currency=currency,
         recurring_payment_id=recurring_payment_id,
         is_overdue=is_overdue,
+        include_cancelled=include_cancelled,
         limit=limit,
         offset=offset,
     )
@@ -216,4 +230,57 @@ async def payments_summary(
         date_from,
         date_to,
         request.app.state.settings.app_timezone,
+    )
+
+
+@router.patch(
+    "/payment-occurrences/{occurrence_id}/amount",
+    response_model=PaymentOccurrenceRead,
+    summary="Изменить сумму и валюту неоплаченного периода",
+    dependencies=[Depends(require_json_request)],
+    responses={
+        403: error_response("FORBIDDEN", "Требуются права администратора"),
+        404: error_response("PAYMENT_OCCURRENCE_NOT_FOUND", "Период платежа не найден"),
+        409: error_response("PAYMENT_ALREADY_PAID", "Оплаченный период защищён от изменения"),
+    },
+)
+async def patch_payment_occurrence_amount(
+    occurrence_id: UUID,
+    payload: AmountCurrencyUpdate,
+    admin: AdminUser,
+    _csrf: Csrf,
+    db: DbSession,
+    request: Request,
+) -> dict:
+    today = today_in_timezone(request.app.state.settings.app_timezone)
+    return await update_occurrence_amount(db, occurrence_id, payload, today, actor=admin)
+
+
+@router.patch(
+    "/recurring-payments/{payment_id}",
+    response_model=RecurringAmountUpdateResponse,
+    summary="Изменить сумму и валюту регулярного платежа со следующего месяца",
+    dependencies=[Depends(require_json_request)],
+    responses={
+        403: error_response("FORBIDDEN", "Требуются права администратора"),
+        404: error_response("RECURRING_PAYMENT_NOT_FOUND", "Регулярный платёж не найден"),
+        409: error_response("RECURRING_PAYMENT_STOPPED", "Регулярный платёж прекращён"),
+    },
+)
+async def patch_recurring_payment_amount(
+    payment_id: UUID,
+    payload: AmountCurrencyUpdate,
+    admin: AdminUser,
+    _csrf: Csrf,
+    db: DbSession,
+    request: Request,
+) -> dict:
+    today = today_in_timezone(request.app.state.settings.app_timezone)
+    return await update_recurring_amount(
+        db,
+        payment_id,
+        payload,
+        today,
+        actor=admin,
+        timezone_name=request.app.state.settings.app_timezone,
     )

@@ -36,6 +36,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test frontend HTTP verification contract
+        timeout-minutes: 1
+        run: python3 -m unittest discover -s scripts/checks -p test_frontend_http_check.py -v
+
       - name: Generate temporary credentials
         run: |
           database_password="$(openssl rand -hex 24)@:/#%"

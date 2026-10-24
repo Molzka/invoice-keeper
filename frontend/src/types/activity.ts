@@ -1,10 +1,12 @@
 import type { Page } from './api'
 
-export const AUDIT_ACTIONS = ['payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'payment.receipt_updated', 'payment.receipt_deleted', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'registration.approved', 'registration.rejected', 'account.mfa_enabled', 'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'] as const
+export const AUDIT_ACTIONS = ['payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'payment.receipt_updated', 'payment.receipt_deleted', 'payment.amount_changed', 'payment.terms_changed', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'registration.approved', 'registration.rejected', 'account.mfa_enabled', 'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'] as const
 export type AuditAction = typeof AUDIT_ACTIONS[number]
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  'payment.deleted': 'Удалён платёж', 'payment.period_deleted': 'Удалён период платежа',
   'payment.created': 'Создан платёж', 'payment.stopped': 'Платёж прекращён',
   'payment.paid': 'Отмечена оплата', 'payment.unpaid': 'Отменена оплата',
+  'payment.amount_changed': 'Изменена сумма периода', 'payment.terms_changed': 'Изменены условия платежа',
   'payment.date_changed': 'Исправлена дата оплаты', 'user.created': 'Создан пользователь',
   'user.updated': 'Изменён пользователь', 'user.deleted': 'Удалён пользователь',
   'password.changed': 'Изменён пароль',

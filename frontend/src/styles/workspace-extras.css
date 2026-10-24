@@ -1,15 +1,2 @@
-/* Six sections retain a comfortable target size and room for the unfolding mark. */
+/* Keep navigation scrolling comfortable for all eight workspace sections. */
 .main-nav { scroll-padding-inline: 16px; }
-@media (min-width: 1001px) and (max-width: 1280px) {
-  .topbar { flex-wrap: wrap; gap: 12px 24px; padding-bottom: 0; }
-  .topbar .brand-slot { flex: 1; width: auto; }
-  .topbar .main-nav { order: 3; flex: 1 0 100%; justify-content: flex-start; padding: 8px 0 14px; }
-}
-.page-heading .workspace-art--calendar {
-  --art-accent: #28b4c4; --art-accent-deep: #108497; --art-line: #83c5cc;
-  --art-ink: #3e6871; --art-tint: #bceaf0; --art-wash: #e9fbfc; --art-paper-end: #e6f8fb;
-}
-.page-heading .workspace-art--activity {
-  --art-accent: #a18bdf; --art-accent-deep: #7960be; --art-line: #b5a6d7;
-  --art-ink: #6c6086; --art-tint: #ddd3f3; --art-wash: #f5f0fd; --art-paper-end: #f0e9fb;
-}

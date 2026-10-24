@@ -14,6 +14,7 @@ from app.api.budget import router as budget_router
 from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
 from app.api.mfa import internal_router as telegram_auth_router
 from app.api.mfa import router as mfa_router
+from app.api.payment_lifecycle import router as lifecycle_router
 from app.api.payments import router as payments_router
 from app.api.receipts import router as receipts_router
 from app.api.registration import router as registration_router
@@ -77,6 +78,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 "/api/v1/payments",
                 "/api/v1/recurring-payments",
                 "/api/v1/payment-occurrences",
+                "/api/v1/payment-receipts",
+                "/api/v1/one-time-payments",
                 "/api/v1/registration",
                 "/internal/v1/telegram-auth",
             )
@@ -119,6 +122,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
     api_router.include_router(registration_router)
     api_router.include_router(users_router)
     api_router.include_router(payments_router)
+    api_router.include_router(lifecycle_router)
     app.include_router(api_router)
     app.include_router(telegram_auth_router)
     return app

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import delete, select, update
 
@@ -98,12 +99,21 @@ async def test_real_payment_source_enqueues_sends_and_preserves_confirmed_delive
         assert delivery["status"] == "pending"
         occurrence_id = occurrence.id
 
+    price_edit = await client.patch(
+        f"/api/v1/payment-occurrences/{occurrence_id}/amount",
+        json={"amount": "234.56", "currency": "EUR"},
+        headers={"X-CSRF-Token": auth["csrf_token"]},
+    )
+    assert price_edit.status_code == 200, price_edit.text
+
     sender = Sender()
     worker = DeliveryWorker(app.state.database.session_factory, make_source(), sender)
     now = datetime.now(UTC)
     result = await worker.run_once(now)
     assert result["sent"] == 1
     assert [call.occurrence_id for call in sender.calls] == [occurrence_id]
+    assert sender.calls[0].amount == Decimal("234.56")
+    assert sender.calls[0].currency == "EUR"
 
     for payload in (
         {"status": "paid", "paid_on": today.isoformat()},

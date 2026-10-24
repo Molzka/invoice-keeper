@@ -25,22 +25,24 @@ export interface PaginationParams { limit?: number; offset?: number }
 export interface Page<T> { items: T[]; total: number; limit: number; offset: number }
 export interface RecurringPayment {
   id: string; title: string; amount: Money; currency: Currency; first_due_date: CalendarDate
-  next_due_date: CalendarDate | null; periodicity: 'monthly'; anchor_day: number
-  is_active: boolean; created_at: string
+  next_due_date: CalendarDate | null; periodicity: 'monthly' | 'once'; is_archived?: boolean; anchor_day: number
+  is_active: boolean; created_at: string; amount_effective_from: CalendarDate | null
 }
 export interface CreateRecurringPaymentRequest {
   title: string; amount: Money; currency: Currency; first_due_date: CalendarDate; periodicity: 'monthly'
 }
-export interface RecurringPaymentFilters extends PaginationParams { is_active?: boolean }
+export interface RecurringPaymentFilters extends PaginationParams { is_active?: boolean; periodicity?: 'monthly' | 'once'; include_archived?: boolean }
 export interface PaymentOccurrence {
   id: string; recurring_payment_id: string; title: string; amount: Money; currency: Currency
   due_date: CalendarDate; status: 'unpaid' | 'paid'; paid_on: CalendarDate | null
-  is_overdue: boolean; paid_late: boolean; days_late: number; recurring_payment_is_active: boolean
+  periodicity?: 'monthly' | 'once'; is_cancelled?: boolean; is_overdue: boolean; paid_late: boolean; days_late: number; recurring_payment_is_active: boolean; amount_is_custom: boolean
 }
 export interface OccurrenceFilters extends PaginationParams {
   date_from?: CalendarDate; date_to?: CalendarDate; status?: 'paid' | 'unpaid'; currency?: Currency
-  recurring_payment_id?: string; is_overdue?: boolean
+  recurring_payment_id?: string; is_overdue?: boolean; include_cancelled?: boolean
 }
+export interface AmountCurrencyUpdateRequest { amount: Money; currency: Currency }
+export interface RecurringAmountUpdateResponse { payment: RecurringPayment; effective_from: CalendarDate; updated_periods: number; preserved_custom_periods: number }
 export type UpdateOccurrenceRequest = { status: 'paid'; paid_on: CalendarDate } | { status: 'unpaid'; paid_on: null }
 export interface CurrencyTotals { planned: Money; paid: Money; unpaid: Money; overdue: Money }
 export interface PaymentSummary {

@@ -7,6 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
 
+from app.schemas.payments import PaymentOccurrenceRead
+
 
 class ReceiptLinkUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
@@ -51,3 +53,15 @@ class PaymentReceiptRead(BaseModel):
     @classmethod
     def timestamp_in_utc(cls, value: datetime) -> datetime:
         return value.astimezone(UTC)
+
+
+class ReceiptListEntry(BaseModel):
+    occurrence: PaymentOccurrenceRead
+    receipt: PaymentReceiptRead | None
+
+
+class PaymentReceiptList(BaseModel):
+    items: list[ReceiptListEntry]
+    total: int
+    limit: int
+    offset: int

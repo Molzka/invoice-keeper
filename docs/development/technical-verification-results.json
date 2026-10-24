@@ -1,0 +1,75 @@
+[
+  {
+    "check": "TypeScript",
+    "timeout_seconds": 45,
+    "exit_code": 0,
+    "status": "passed",
+    "output": ""
+  },
+  {
+    "check": "ESLint",
+    "timeout_seconds": 45,
+    "exit_code": 0,
+    "status": "passed",
+    "output": ""
+  },
+  {
+    "check": "Frontend unit tests",
+    "timeout_seconds": 30,
+    "exit_code": 0,
+    "status": "passed",
+    "output": "warnings ...` to show where the warning was created)\n✔ calendar uses Monday-first Gregorian weeks and actual month lengths (9.1291ms)\n✔ calendar month navigation respects year transitions and representable boundaries (2.6051ms)\n✔ calendar URLs validate state, preserve filters and reject unknown status or dates (1.594ms)\n✔ calendar loads every API page before publishing the month (53.1087ms)\n✔ calendar rejects failed, partial, duplicated and changing pages instead of showing empty dates (1.8646ms)\n(node:6248) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ workspace hashes have safe defaults and history keeps an unbounded range (3.9853ms)\n✔ all status and currency deep links preserve filters and pagination on reload (1.7655ms)\n✔ history round trips empty and one-sided dates and encoded recurring IDs (0.698ms)\n✔ invalid or reversed calendar ranges cannot produce bad API queries (0.3696ms)\n✔ unknown query keys, enums, unsafe numbers and irrelevant rule IDs are discarded (0.3635ms)\n(node:15652) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ receipt links accept and normalize absolute HTTP(S) destinations (1.2395ms)\n✔ receipt links reject executable, relative, credential-bearing and malformed URLs (0.5939ms)\n✔ receipt file sizes show supplied sizes and reject missing or invalid data (22.075ms)\n(node:15160) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ amount accepts whole units and either decimal separator as exact API strings (4.7334ms)\n✔ amount rejects zero, overflow, excess precision and unsupported number syntax (0.7051ms)\n✔ monthly estimate includes first due date and restores the original day after a short month (5.2789ms)\n✔ monthly estimate handles leap years, centuries and year transitions without a Date object (1.0181ms)\n✔ invalid calendar values have no preview and dates stay in the supported year range (0.9149ms)\n(node:11416) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ theme preferences accept known manual values and use the system for missing or invalid storage (2.3497ms)\n✔ explicit choice wins over the operating system and system choice follows it (0.5121ms)\n✔ early initialization restores the correct palette before React and agrees with the theme resolver (14.434ms)\n✔ theme startup stays usable with blocked storage or unavailable system media preference (1.3878ms)\n(node:4148) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ audit filters use Moscow dates across UTC midnight and combine actor, action, text and pagination (21.9661ms)\n✔ audit store whitelists change fields, copies identities and returns immutable snapshots with stable new-event ordering (1.9941ms)\n✔ demo journal is admin-only, validates filters and has explicit empty/error scenarios (119.2056ms)\n✔ demo audit has distinguishable empty and temporarily unavailable outcomes (29.3976ms)\n✔ successful payment changes log one event, no-ops and rejected mutations log none, history uses recurring ID (63.1311ms)\n✔ user changes preserve deleted identity and never put password values or tokens in the journal (64.7778ms)\n(node:11012) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ one-time payments are single periods and deletion preserves a read-only history outside totals (149.0199ms)\n✔ archive preserves paid periods and deletes unpaid obligations, and members cannot delete (38.6415ms)\n✔ budget separates forecast from saved obligations and receipt filters paginate matching server records (30.872ms)\n✔ single unpaid period edit preserves other snapshots and moves exact currency totals (40.2703ms)\n✔ paid period edits reject even no-ops; unchanged default periods stay non-custom (30.9034ms)\n✔ regular terms apply next month and preserve current, paid and custom snapshots atomically (39.4817ms)\n✔ stopped unpaid periods remain editable while stopped recurring terms are rejected (26.7615ms)\n✔ editing enforces exact bodies, valid money, IDs, CSRF and admin role without mutating on failure (30.2179ms)\n✔ overdue amount and currency edits move overdue within unpaid without changing paid totals (15.6041ms)\n(node:25540) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ mock protects the administrator password (119.3958ms)\n✔ mock changes own password for user, rotates CSRF and accepts only the exact new secret afterward (29.5513ms)\n✔ mock rejects query/extra fields, enforces password bounds and keeps error fields distinct (25.3098ms)\n✔ mock limiter counts wrong-current and successful changes per user, independently of login and CSRF failures (28.4178ms)\n✔ mock response-loss and stale-CSRF scenarios recover with me while preserving unknown password outcome (28.0221ms)\n✔ mock stale-CSRF scenario rejects the first change without changing the secret (13.7381ms)\n✔ mock account-switch scenario rejects the old form and me returns the other account without changing either password (24.8255ms)\nℹ tests 67\nℹ suites 0\nℹ pass 67\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1862.289\nnpm notice\nnpm notice New major version of npm available! 11.6.2 -> 12.2.1\nnpm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1\nnpm notice To update run: npm install -g npm@12.2.1\nnpm notice\n"
+  },
+  {
+    "check": "Production build",
+    "timeout_seconds": 45,
+    "exit_code": 0,
+    "status": "passed",
+    "output": "vite v8.3.5 building client environment for production...\ntransforming...\n✓ 192 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.68 kB │ gzip:   0.44 kB\ndist/assets/index-D9WZnIG1.css  161.74 kB │ gzip:  27.06 kB\ndist/assets/index-CNRe-DpG.js   545.62 kB │ gzip: 150.67 kB\n\n✓ built in 234ms\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+  },
+  {
+    "check": "Ruff lint",
+    "timeout_seconds": 20,
+    "exit_code": 0,
+    "status": "passed",
+    "output": "All checks passed!\n"
+  },
+  {
+    "check": "Ruff formatting",
+    "timeout_seconds": 20,
+    "exit_code": 0,
+    "status": "passed",
+    "output": "94 files already formatted\n"
+  },
+  {
+    "check": "OpenAPI consistency",
+    "timeout_seconds": 20,
+    "exit_code": 0,
+    "status": "passed",
+    "output": "OpenAPI matches the application.\n"
+  },
+  {
+    "check": "HTTP 5173",
+    "timeout_seconds": 3,
+    "status": "unavailable",
+    "error_type": "URLError"
+  },
+  {
+    "check": "HTTP 5180",
+    "timeout_seconds": 3,
+    "status": "passed",
+    "http_status": 200
+  },
+  {
+    "check": "HTTP 5181",
+    "timeout_seconds": 3,
+    "status": "passed",
+    "http_status": 200
+  },
+  {
+    "check": "HTTP 8001",
+    "timeout_seconds": 3,
+    "status": "passed",
+    "http_status": 200
+  }
+]

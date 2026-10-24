@@ -26,6 +26,32 @@ async function clientFixture(handler) {
 function json(body, status = 200, headers = {}) { return new globalThis.Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }) }
 function serverError(status, code) { return json({ error: { code, message: 'Ответ сервера', details: [] } }, status) }
 
+test('receipt PUT uses cookie and CSRF for exact JSON and raw files, while binary downloads preserve 401 handling', async () => {
+  let response = json({ user: { id: 'member', role: 'user' }, csrf_token: 'receipt-token', timezone: 'Europe/Moscow' })
+  const { api, calls, events } = await clientFixture(() => response)
+  await api.me()
+  response = json({ id: 'receipt', kind: 'link', url: 'https://example.com/proof' })
+  await api.saveReceiptLink('id /?', 'https://example.com/proof')
+  let call = calls.at(-1)
+  assert.equal(call.url, '/api/v1/payment-occurrences/id%20%2F%3F/receipt')
+  assert.equal(call.init.method, 'PUT'); assert.equal(call.init.credentials, 'include')
+  assert.equal(call.init.headers.get('X-CSRF-Token'), 'receipt-token')
+  assert.deepEqual(JSON.parse(call.init.body), { url: 'https://example.com/proof' })
+  const file = new globalThis.File(['%PDF-1.7 test'], 'Чек.pdf', { type: 'application/pdf' })
+  response = json({ id: 'receipt', kind: 'file', filename: file.name })
+  await api.saveReceiptFile('id', file)
+  call = calls.at(-1)
+  assert.equal(call.init.body, file)
+  assert.equal(call.init.headers.get('Content-Type'), 'application/pdf')
+  assert.equal(call.init.headers.get('X-Filename'), encodeURIComponent('Чек.pdf'))
+  assert.equal(call.init.headers.get('X-CSRF-Token'), 'receipt-token')
+  response = new globalThis.Response('%PDF-1.7 test', { headers: { 'Content-Type': 'application/pdf' } })
+  assert.equal(await (await api.downloadReceipt('id')).text(), '%PDF-1.7 test')
+  response = serverError(401, 'AUTH_REQUIRED')
+  await assert.rejects(api.downloadReceipt('id'), error => error.status === 401)
+  assert.deepEqual(events, ['invoice:unauthorized'])
+})
+
 // This is deliberately narrower than a generic 404 detector.
 test('only payment collection GET 404s are classified as missing integration routes', () => {
   for (const path of ['/payments/summary', '/payment-occurrences', '/recurring-payments']) {
@@ -240,4 +266,69 @@ test('audit requests omit empty filters and retain backend authorization, availa
   await assert.rejects(api.listAuditEvents(filters), error => error.code === 'NETWORK_ERROR')
   assert.equal(calls.length, 6)
   assert.deepEqual(events, ['invoice:unauthorized'])
+})
+
+test('amount editing uses real exact PATCH routes, cookie and CSRF without leaking form fields', async () => {
+  let response = json({ user: { id: 'admin', username: 'admin', role: 'admin' }, csrf_token: 'amount-token', timezone: 'Europe/Moscow' })
+  const { api, calls } = await clientFixture(() => response)
+  await api.me()
+  response = json({ id: 'period', amount: '45000.50', currency: 'USD', amount_is_custom: true })
+  const period = await api.updateOccurrenceAmount('period /?', { amount: '45000.50', currency: 'USD', status: 'paid', scope: 'all' })
+  assert.equal(period.amount_is_custom, true)
+  assert.equal(calls.at(-1).url, '/api/v1/payment-occurrences/period%20%2F%3F/amount')
+  assert.equal(calls.at(-1).init.method, 'PATCH'); assert.equal(calls.at(-1).init.credentials, 'include')
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), 'amount-token')
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body), { amount: '45000.50', currency: 'USD' })
+  response = json({ payment: { id: 'rule', amount: '42.50', currency: 'EUR', amount_effective_from: '2026-11-01' }, effective_from: '2026-11-01', updated_periods: 2, preserved_custom_periods: 1 })
+  const terms = await api.updateRecurringAmount('rule /?', { amount: '42.50', currency: 'EUR', first_due_date: '2000-01-01' })
+  assert.equal(terms.updated_periods, 2); assert.equal(terms.preserved_custom_periods, 1)
+  assert.equal(calls.at(-1).url, '/api/v1/recurring-payments/rule%20%2F%3F')
+  assert.equal(calls.at(-1).init.method, 'PATCH'); assert.equal(calls.at(-1).init.credentials, 'include')
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), 'amount-token')
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body), { amount: '42.50', currency: 'EUR' })
+})
+
+test('amount edit failures retain conflicts and field errors and never replay an uncertain PATCH', async context => {
+  let response = () => serverError(409, 'PAYMENT_ALREADY_PAID')
+  const { api, calls } = await clientFixture((url, init) => response(url, init))
+  await assert.rejects(api.updateOccurrenceAmount('period', { amount: '1.00', currency: 'RUB' }), error => error.status === 409 && error.code === 'PAYMENT_ALREADY_PAID')
+  response = () => json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid amount', details: [{ field: 'amount', code: 'money_range', message: 'Out of range' }] } }, 422)
+  await assert.rejects(api.updateRecurringAmount('rule', { amount: '0.00', currency: 'RUB' }), error => error.details[0].field === 'amount')
+  response = () => { throw new TypeError('Disconnected') }
+  const start = calls.length
+  await assert.rejects(api.updateRecurringAmount('rule', { amount: '1.00', currency: 'RUB' }), error => error.code === 'NETWORK_ERROR')
+  assert.equal(calls.length, start + 1)
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  response = (url, init) => new Promise((resolve, reject) => { init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }) })
+  const pending = api.updateOccurrenceAmount('period', { amount: '1.00', currency: 'RUB' })
+  const rejected = assert.rejects(pending, error => error.code === 'TIMEOUT' && error.request.path === '/payment-occurrences/period/amount')
+  context.mock.timers.tick(12000)
+  await rejected
+  assert.equal(calls.length, start + 2)
+})
+
+
+test('pending MFA token is isolated until verification and receipt PUT uses the verified session token', async () => {
+  let response = json({ mfa_required: true, methods: ['totp', 'telegram', 'recovery'], csrf_token: 'pending-token', expires_at: '2026-10-25T23:59:00Z' })
+  const { api, calls, events } = await clientFixture(() => response)
+  const challenge = await api.login({ username: 'ivan', password: 'example-password-only' })
+  assert.equal(challenge.mfa_required, true)
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), null)
+  response = json({ sent: true, retry_after: 30 })
+  await api.sendLoginTelegram()
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), 'pending-token')
+  response = serverError(401, 'MFA_CODE_INVALID')
+  await assert.rejects(api.verifyMfa('totp', '123456'), error => error.code === 'MFA_CODE_INVALID')
+  assert.deepEqual(events, [])
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), 'pending-token')
+  response = json({ user: { id: 'member', role: 'user' }, csrf_token: 'verified-token', timezone: 'Europe/Moscow' })
+  await api.verifyMfa('recovery', 'single-use-code')
+  response = json({ id: 'receipt', kind: 'file', filename: 'proof.pdf' })
+  const file = new globalThis.File(['%PDF-1.7 test'], 'proof.pdf', { type: 'application/pdf' })
+  await api.saveReceiptFile('period', file)
+  const saved = calls.at(-1)
+  assert.equal(saved.init.method, 'PUT')
+  assert.equal(saved.init.headers.get('X-CSRF-Token'), 'verified-token')
+  assert.equal(saved.init.headers.get('X-Filename'), 'proof.pdf')
+  assert.equal(saved.init.body, file)
 })

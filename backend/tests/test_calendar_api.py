@@ -35,6 +35,8 @@ async def _seed_periods(app, specifications):
                 PaymentOccurrence(
                     id=uuid4(),
                     recurring_payment_id=rule.id,
+                    amount=rule.amount,
+                    currency=rule.currency,
                     due_date=due_date,
                     status=specification.get("status", "unpaid"),
                     paid_on=specification.get("paid_on"),
