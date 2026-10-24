@@ -13,6 +13,8 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import Database
 from app.models import LoginRateLimit, User, UserSession
+from app.models.mfa import MfaChallenge
+from app.models.registration import RegistrationChallenge
 from app.schemas.users import UserCreate
 from app.services.users import ADMIN_LOCK_KEY
 
@@ -37,6 +39,10 @@ async def create_admin(database: Database, data: UserCreate) -> None:
 async def cleanup_auth(database: Database) -> tuple[int, int]:
     now = datetime.now(UTC)
     async with database.session_factory() as session:
+        await session.execute(delete(MfaChallenge).where(MfaChallenge.expires_at <= now))
+        await session.execute(
+            delete(RegistrationChallenge).where(RegistrationChallenge.expires_at <= now)
+        )
         expired = await session.execute(delete(UserSession).where(UserSession.expires_at <= now))
         limits = await session.execute(
             delete(LoginRateLimit).where(
@@ -46,6 +52,7 @@ async def cleanup_auth(database: Database) -> tuple[int, int]:
                     seconds=max(
                         settings.login_rate_limit_window_seconds,
                         settings.password_change_rate_limit_window_seconds,
+                        settings.mfa_rate_window_seconds,
                     )
                 ),
             )

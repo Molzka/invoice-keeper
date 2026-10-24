@@ -16,8 +16,14 @@ AuditAction = Literal[
     "password.changed",
     "payment.receipt_updated",
     "payment.receipt_deleted",
+    "registration.approved",
+    "registration.rejected",
+    "account.mfa_enabled",
+    "account.mfa_disabled",
+    "account.mfa_changed",
+    "account.recovery_regenerated",
 ]
-AuditEntityType = Literal["payment", "user", "account"]
+AuditEntityType = Literal["payment", "user", "account", "registration"]
 AUDIT_ACTION_LABELS: dict[str, str] = {
     "payment.created": "Создан платёж",
     "payment.stopped": "Платёж прекращён",
@@ -30,6 +36,12 @@ AUDIT_ACTION_LABELS: dict[str, str] = {
     "password.changed": "Изменён пароль",
     "payment.receipt_updated": "Добавлено подтверждение оплаты",
     "payment.receipt_deleted": "Удалено подтверждение оплаты",
+    "registration.approved": "Одобрена заявка сотрудника",
+    "registration.rejected": "Отклонена заявка сотрудника",
+    "account.mfa_enabled": "Подключена дополнительная защита входа",
+    "account.mfa_disabled": "Отключена дополнительная защита входа",
+    "account.mfa_changed": "Изменён способ подтверждения входа",
+    "account.recovery_regenerated": "Обновлены резервные коды",
 }
 SAFE_CHANGE_FIELDS = frozenset(
     {

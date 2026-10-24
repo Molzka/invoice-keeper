@@ -12,8 +12,11 @@ from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.budget import router as budget_router
 from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
+from app.api.mfa import internal_router as telegram_auth_router
+from app.api.mfa import router as mfa_router
 from app.api.payments import router as payments_router
 from app.api.receipts import router as receipts_router
+from app.api.registration import router as registration_router
 from app.api.users import router as users_router
 from app.core.config import Settings, settings
 from app.core.exceptions import (
@@ -74,6 +77,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 "/api/v1/payments",
                 "/api/v1/recurring-payments",
                 "/api/v1/payment-occurrences",
+                "/api/v1/registration",
+                "/internal/v1/telegram-auth",
             )
         ):
             response.headers["Cache-Control"] = "no-store"
@@ -107,12 +112,15 @@ def create_app(config: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     api_router.include_router(auth_router)
+    api_router.include_router(mfa_router)
     api_router.include_router(audit_router)
     api_router.include_router(budget_router)
     api_router.include_router(receipts_router)
+    api_router.include_router(registration_router)
     api_router.include_router(users_router)
     api_router.include_router(payments_router)
     app.include_router(api_router)
+    app.include_router(telegram_auth_router)
     return app
 
 

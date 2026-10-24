@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
 from app.models import User, UserSession
+from app.models.mfa import MfaChallenge
 from app.schemas.users import UserCreate, UserUpdate
 from app.services.audit import record_audit_event
 from app.services.errors import api_error
@@ -87,6 +88,8 @@ async def update_user(db: AsyncSession, user_id: UUID, payload: UserUpdate, acto
         if password_hash is not None:
             user.password_hash = password_hash
         if revoke_sessions:
+            user.security_version += 1
+            await db.execute(delete(MfaChallenge).where(MfaChallenge.user_id == user.id))
             await db.execute(delete(UserSession).where(UserSession.user_id == user.id))
             record_audit_event(
                 db,

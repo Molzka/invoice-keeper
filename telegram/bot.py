@@ -17,6 +17,7 @@ from aiogram.exceptions import (
     TelegramUnauthorizedError,
 )
 from aiogram.filters import Command, CommandStart
+from aiogram.filters.command import CommandObject
 from aiogram.types import (
     BotCommand,
     CallbackQuery,
@@ -37,6 +38,7 @@ from api import (
 )
 from dotenv import load_dotenv
 from features import payment_card, payment_list_item, summary_text
+from mfa import LINK_TOKEN, MfaBridgeError, claim_telegram
 
 T = json.loads((Path(__file__).parent / "texts.json").read_text(encoding="utf-8"))
 
@@ -209,7 +211,38 @@ def chat_id_text(chat_id: int) -> str:
 
 @public.message(CommandStart())
 @public.message(Command("menu"))
-async def start(message: Message):
+async def start(message: Message, command: CommandObject):
+    if command.command == "start" and command.args and command.args.startswith("mfa_"):
+        user = message.from_user
+        if (
+            message.chat.type != "private"
+            or user is None
+            or user.is_bot
+            or user.id != message.chat.id
+        ):
+            await message.answer(T["MFA_PRIVATE_ONLY"])
+            return
+        token = command.args.removeprefix("mfa_")
+        if LINK_TOKEN.fullmatch(token) is None:
+            await message.answer(T["MFA_LINK_INVALID"])
+            return
+        try:
+            await claim_telegram(
+                token,
+                telegram_id=user.id,
+                chat_id=message.chat.id,
+                username=user.username,
+                display_name=user.full_name[:128],
+            )
+        except MfaBridgeError as error:
+            key = {
+                "invalid": "MFA_LINK_INVALID",
+                "limited": "MFA_RATE_LIMITED",
+            }.get(error.reason, "MFA_UNAVAILABLE")
+            await message.answer(T[key])
+            return
+        await message.answer(T["MFA_LINK_CLAIMED"])
+        return
     await message.answer(start_text(message.chat.id), reply_markup=help_keyboard(message.chat.id))
 
 

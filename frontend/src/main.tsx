@@ -15,4 +15,5 @@ import './styles/change-password.css';
 import './styles/payment-calendar.css';
 import './styles/activity.css';
 import './styles/workspace-extras.css';
+import './styles/access-security.css';
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

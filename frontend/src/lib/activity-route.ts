@@ -10,6 +10,13 @@ export const auditActionLabels: Record<AuditAction, string> = {
   'user.updated': 'Изменение пользователя',
   'user.deleted': 'Удаление пользователя',
   'password.changed': 'Смена своего пароля',
+  'registration.approved': 'Заявка одобрена',
+  'registration.rejected': 'Заявка отклонена',
+  'account.mfa_enabled': 'Защита входа подключена',
+  'account.mfa_disabled': 'Защита входа отключена',
+  'account.mfa_changed': 'Способы защиты изменены',
+  'account.recovery_regenerated': 'Резервные коды обновлены',
+
   'payment.receipt_updated': 'Изменение подтверждения оплаты',
   'payment.receipt_deleted': 'Удаление подтверждения оплаты',
 }
