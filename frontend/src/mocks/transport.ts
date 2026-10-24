@@ -10,21 +10,25 @@ const demoScenario = () => typeof window === 'undefined' ? '' : new URLSearchPar
 const db = createFixtures(demoScenario() === 'stress')
 const passwords = new Map([['admin', 'Admin123!'], ['ivan', 'example-password-only'], ['anna', 'example-password-only']])
 let currentUsername: string | null = readSession()
-const CSRF = 'demo-session-csrf-only'
+let csrfToken = crypto.randomUUID()
+const passwordChangeAttempts = new Map<string, number[]>()
+let passwordScenarioUsed = false
+const PASSWORD_CHANGE_WINDOW_MS = 15 * 60 * 1000
+const PASSWORD_CHANGE_ATTEMPTS = 5
 function readSession(): string | null { try { return localStorage.getItem(SESSION_KEY) } catch { return null } }
 function saveSession(username: string | null) {
   currentUsername = username
   try { if (username) localStorage.setItem(SESSION_KEY, username); else localStorage.removeItem(SESSION_KEY) } catch { /* Private browsers can disable demo persistence. */ }
 }
 class MockFault extends Error {
-  constructor(public status: number, public code: string, message: string, public details: ErrorDetail[] = []) { super(message) }
+  constructor(public status: number, public code: string, message: string, public details: ErrorDetail[] = [], public retryAfterSeconds?: number) { super(message) }
 }
 function fault(status: number, code: string, message: string): never { throw new MockFault(status, code, message) }
 function invalid(field: string, message: string, code = 'INVALID_VALUE'): never {
   throw new MockFault(422, 'VALIDATION_ERROR', 'Проверьте поля запроса', [{ field, code, message }])
 }
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } })
+function json(data: unknown, status = 200, retryAfterSeconds?: number): Response {
+  return new Response(JSON.stringify(data), { status, headers: { ...(retryAfterSeconds === undefined ? {} : { 'Retry-After': String(retryAfterSeconds) }), 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } })
 }
 function wait(ms: number, signal?: AbortSignal | null): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -95,6 +99,19 @@ function username(value: unknown): string {
   return value
 }
 function password(value: unknown): string { if (typeof value !== 'string' || value.length < 8 || value.length > 128) invalid('password', 'Пароль должен содержать от 8 до 128 символов'); return value }
+function passwordChangeValue(value: unknown, field: string, minimum: number): string {
+  if (typeof value !== 'string' || Array.from(value).length < minimum || Array.from(value).length > 128) invalid(field, `Пароль должен содержать от ${minimum} до 128 символов`)
+  return value
+}
+function recordPasswordChangeAttempt(userId: string) {
+  const now = Date.now()
+  const attempts = (passwordChangeAttempts.get(userId) || []).filter(at => at > now - PASSWORD_CHANGE_WINDOW_MS)
+  if (attempts.length >= PASSWORD_CHANGE_ATTEMPTS) {
+    const seconds = Math.max(1, Math.ceil((attempts[0] + PASSWORD_CHANGE_WINDOW_MS - now) / 1000))
+    throw new MockFault(429, 'PASSWORD_CHANGE_RATE_LIMITED', 'Слишком много попыток смены пароля. Попробуйте позже.', [], seconds)
+  }
+  passwordChangeAttempts.set(userId, [...attempts, now])
+}
 function advanceMonth(value: string, anchor: number): string { return calendarMonthDate(value, anchor, 1) }
 function addOccurrences(rule: RecurringPayment) {
   let due = rule.first_due_date
@@ -122,12 +139,36 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       const body = bodyObject(init, ['username', 'password'], ['username', 'password'])
       if (typeof body.username !== 'string' || typeof body.password !== 'string' || passwords.get(body.username) !== body.password || !db.users.some(user => user.username === body.username)) fault(401, 'INVALID_CREDENTIALS', 'Неверный логин или пароль')
       saveSession(body.username as string)
-      return json({ user: getCurrentUser(), csrf_token: CSRF })
+      csrfToken = crypto.randomUUID()
+      return json({ user: getCurrentUser(), csrf_token: csrfToken })
     }
     const user = getCurrentUser()
-    if (path === '/auth/me' && method === 'GET') { queryAllowed(url.searchParams, []); return json({ user, csrf_token: CSRF }) }
-    if (['POST', 'PATCH', 'DELETE'].includes(method) && new Headers(init.headers).get('X-CSRF-Token') !== CSRF) fault(403, 'CSRF_FAILED', 'Обновите страницу и повторите действие')
+    if (path === '/auth/me' && method === 'GET') { queryAllowed(url.searchParams, []); return json({ user, csrf_token: csrfToken }) }
+    if (path === '/auth/change-password' && method === 'POST' && scenario === 'password-csrf' && !passwordScenarioUsed) {
+      passwordScenarioUsed = true; csrfToken = crypto.randomUUID(); fault(403, 'CSRF_FAILED', 'Обновите сессию и повторите действие')
+    }
+    if (path === '/auth/change-password' && method === 'POST' && scenario === 'password-account-changed' && !passwordScenarioUsed) {
+      passwordScenarioUsed = true
+      saveSession(user.username === 'admin' ? 'ivan' : 'admin')
+      csrfToken = crypto.randomUUID()
+      fault(403, 'CSRF_FAILED', 'Учётная запись в текущем браузере изменилась')
+    }
+    if (['POST', 'PATCH', 'DELETE'].includes(method) && new Headers(init.headers).get('X-CSRF-Token') !== csrfToken) fault(403, 'CSRF_FAILED', 'Обновите страницу и повторите действие')
     if (path === '/auth/logout' && method === 'POST') { queryAllowed(url.searchParams, []); saveSession(null); return new Response(null, { status: 204 }) }
+    if (path === '/auth/change-password' && method === 'POST') {
+      queryAllowed(url.searchParams, [])
+      const body = bodyObject(init, ['current_password', 'new_password'], ['current_password', 'new_password'])
+      const currentPassword = passwordChangeValue(body.current_password, 'current_password', 1)
+      const newPassword = passwordChangeValue(body.new_password, 'new_password', 8)
+      recordPasswordChangeAttempt(user.id)
+      if (passwords.get(user.username) !== currentPassword) throw new MockFault(422, 'CURRENT_PASSWORD_INVALID', 'Текущий пароль указан неверно', [{ field: 'current_password', code: 'CURRENT_PASSWORD_INVALID', message: 'Текущий пароль указан неверно' }])
+      if (newPassword === currentPassword) throw new MockFault(422, 'NEW_PASSWORD_UNCHANGED', 'Новый пароль должен отличаться от текущего', [{ field: 'new_password', code: 'NEW_PASSWORD_UNCHANGED', message: 'Новый пароль должен отличаться от текущего' }])
+      // Demo secrets are deliberately memory-only: a reload restores the example credentials.
+      passwords.set(user.username, newPassword)
+      csrfToken = crypto.randomUUID()
+      if (scenario === 'password-network' && !passwordScenarioUsed) { passwordScenarioUsed = true; throw new TypeError('Demo password response lost') }
+      return json({ user, csrf_token: csrfToken })
+    }
     if (scenario === 'forbidden') fault(403, 'FORBIDDEN', 'У вас нет доступа к этому разделу')
     if (path === '/payments/summary' && method === 'GET') {
       queryAllowed(url.searchParams, ['date_from', 'date_to'])
@@ -222,7 +263,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
     }
     return fault(404, 'NOT_FOUND', 'Маршрут не найден')
   } catch (error) {
-    if (error instanceof MockFault) return json({ error: { code: error.code, message: error.message, details: error.details } }, error.status)
+    if (error instanceof MockFault) return json({ error: { code: error.code, message: error.message, details: error.details } }, error.status, error.retryAfterSeconds)
     throw error
   }
 }
