@@ -9,3 +9,5 @@ docker/bot/**
 !docker/bot/Dockerfile
 !docker/bot/pyproject.toml
 !docker/bot/uv.lock
+!texts.json
+!formatting.py

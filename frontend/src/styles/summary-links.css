@@ -15,8 +15,10 @@
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
-  width: max-content;
+  width: fit-content;
+  min-width: 0;
   max-width: 100%;
+  white-space: normal;
   min-height: 24px;
   margin: -3px -4px;
   padding: 3px 4px;
@@ -26,15 +28,29 @@
   text-underline-offset: 4px;
   transition: color 160ms, background-color 160ms;
 }
-.summary-amount-link > span { min-width: 0; overflow-wrap: anywhere; }
+.summary-amount-link > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .summary-amount-link > svg {
   flex-shrink: 0;
   color: var(--currency-accent, #18889a);
   opacity: .5;
   transition: transform 220ms var(--ease-out), opacity 160ms;
 }
+.currency-amount, .currency-breakdown { min-width: 0; }
 .currency-amount .summary-amount-link { justify-content: flex-start; }
-.currency-breakdown dd { min-width: 0; flex: 1 1 auto; }
+/* Wrap a long amount below its label before the narrow card clips either one. */
+.currency-breakdown > div { min-width: 0; flex-wrap: wrap; row-gap: 3px; }
+.currency-breakdown dt {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.currency-breakdown dd { min-width: 0; max-width: 100%; flex: 1 1 auto; }
 .summary-amount-link[aria-current='true'] {
   background: var(--currency-soft, #eef8fa);
   text-decoration: underline;

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     login_rate_limit_attempts: int = Field(default=10, ge=1, le=1000)
     login_rate_limit_ip_attempts: int = Field(default=60, ge=1, le=10000)
     login_rate_limit_window_seconds: int = Field(default=900, ge=1, le=86400)
+    password_change_rate_limit_attempts: int = Field(default=5, ge=1, le=1000)
+    password_change_rate_limit_window_seconds: int = Field(default=900, ge=1, le=86400)
 
     @field_validator("database_url")
     @classmethod

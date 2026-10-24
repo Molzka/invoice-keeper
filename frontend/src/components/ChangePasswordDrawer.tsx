@@ -55,7 +55,7 @@ export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated
     try {
       const data = await api.me()
       if (!mounted.current) return
-      if (data.user.id !== user.id) { clearPasswords(); onSignIn('Аккаунт изменился в другой вкладке. Войдите снова.'); return }
+      if (data.user.id !== user.id || data.user.role !== user.role) { clearPasswords(); onSignIn('Аккаунт изменился в другой вкладке. Войдите снова.'); return }
       onUserUpdated(data.user)
       if (uncertain) { setRecovery('uncertain-restored'); setInfo('Сессия действует. Это не подтверждает, что пароль изменён.') }
       else { setRecovery('none'); setInfo('Сессия обновлена. Заполните форму ещё раз.'); setError('') }
@@ -81,13 +81,17 @@ export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated
       const response = await api.changePassword({ current_password: values.current_password, new_password: values.new_password })
       if (!mounted.current) return
       clearPasswords()
-      if (response.user.id !== user.id) { onSignIn('Аккаунт изменился в другой вкладке. Войдите снова.'); return }
+      if (response.user.id !== user.id || response.user.role !== user.role) { onSignIn('Аккаунт изменился в другой вкладке. Войдите снова.'); return }
       onUserUpdated(response.user); onSaved()
     } catch (reason) {
       if (!mounted.current) return
       const apiError = reason instanceof ApiError ? reason : null
       if (apiError?.status === 401) return // The shared client opens the sign-in screen.
-      if (apiError?.code === 'CSRF_FAILED') {
+      if (apiError?.code === 'CSRF_RECOVERED') {
+        clearPasswords(); setRecovery('none'); setError(''); setInfo('Сессия обновлена. Заполните форму ещё раз.')
+      } else if (apiError?.code === 'CSRF_REFRESH_FAILED') {
+        clearPasswords(); setRecovery('csrf-unverified'); setError(apiError.message)
+      } else if (apiError?.code === 'CSRF_FAILED') {
         clearPasswords(); setRecovery('csrf-unverified')
         setError('Сессия обновилась в другой вкладке. Запрос не применён.')
         await checkSession(false)

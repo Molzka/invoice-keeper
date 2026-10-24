@@ -1,6 +1,7 @@
 import hashlib
 import math
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.security import (
     create_session_token,
+    hash_password,
     hash_session_token,
     valid_session_token,
     verify_password,
@@ -21,12 +23,29 @@ async def consume_login_attempt(
     db: AsyncSession, settings: Settings, username: str, ip_address: str
 ) -> None:
     """Atomically consume both buckets, committing even rejected login attempts."""
-    now = datetime.now(UTC)
-    window = timedelta(seconds=settings.login_rate_limit_window_seconds)
     buckets = [
         (f"ip:{ip_address}", settings.login_rate_limit_ip_attempts),
         (f"username:{username}", settings.login_rate_limit_attempts),
     ]
+    await _consume_attempts(
+        db,
+        buckets,
+        settings.login_rate_limit_window_seconds,
+        code="LOGIN_RATE_LIMITED",
+        message="Слишком много попыток входа. Повторите позже",
+    )
+
+
+async def _consume_attempts(
+    db: AsyncSession,
+    buckets: list[tuple[str, int]],
+    window_seconds: int,
+    *,
+    code: str,
+    message: str,
+) -> None:
+    now = datetime.now(UTC)
+    window = timedelta(seconds=window_seconds)
     # The same bucket order in every request avoids concurrent lock inversions.
     for identity, limit in buckets:
         key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
@@ -55,11 +74,101 @@ async def consume_login_attempt(
             await db.commit()
             raise api_error(
                 429,
-                "LOGIN_RATE_LIMITED",
-                "Слишком много попыток входа. Повторите позже",
+                code,
+                message,
                 headers={"Retry-After": str(retry_after)},
             )
     await db.commit()
+
+
+async def change_password(
+    db: AsyncSession,
+    settings: Settings,
+    user_id: UUID,
+    session_id: UUID,
+    session_token: str,
+    current_password: str,
+    new_password: str,
+) -> tuple[User, str, datetime]:
+    # A separate per-user bucket covers all sessions and source IPs. Persist even
+    # incorrect-password attempts; never share a bucket with the login endpoint.
+    await _consume_attempts(
+        db,
+        [(f"password-change:{user_id}", settings.password_change_rate_limit_attempts)],
+        settings.password_change_rate_limit_window_seconds,
+        code="PASSWORD_CHANGE_RATE_LIMITED",
+        message="Слишком много попыток смены пароля. Повторите позже",
+    )
+    user = await db.scalar(
+        select(User).where(User.id == user_id).execution_options(populate_existing=True)
+    )
+    if user is None or not user.is_active:
+        raise api_error(401, "AUTH_REQUIRED", "Требуется авторизация")
+    previous_hash = user.password_hash
+    if not await verify_password(current_password, previous_hash):
+        message = "Текущий пароль указан неверно"
+        raise api_error(
+            422,
+            "CURRENT_PASSWORD_INVALID",
+            message,
+            details=[
+                {
+                    "field": "current_password",
+                    "code": "CURRENT_PASSWORD_INVALID",
+                    "message": message,
+                }
+            ],
+        )
+    if new_password == current_password:
+        message = "Новый пароль должен отличаться от текущего"
+        raise api_error(
+            422,
+            "NEW_PASSWORD_UNCHANGED",
+            message,
+            details=[
+                {"field": "new_password", "code": "NEW_PASSWORD_UNCHANGED", "message": message}
+            ],
+        )
+    password_hash = await hash_password(new_password)
+    # Use the same row-lock order as login and user administration. Recheck both
+    # credentials and session after Argon2: an already-revoked session cannot
+    # overwrite a concurrent password reset or create a replacement session.
+    user = await db.scalar(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if user is None or not user.is_active or user.password_hash != previous_hash:
+        raise api_error(401, "AUTH_REQUIRED", "Требуется авторизация")
+    now = datetime.now(UTC)
+    session = await db.scalar(
+        select(UserSession)
+        .where(
+            UserSession.id == session_id,
+            UserSession.user_id == user_id,
+            UserSession.token_hash == hash_session_token(session_token),
+            UserSession.expires_at > now,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if session is None:
+        raise api_error(401, "AUTH_REQUIRED", "Требуется авторизация")
+    expires_at = session.expires_at
+    token = create_session_token()
+    user.password_hash = password_hash
+    await db.execute(delete(UserSession).where(UserSession.user_id == user_id))
+    db.add(
+        UserSession(
+            user_id=user_id,
+            token_hash=hash_session_token(token),
+            created_at=now,
+            expires_at=expires_at,
+        )
+    )
+    await db.commit()
+    return user, token, expires_at
 
 
 async def login(

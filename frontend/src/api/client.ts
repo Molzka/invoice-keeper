@@ -13,6 +13,12 @@ export const API_MODE = import.meta.env.VITE_API_MODE === 'real' ? 'real' : 'moc
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 const REQUEST_TIMEOUT_MS = 12000
 let csrfToken: string | null = null
+let sessionUser: AuthResponse['user'] | null = null
+function installSession(data: AuthResponse) { csrfToken = data.csrf_token; sessionUser = data.user }
+function clearSession(message?: string) {
+  csrfToken = null; sessionUser = null
+  window.dispatchEvent(new CustomEvent('invoice:unauthorized', { detail: { message } }))
+}
 const transport = API_MODE === 'real' ? (url: string, init: RequestInit) => fetch(url, init) : mockFetch
 function query(params?: object): string {
   const search = new URLSearchParams()
@@ -27,6 +33,7 @@ function retryAfterSeconds(response: Response): number | undefined {
 }
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const requestContext = { method: method.toUpperCase(), path: path.split(/[?#]/, 1)[0] }
+  const expectedUser = sessionUser
   const headers = new Headers({ Accept: 'application/json' })
   if (body !== undefined) headers.set('Content-Type', 'application/json')
   if (['POST', 'PATCH', 'DELETE'].includes(method) && path !== '/auth/login' && csrfToken) headers.set('X-CSRF-Token', csrfToken)
@@ -39,7 +46,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     if (response.status === 204) return undefined as T
     let payload: unknown
     try { payload = await response.json() } catch (error) {
-      if (response.status === 401) { csrfToken = null; window.dispatchEvent(new CustomEvent('invoice:unauthorized')) }
+      if (response.status === 401) clearSession()
       // A disconnected or timed-out response body still has an unknown mutation outcome.
       if (abort.signal.aborted || error instanceof TypeError) throw error
       throw new ApiError(response.status, 'INVALID_RESPONSE', 'Сервер вернул ответ в неизвестном формате', [], requestContext, retryAfterSeconds(response))
@@ -48,8 +55,11 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       const serverError = (payload as Partial<ErrorResponse>)?.error
       const error = new ApiError(response.status, serverError?.code || 'HTTP_ERROR', serverError?.message || 'Не удалось выполнить запрос', Array.isArray(serverError?.details) ? serverError.details : [], requestContext, retryAfterSeconds(response))
       if (response.status === 401 && !(path === '/auth/login' && error.code === 'INVALID_CREDENTIALS')) {
-        csrfToken = null
-        window.dispatchEvent(new CustomEvent('invoice:unauthorized'))
+        clearSession()
+      }
+      if (response.status === 403 && error.code === 'CSRF_FAILED' && expectedUser && ['POST', 'PATCH', 'DELETE'].includes(method)) {
+        await recoverCsrfSession(expectedUser, requestContext)
+        throw new ApiError(403, 'CSRF_RECOVERED', 'Сессия обновлена. Действие не выполнено — повторите его вручную.', [], requestContext)
       }
       throw error
     }
@@ -61,11 +71,30 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   } finally { clearTimeout(timeout) }
 }
 
+async function recoverCsrfSession(expectedUser: AuthResponse['user'], context: { method: string; path: string }): Promise<void> {
+  let data: AuthResponse
+  try { data = await request<AuthResponse>('/auth/me') }
+  catch (error) {
+    if (error instanceof ApiError && error.status === 401) throw error
+    throw new ApiError(403, 'CSRF_REFRESH_FAILED', 'Действие не выполнено. Не удалось обновить сессию — проверьте соединение и обновите страницу.', [], context)
+  }
+  if (!data?.user || typeof data.csrf_token !== 'string' || !data.csrf_token) {
+    throw new ApiError(403, 'CSRF_REFRESH_FAILED', 'Действие не выполнено. Сервер не подтвердил сессию — обновите страницу.', [], context)
+  }
+  // A shared cookie can now belong to another account. Do not authorize an old form with its token.
+  if (!sessionUser || sessionUser.id !== expectedUser.id || sessionUser.role !== expectedUser.role || data.user.id !== expectedUser.id || data.user.role !== expectedUser.role) {
+    const message = 'Аккаунт или права доступа изменились в другой вкладке. Войдите снова.'
+    clearSession(message)
+    throw new ApiError(401, 'AUTH_REQUIRED', message, [], context)
+  }
+  installSession(data)
+}
+
 export const api = {
-  async login(payload: LoginRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/login', 'POST', payload); csrfToken = data.csrf_token; return data },
-  async changePassword(payload: ChangePasswordRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/change-password', 'POST', { current_password: payload.current_password, new_password: payload.new_password }); csrfToken = data.csrf_token; return data },
-  async me(): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/me'); csrfToken = data.csrf_token; return data },
-  async logout(): Promise<void> { await request<void>('/auth/logout', 'POST'); csrfToken = null },
+  async login(payload: LoginRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/login', 'POST', payload); installSession(data); return data },
+  async changePassword(payload: ChangePasswordRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/change-password', 'POST', { current_password: payload.current_password, new_password: payload.new_password }); installSession(data); return data },
+  async me(): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/me'); installSession(data); return data },
+  async logout(): Promise<void> { await request<void>('/auth/logout', 'POST'); csrfToken = null; sessionUser = null },
   listOccurrences: (filters: OccurrenceFilters = {}) => request<Page<PaymentOccurrence>>('/payment-occurrences' + query(filters)),
   getOccurrence: (id: string) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id)),
   updateOccurrence: (id: string, payload: UpdateOccurrenceRequest) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id), 'PATCH', payload),

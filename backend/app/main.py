@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.auth import router as auth_router
 from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
+from app.api.payments import router as payments_router
 from app.api.users import router as users_router
 from app.core.config import Settings, settings
 from app.core.exceptions import (
@@ -71,6 +72,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-CSRF-Token"],
+        expose_headers=["Retry-After"],
     )
     api_router = APIRouter(
         prefix="/api/v1", dependencies=[Depends(reject_unknown_query_parameters)]
@@ -93,6 +95,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
 
     api_router.include_router(auth_router)
     api_router.include_router(users_router)
+    api_router.include_router(payments_router)
     app.include_router(api_router)
     return app
 

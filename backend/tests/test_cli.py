@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from app.cli import cleanup_auth, create_admin
+from app.core.config import settings
 from app.models import LoginRateLimit, User, UserSession
 from app.schemas.users import UserCreate
 
@@ -61,3 +62,20 @@ async def test_cleanup_removes_expired_records_and_keeps_active_ones(app, create
     async with app.state.database.session_factory() as session:
         assert (await session.scalars(select(UserSession.token_hash))).all() == ["b" * 64]
         assert (await session.scalars(select(LoginRateLimit.key))).all() == ["d" * 64]
+
+
+async def test_cleanup_keeps_password_change_buckets_until_longest_window_ends(app, monkeypatch):
+    monkeypatch.setattr(settings, "login_rate_limit_window_seconds", 60)
+    monkeypatch.setattr(settings, "password_change_rate_limit_window_seconds", 900)
+    async with app.state.database.session_factory() as session:
+        session.add(
+            LoginRateLimit(
+                key="e" * 64,
+                attempts=5,
+                window_started_at=datetime.now(UTC) - timedelta(minutes=2),
+            )
+        )
+        await session.commit()
+    assert await cleanup_auth(app.state.database) == (0, 0)
+    async with app.state.database.session_factory() as session:
+        assert await session.get(LoginRateLimit, "e" * 64) is not None

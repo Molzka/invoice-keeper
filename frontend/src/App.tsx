@@ -76,7 +76,13 @@ export default function App() {
   }, [])
   useEffect(() => {
     void restore()
-    const unauthorized = () => { if (userRef.current) setToast(passwordOpenRef.current ? 'Сессия завершилась. Войдите снова. Если вы меняли пароль, попробуйте новый.' : 'Сессия завершилась. Войдите снова.'); setPasswordOpen(false); setUser(null); setRestoring(false) }
+    const unauthorized = (event: Event) => {
+      const message = (event as CustomEvent<{ message?: string }>).detail?.message
+      if (message) setToast(message)
+      else if (userRef.current) setToast(passwordOpenRef.current ? 'Сессия завершилась. Войдите снова. Если вы меняли пароль, попробуйте новый.' : 'Сессия завершилась. Войдите снова.')
+      setPasswordOpen(false); setPasswordLimit({ userId: '', retryAt: 0 }); setHistoryRule(null)
+      setUser(null); setRestoreError(null); setRestoring(false)
+    }
     window.addEventListener('invoice:unauthorized', unauthorized)
     return () => { window.removeEventListener('invoice:unauthorized', unauthorized) }
   }, [restore])
@@ -90,7 +96,12 @@ export default function App() {
     if (logoutGuard.current) return
     logoutGuard.current = true; setLogoutBusy(true)
     try { await api.logout(); setPasswordOpen(false); setUser(null); setRestoreError(null); setToast('') }
-    catch (error) { if (!(error instanceof ApiError && error.status === 401)) notify('Выход не подтверждён сервером. Проверьте соединение и повторите.'); else setUser(null) }
+    catch (error) {
+      if (error instanceof ApiError && error.status === 401) setUser(null)
+      else if (error instanceof ApiError && error.code === 'CSRF_RECOVERED') notify('Сессия обновлена. Чтобы выйти, нажмите «Выйти» ещё раз.')
+      else if (error instanceof ApiError && error.code === 'CSRF_REFRESH_FAILED') notify(error.message)
+      else notify('Выход не подтверждён сервером. Проверьте соединение и повторите.')
+    }
     finally { logoutGuard.current = false; setLogoutBusy(false) }
   }
   if (restoring) return <div className="empty-state" style={{ minHeight: '100vh' }} role="status"><Brand/><span className="spinner"/><p>Восстанавливаем вашу сессию…</p></div>
