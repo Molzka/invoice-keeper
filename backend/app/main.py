@@ -71,7 +71,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 "/api/v1/auth",
                 "/api/v1/users",
                 "/api/v1/audit-events",
-                "/api/v1/payments/budget",
+                "/api/v1/payments",
+                "/api/v1/recurring-payments",
                 "/api/v1/payment-occurrences",
             )
         ):

@@ -105,6 +105,9 @@ jobs:
           python3 scripts/checks/check_backend.py "$FRONTEND_URL"
           python3 scripts/checks/check_frontend.py "$FRONTEND_URL" --api-ready
 
+      - name: Check payment rules and financial API through Nginx
+        run: python3 scripts/checks/check_payment_rules.py "$FRONTEND_URL"
+
       - name: Check proxy recovery after replacing API container
         run: |
           docker compose --env-file .env.example rm --stop --force backend
@@ -115,11 +118,15 @@ jobs:
           docker compose --env-file .env.example up -d --wait --wait-timeout 90 backend
           python3 scripts/checks/check_backend.py "$FRONTEND_URL"
 
+      - name: Create separate administrator for browser scenarios
+        run: |
+          docker compose --env-file .env.example run --rm -T -e ADMIN_USERNAME=browser_admin backend python -m app.cli create-admin
+
       - name: Check authentication and users in Chromium
         working-directory: frontend
         run: |
           E2E_BASE_URL="$FRONTEND_URL" \
-          E2E_ADMIN_USERNAME="$ADMIN_USERNAME" \
+          E2E_ADMIN_USERNAME=browser_admin \
           E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
           npm run test:e2e
 

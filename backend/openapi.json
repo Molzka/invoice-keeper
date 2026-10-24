@@ -270,7 +270,8 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 64
+                  "maxLength": 64,
+                  "pattern": "^[^\\x00]*$"
                 },
                 {
                   "type": "null"
@@ -316,7 +317,8 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 200
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$"
                 },
                 {
                   "type": "null"
@@ -2517,6 +2519,7 @@
             "type": "string",
             "maxLength": 200,
             "minLength": 1,
+            "pattern": "^[^\\x00]*$",
             "title": "Title"
           },
           "amount": {
