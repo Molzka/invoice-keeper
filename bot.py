@@ -7,11 +7,14 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
-import aiohttp
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramUnauthorizedError
+from aiogram.exceptions import (
+    TelegramAPIError,
+    TelegramBadRequest,
+    TelegramUnauthorizedError,
+)
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     BotCommand,
@@ -24,9 +27,18 @@ from aiogram.types import (
 from aiogram.utils.token import TokenValidationError
 from dotenv import load_dotenv
 
+from api import (
+    ApiAuthError,
+    ApiDataError,
+    ApiNotConfigured,
+    ApiRateLimited,
+    ApiUnavailable,
+    PaymentsClient,
+)
+
 T = json.loads((Path(__file__).parent / "texts.json").read_text(encoding="utf-8"))
 
-load_dotenv(Path(__file__).parent / ".env", override=True)
+load_dotenv(Path(__file__).parent / ".env", override=False)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("bot")
@@ -60,6 +72,7 @@ def load_panel_url():
 ALLOWED_CHAT = load_chat_id()
 
 PAGE_SIZE = 5
+api_client = PaymentsClient()
 
 # ---------- форматирование ----------
 
@@ -86,20 +99,6 @@ def format_date(value) -> str:
         except ValueError:
             pass
     raise ValueError(f"Некорректная дата: {value!r}")
-
-
-# ---------- API платежей (заглушка) ----------
-
-class ApiUnavailable(Exception):
-    pass
-
-
-async def fetch_payments(kind: str) -> list[dict]:
-    """kind: 'upcoming' (7 дней) или 'overdue'.
-    TODO: реальный запрос, когда Ваня опишет API.
-    Ожидаемые поля: title, amount, currency, due_date.
-    При ошибке сети/таймауте/5xx бросать ApiUnavailable."""
-    raise NotImplementedError
 
 
 # ---------- роутеры ----------
@@ -193,22 +192,33 @@ async def cb_denied(callback: CallbackQuery):
 
 async def build_view(kind: str, page: int):
     title, empty = T["PAYMENT_KINDS"][kind]
+    page = max(page, 0)
     try:
-        items = await fetch_payments(kind)
-    except NotImplementedError:
-        return T["PAYMENTS_NOT_READY"], None
-    except (ApiUnavailable, asyncio.TimeoutError, aiohttp.ClientError):
+        result = await api_client.fetch_payments(kind, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
+        pages = max(1, (result["total"] + PAGE_SIZE - 1) // PAGE_SIZE)
+        if page >= pages:
+            page = pages - 1
+            result = await api_client.fetch_payments(kind, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
+            pages = max(1, (result["total"] + PAGE_SIZE - 1) // PAGE_SIZE)
+    except ApiNotConfigured:
+        return T["API_NOT_CONFIGURED"], None
+    except ApiAuthError:
+        return T["API_AUTH_FAILED"], None
+    except ApiRateLimited:
+        return T["API_RATE_LIMITED"], None
+    except ApiDataError:
+        log.error("bad payment response: kind=%s", kind)
+        return T["BAD_DATA"], None
+    except ApiUnavailable:
         log.warning("payments api unavailable: kind=%s", kind)
         return T["API_UNAVAILABLE"], None
 
-    if not items:
+    if not result["items"]:
         return empty, None
 
-    pages = -(-len(items) // PAGE_SIZE)
-    page = min(max(page, 0), pages - 1)
-    chunk = items[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
+    def e(value):
+        return html.escape(str(value), quote=False)
 
-    e = lambda v: html.escape(str(v), quote=False)
     try:
         lines = [
             T["PAYMENT_LINE"].format(
@@ -216,15 +226,14 @@ async def build_view(kind: str, page: int):
                 amount=e(format_amount(p["amount"], p["currency"])),
                 due_date=e(format_date(p["due_date"])),
             )
-            for p in chunk
+            for p in result["items"]
         ]
-    except (ValueError, KeyError) as exc:
+    except (ValueError, KeyError, InvalidOperation) as exc:
         log.error("bad payment data: %s", type(exc).__name__)
         return T["BAD_DATA"], None
 
     header = T["PAGE_HEADER"].format(title=title, page=page + 1, pages=pages)
     text = header + "\n" + "\n".join(lines)
-
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton(text=T["NAV_PREV"], callback_data=f"pg:{kind}:{page - 1}"))
@@ -247,10 +256,10 @@ async def overdue(message: Message):
 
 @secure.callback_query(F.data.in_({"cmd:payments", "cmd:overdue"}))
 async def cb_payments(callback: CallbackQuery):
+    await callback.answer()
     kind = "upcoming" if callback.data == "cmd:payments" else "overdue"
     text, markup = await build_view(kind, 0)
     await callback.message.answer(text, reply_markup=markup)
-    await callback.answer()
 
 
 @secure.callback_query(F.data.startswith("pg:"))
@@ -264,12 +273,12 @@ async def paginate(callback: CallbackQuery):
     if kind not in T["PAYMENT_KINDS"]:
         await callback.answer()
         return
+    await callback.answer()
     text, markup = await build_view(kind, page)
     try:
         await callback.message.edit_text(text, reply_markup=markup)
     except TelegramBadRequest:
         pass  # "message is not modified"
-    await callback.answer()
 
 
 # ---------- запуск ----------
@@ -278,7 +287,6 @@ async def on_error(event: ErrorEvent) -> bool:
     """Ошибка в обработчике не должна останавливать бота. Содержимое сообщений не логируется."""
     log.error(
         "ошибка в обработчике: %s", type(event.exception).__name__,
-        exc_info=event.exception,
     )
     return True
 
@@ -318,7 +326,10 @@ async def main():
     except TelegramUnauthorizedError:
         raise SystemExit("Telegram отклонил токен (401): проверьте BOT_TOKEN, при утечке сделайте /revoke")
     finally:
-        await bot.session.close()
+        try:
+            await api_client.close()
+        finally:
+            await bot.session.close()
 
 
 if __name__ == "__main__":
