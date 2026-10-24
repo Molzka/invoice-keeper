@@ -4,6 +4,7 @@ export type CalendarDate = string
 export type Money = string
 export interface User { id: string; username: string; role: Role; created_at: string }
 export interface LoginRequest { username: string; password: string }
+export interface ChangePasswordRequest { current_password: string; new_password: string }
 export interface AuthResponse { user: User; csrf_token: string }
 export interface PaginationParams { limit?: number; offset?: number }
 export interface Page<T> { items: T[]; total: number; limit: number; offset: number }
