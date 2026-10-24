@@ -41,6 +41,7 @@ export default function App() {
   const [historyRule, setHistoryRule] = useState<{id:string;title:string} | null>(null)
   const userRef = useRef<User | null>(null)
   const logoutGuard = useRef(false)
+  const logoutChannel = useRef<BroadcastChannel | null>(null)
   userRef.current = user
   const today = session ? businessToday(API_MODE, new Date(clockNow), session.timezone) : null
   const route = useWorkspaceRoute(today)
@@ -60,6 +61,12 @@ export default function App() {
     finally { setRestoring(false) }
   }, [])
   useEffect(() => {
+    const channel = API_MODE === 'real' ? new BroadcastChannel('invoice-keeper-auth') : null
+    logoutChannel.current = channel
+    if (channel) channel.onmessage = ({ data }) => {
+      // Reload cancels old requests and discards private state in every open tab.
+      if (data === 'logout') window.location.reload()
+    }
     void restore()
     const unauthorized = (event: Event) => {
       const message = (event as CustomEvent<{ message?: string }>).detail?.message
@@ -74,7 +81,7 @@ export default function App() {
     }
     window.addEventListener('invoice:unauthorized', unauthorized)
     window.addEventListener('invoice:session', sessionUpdated)
-    return () => { window.removeEventListener('invoice:unauthorized', unauthorized); window.removeEventListener('invoice:session', sessionUpdated) }
+    return () => { channel?.close(); logoutChannel.current = null; window.removeEventListener('invoice:unauthorized', unauthorized); window.removeEventListener('invoice:session', sessionUpdated) }
   }, [restore])
   useEffect(() => {
     const tick = () => setClockNow(Date.now())
@@ -92,7 +99,7 @@ export default function App() {
   async function logout() {
     if (logoutGuard.current) return
     logoutGuard.current = true; setLogoutBusy(true)
-    try { await api.logout(); setSecurityOpen(false); setSecurityOffer(false); setPasswordOpen(false); setSession(null); setRestoreError(null); setToast('') }
+    try { await api.logout(); logoutChannel.current?.postMessage('logout'); setSecurityOpen(false); setSecurityOffer(false); setPasswordOpen(false); setSession(null); setRestoreError(null); setToast('') }
     catch (error) {
       if (error instanceof ApiError && error.status === 401) setSession(null)
       else if (error instanceof ApiError && error.code === 'CSRF_RECOVERED') notify('Сессия обновлена. Чтобы выйти, нажмите «Выйти» ещё раз.')
