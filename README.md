@@ -302,6 +302,7 @@ uv run --locked uvicorn app.main:app --reload --no-proxy-headers
 | `POST /auth/login` | JSON `username`, `password`; ответ `user` и `csrf_token`, сессия в HttpOnly cookie |
 | `GET /auth/me` | Текущий пользователь и CSRF-токен; без действующей сессии — 401 |
 | `POST /auth/logout` | Удаление текущей сессии и cookie; ответ 204 |
+| `POST /auth/change-password` | Обе роли: текущий и новый пароль; ответ `{user, csrf_token}`, обновлённая cookie, отзыв остальных сессий |
 | `GET /users?limit=50&offset=0` | Только администратор; `items`, `total`, `limit`, `offset` |
 | `POST /users` | Только администратор; создание пользователя, ответ 201 |
 | `PATCH /users/{user_id}` | Только администратор; изменение логина и/или пароля обычного пользователя |
@@ -315,7 +316,18 @@ uv run --locked uvicorn app.main:app --reload --no-proxy-headers
 
 Frontend делает запросы с `credentials: "include"`. CSRF-токен можно держать в памяти; после перезагрузки страницы восстановить через `/auth/me`. Сессионный токен находится в HttpOnly cookie. Используйте один и тот же hostname для frontend и API: например, `localhost:5173` и `localhost:8000`.
 
-Разрешённые адреса frontend/API задаются JSON-массивом `ALLOWED_ORIGINS` в `.env`. Cookie `session_id` имеет `SameSite=Lax`, фиксированный срок семь дней по умолчанию и проверяется сервером. Пароли хранятся как Argon2-хеши, сессионные токены — как SHA-256-хеши. При смене логина или пароля и удалении пользователя отзываются все его сессии. После обновления со старой версии cookie потребуется войти заново.
+Разрешённые адреса frontend/API задаются JSON-массивом `ALLOWED_ORIGINS` в `.env`. Cookie `session_id` имеет `SameSite=Lax`, фиксированный срок семь дней по умолчанию и проверяется сервером. Пароли хранятся как Argon2-хеши, сессионные токены — как SHA-256-хеши. При смене логина/пароля через администрирование пользователей и при удалении пользователя отзываются все его сессии. После обновления со старой версии cookie потребуется войти заново.
+
+Для самостоятельной смены пароля обе роли используют `POST /auth/change-password`
+с JSON `current_password`, `new_password`, Origin и CSRF. Новый пароль — 8–128
+символов, без обрезки пробелов, отличается от текущего. Успех сохраняет вход в
+текущем браузере, обновляет cookie и возвращает новый CSRF; остальные сессии
+отзываются. Исходный срок сессии не продлевается. Неверный текущий пароль —
+`422 CURRENT_PASSWORD_INVALID`, одинаковый новый — `422 NEW_PASSWORD_UNCHANGED`.
+Отдельный лимит — 5 попыток за 15 минут на пользователя; настройки
+`PASSWORD_CHANGE_RATE_LIMIT_ATTEMPTS` / `PASSWORD_CHANGE_RATE_LIMIT_WINDOW_SECONDS`.
+Точный контракт, обработка ошибок и пример подключения находятся в
+[памятке для frontend](backend/docs/frontend-password-change.md).
 
 Ошибки имеют оболочку `error` с `code`, `message`, `details`. Каждый элемент `details` содержит `{field, code, message}`; для тела это, например, `password`, для query — `query.limit`, для пути — `path.user_id`. Исходные значения паролей в ошибки не копируются. Битый JSON возвращает `400 INVALID_JSON`, неизвестные query-параметры на всех маршрутах API — `422 VALIDATION_ERROR`.
 

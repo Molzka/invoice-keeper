@@ -41,7 +41,13 @@ async def cleanup_auth(database: Database) -> tuple[int, int]:
         limits = await session.execute(
             delete(LoginRateLimit).where(
                 LoginRateLimit.window_started_at
-                < now - timedelta(seconds=settings.login_rate_limit_window_seconds),
+                < now
+                - timedelta(
+                    seconds=max(
+                        settings.login_rate_limit_window_seconds,
+                        settings.password_change_rate_limit_window_seconds,
+                    )
+                ),
             )
         )
         await session.commit()
