@@ -14,7 +14,7 @@ import type { PaymentFilters, PaymentPageSize, PaymentRoute, PaymentTab } from '
 
 
 type RuleSelection = { id: string; title: string } | null
-type Props = { mode: 'payments' | 'history'; route: PaymentRoute; onRouteChange: (next: PaymentRoute, replace?: boolean) => void; revision: number; today: string; selectedRule: RuleSelection; onHistory: (id: string, title: string) => void; onChanged: () => void; notify: (message: string) => void }
+type Props = { mode: 'payments' | 'history'; route: PaymentRoute; onRouteChange: (next: PaymentRoute, replace?: boolean) => void; revision: number; today: string; timezone: string; selectedRule: RuleSelection; onHistory: (id: string, title: string) => void; onChanged: () => void; notify: (message: string) => void }
 const currencies: Currency[] = ['RUB', 'USD', 'EUR']
 const currencyNames = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' }
 
@@ -26,7 +26,7 @@ function focusPaymentResults(event: MouseEvent<HTMLAnchorElement>) {
   document.getElementById('payment-results')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
 }
 
-function Summary({ dates, revision, filters, limit }: { dates: { date_from: string; date_to: string }; revision: number; filters: PaymentFilters; limit: PaymentPageSize }) {
+function Summary({ dates, revision, filters, limit, today, timezone }: { dates: { date_from: string; date_to: string }; revision: number; filters: PaymentFilters; limit: PaymentPageSize; today: string; timezone: string }) {
   const [summary, setSummary] = useState<PaymentSummary | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [retry, setRetry] = useState(0)
@@ -35,7 +35,7 @@ function Summary({ dates, revision, filters, limit }: { dates: { date_from: stri
     setSummary(null); setError(null)
     api.getSummary(dates).then(value => { if (alive) setSummary(value) }).catch(reason => { if (alive) setError(reason) })
     return () => { alive = false }
-  }, [dates, revision, retry])
+  }, [dates, revision, retry, today, timezone])
   if (error) return <ErrorNotice error={error} onRetry={() => setRetry(value => value + 1)}/>
   if (!summary) return <div className="summary-grid" aria-label="Загрузка сводки" aria-busy="true">{currencies.map(currency => <div className="currency-card" key={currency}><div className="skeleton" style={{ height: 23, marginBottom: 20 }}/><div className="skeleton" style={{ height: 35, marginBottom: 20 }}/><div className="skeleton" style={{ height: 80 }}/></div>)}</div>
   function amountLink(currency: Currency, tab: PaymentTab, amount: string, label: string) {
@@ -44,7 +44,7 @@ function Summary({ dates, revision, filters, limit }: { dates: { date_from: stri
     return <a className="summary-amount-link" href={href} onClick={focusPaymentResults} aria-label={`${label} в ${currency}: ${money(amount, currency)}`} aria-current={filters.currency === currency && filters.tab === tab ? 'true' : undefined}><span>{money(amount, currency)}</span><ArrowUpRight size={13} aria-hidden="true"/></a>
   }
   return <section aria-label="Сводка обязательств по валютам">
-    <p className="summary-caption">По срокам {dateLabel(summary.date_from)}–{dateLabel(summary.date_to)} · состояние на {dateLabel(summary.as_of_date)}, МСК · все статусы и валюты</p>
+    <p className="summary-caption">По срокам {dateLabel(summary.date_from)}–{dateLabel(summary.date_to)} · состояние на {dateLabel(summary.as_of_date)}, {summary.timezone} · все статусы и валюты</p>
     <p className="summary-navigation-hint"><ArrowUpRight size={13} aria-hidden="true"/> Нажмите на сумму, чтобы посмотреть соответствующие платежи</p>
     <div className="summary-grid">{currencies.map(currency => {
       const total = summary.totals[currency]
@@ -86,7 +86,7 @@ function PaymentFilterToolbar({ filters, history, today, onApply, onReset }: { f
   </form>{filterError && <p className="query-error" role="alert">{filterError}</p>}</>
 }
 
-function PaymentDrawer({ initial, today, onClose, onSaved, onHistory }: { initial: PaymentOccurrence; today: string; onClose: () => void; onSaved: (item: PaymentOccurrence) => void; onHistory: () => void }) {
+function PaymentDrawer({ initial, today, timezone, onClose, onSaved, onHistory }: { initial: PaymentOccurrence; today: string; timezone: string; onClose: () => void; onSaved: (item: PaymentOccurrence) => void; onHistory: () => void }) {
   const [item, setItem] = useState(initial)
   const [paidOn, setPaidOn] = useState(initial.paid_on || today)
   const [loading, setLoading] = useState(true)
@@ -94,16 +94,18 @@ function PaymentDrawer({ initial, today, onClose, onSaved, onHistory }: { initia
   const [error, setError] = useState<unknown>(null)
   const [fieldError, setFieldError] = useState('')
   const guard = useRef(false)
+  const openedOn = useRef(today)
   useEffect(() => {
     let alive = true
-    api.getOccurrence(initial.id).then(value => { if (alive) { setItem(value); setPaidOn(value.paid_on || today) } }).catch(reason => { if (alive) setError(reason) }).finally(() => { if (alive) setLoading(false) })
+    // A calendar rollover updates the limit and hint without replacing a date the user is editing.
+    api.getOccurrence(initial.id).then(value => { if (alive) { setItem(value); setPaidOn(value.paid_on || openedOn.current) } }).catch(reason => { if (alive) setError(reason) }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [initial.id, today])
+  }, [initial.id])
   async function save(paid: boolean) {
     if (guard.current) return
     const actualPaidOn = paidOn
     setPaidOn(actualPaidOn)
-    if (paid && (!actualPaidOn || actualPaidOn > today)) { setFieldError('Укажите фактическую дату не позже сегодняшнего дня по МСК.'); return }
+    if (paid && (!actualPaidOn || actualPaidOn > today)) { setFieldError(`Укажите фактическую дату не позже сегодняшнего дня (${timezone}).`); return }
     guard.current = true; setBusy(true); setError(null); setFieldError('')
     try {
       const updated = await api.updateOccurrence(item.id, paid ? { status: 'paid', paid_on: actualPaidOn } : { status: 'unpaid', paid_on: null })
@@ -113,11 +115,11 @@ function PaymentDrawer({ initial, today, onClose, onSaved, onHistory }: { initia
       if (reason instanceof ApiError) setFieldError(reason.details.find(detail => detail.field === 'paid_on')?.message || '')
     } finally { guard.current = false; setBusy(false) }
   }
-  return <Drawer canClose={!busy} title={item.status === 'paid' ? 'Изменить оплату' : 'Отметить оплату'} subtitle="Изменение относится только к этому периоду." onClose={() => { if (!guard.current) onClose() }}><div className="payment-detail"><h3 className="payment-title">{item.title}</h3><dl><div><dt>Сумма</dt><dd>{money(item.amount, item.currency)}</dd></div><div><dt>Срок оплаты</dt><dd>{dateLabel(item.due_date)}</dd></div><div><dt>Статус</dt><dd><PaymentStatus item={item}/></dd></div>{item.days_late > 0 && <div><dt>Дней опоздания</dt><dd>{item.days_late}</dd></div>}</dl>{!item.recurring_payment_is_active && <div className="notice"><Info size={18}/><p>Регулярный платёж прекращён. Этот период сохранён в истории, его оплату можно исправить.</p></div>}</div>{error ? <ErrorNotice error={error}/> : null}<form className="payment-form" noValidate onSubmit={(event: FormEvent) => { event.preventDefault(); void save(true) }}><div className="field"><label htmlFor="paid-on">Фактическая дата оплаты</label><DatePicker name="paid_on" id="paid-on" today={today} aria-label="Фактическая дата оплаты" required max={today} value={paidOn} onChange={setPaidOn} disabled={busy || loading} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? "paid-on-hint paid-on-error" : "paid-on-hint"}/><small id="paid-on-hint">Досрочная оплата разрешена. Сегодня по МСК: {dateLabel(today)}.</small>{fieldError && <span id="paid-on-error" className="field-error" role="alert">{fieldError}</span>}</div><div className="notice"><Info size={18}/><p>Вы подтверждаете уже выполненную оплату. Дата срока остаётся прежней; просрочку пересчитает сервер.</p></div><div className="form-actions payment-actions"><button className="btn btn-primary" type="submit" disabled={busy || loading}>{busy ? <span className="spinner"/> : <Check size={17}/>} {item.status === 'paid' ? 'Сохранить дату' : 'Подтвердить оплату'}</button>{item.status === 'paid' && <button className="btn btn-danger" type="button" disabled={busy || loading} onClick={() => void save(false)}>Отменить отметку оплаты</button>}</div></form><button type="button" className="btn btn-secondary payment-history-button" disabled={busy} onClick={onHistory}><History size={16}/> Вся история платежа</button></Drawer>
+  return <Drawer canClose={!busy} title={item.status === 'paid' ? 'Изменить оплату' : 'Отметить оплату'} subtitle="Изменение относится только к этому периоду." onClose={() => { if (!guard.current) onClose() }}><div className="payment-detail"><h3 className="payment-title">{item.title}</h3><dl><div><dt>Сумма</dt><dd>{money(item.amount, item.currency)}</dd></div><div><dt>Срок оплаты</dt><dd>{dateLabel(item.due_date)}</dd></div><div><dt>Статус</dt><dd><PaymentStatus item={item}/></dd></div>{item.days_late > 0 && <div><dt>Дней опоздания</dt><dd>{item.days_late}</dd></div>}</dl>{!item.recurring_payment_is_active && <div className="notice"><Info size={18}/><p>Регулярный платёж прекращён. Этот период сохранён в истории, его оплату можно исправить.</p></div>}</div>{error ? <ErrorNotice error={error}/> : null}<form className="payment-form" noValidate onSubmit={(event: FormEvent) => { event.preventDefault(); void save(true) }}><div className="field"><label htmlFor="paid-on">Фактическая дата оплаты</label><DatePicker name="paid_on" id="paid-on" today={today} aria-label="Фактическая дата оплаты" required max={today} value={paidOn} onChange={setPaidOn} disabled={busy || loading} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? "paid-on-hint paid-on-error" : "paid-on-hint"}/><small id="paid-on-hint">Досрочная оплата разрешена. Сегодня ({timezone}): {dateLabel(today)}.</small>{fieldError && <span id="paid-on-error" className="field-error" role="alert">{fieldError}</span>}</div><div className="notice"><Info size={18}/><p>Вы подтверждаете уже выполненную оплату. Дата срока остаётся прежней; просрочку пересчитает сервер.</p></div><div className="form-actions payment-actions"><button className="btn btn-primary" type="submit" disabled={busy || loading}>{busy ? <span className="spinner"/> : <Check size={17}/>} {item.status === 'paid' ? 'Сохранить дату' : 'Подтвердить оплату'}</button>{item.status === 'paid' && <button className="btn btn-danger" type="button" disabled={busy || loading} onClick={() => void save(false)}>Отменить отметку оплаты</button>}</div></form><button type="button" className="btn btn-secondary payment-history-button" disabled={busy} onClick={onHistory}><History size={16}/> Вся история платежа</button></Drawer>
 }
 
 
-export function PaymentsView({ mode, route, onRouteChange, revision, today, selectedRule, onHistory, onChanged, notify }: Props) {
+export function PaymentsView({ mode, route, onRouteChange, revision, today, timezone, selectedRule, onHistory, onChanged, notify }: Props) {
   const history = mode === 'history'
   const { filters, offset, limit } = route
   const [page, setPage] = useState<Page<PaymentOccurrence> | null>(null)
@@ -152,7 +154,7 @@ export function PaymentsView({ mode, route, onRouteChange, revision, today, sele
     setSelected(null); onChanged(); notify(item.status === 'unpaid' ? 'Отметка оплаты отменена. Дата оплаты очищена.' : item.paid_late ? 'Оплата сохранена. Период оплачен с опозданием.' : 'Оплата сохранена. Срок не изменился.')
   }
   return <>
-    {!history && <Summary dates={summaryDates} revision={revision} filters={filters} limit={limit}/>}
+    {!history && <Summary dates={summaryDates} revision={revision} filters={filters} limit={limit} today={today} timezone={timezone}/>}
     <section id="payment-results" className="panel" aria-label={history ? 'История периодов' : 'Периоды оплаты'} aria-busy={loading}>
       <div className="section-head"><div><h2 id="payment-results-heading" tabIndex={-1}>{history ? 'Все периоды' : 'Периоды оплаты'}{page && <span className="pill">{page.total}</span>}</h2><p>{history ? 'Сохраняем прошлые оплаты и периоды прекращённых платежей.' : 'Сначала ближайшие сроки. Статусы и итоговые суммы рассчитывает сервер.'}</p></div><button className="icon-button" type="button" aria-label="Обновить список и сводку" disabled={loading} onClick={() => { setRetry(value => value + 1); onChanged() }}><RefreshCw size={17}/></button></div>
       {selectedRule && <div className="history-chip"><History size={16}/><strong>{selectedRule.title === 'История выбранного платежа' ? page?.items[0]?.title || selectedRule.title : selectedRule.title}</strong><button type="button" className="btn btn-secondary btn-small" onClick={() => onRouteChange({ ...route, ruleId: null, offset: 0 })}>Все платежи</button></div>}
@@ -164,8 +166,8 @@ export function PaymentsView({ mode, route, onRouteChange, revision, today, sele
       })}</tbody></table></div>}
       {page && !error && <><div className="page-size"><label htmlFor="page-size">На странице</label><SelectField id="page-size" className="ik-select-compact" value={String(limit)} onChange={size => onRouteChange({ ...route, limit: Number(size) as PaymentPageSize, offset: 0 })} options={[6, 12, 24].map(size => ({ value: String(size), label: String(size) }))}/></div><Pagination total={page.total} limit={limit} offset={offset} onPage={nextOffset => onRouteChange({ ...route, offset: nextOffset })}/></>}
     </section>
-    <div className="footer-note"><span><Send size={14}/> Напоминание в Telegram — за 3 дня до срока</span><span><Clock3 size={14}/> Календарные даты по МСК</span></div>
+    <div className="footer-note"><span><Send size={14}/> Напоминание в Telegram — за 3 дня до срока</span><span><Clock3 size={14}/> Часовой пояс: {timezone}</span></div>
     {history && <p className="summary-caption"><Info size={14}/> Прекращение повторения не отменяет уже возникшие обязательства и не удаляет историю.</p>}
-    {selected && <PaymentDrawer key={selected.id} initial={selected} today={today} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { setSelected(null); onHistory(selected.recurring_payment_id, selected.title) }}/>}
+    {selected && <PaymentDrawer key={selected.id} initial={selected} today={today} timezone={timezone} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { setSelected(null); onHistory(selected.recurring_payment_id, selected.title) }}/>}
   </>
 }

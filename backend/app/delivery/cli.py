@@ -72,6 +72,7 @@ async def run(args) -> None:
                     source,
                     TelegramSender(bot, settings.chat_id),
                     poll_seconds=args.poll_seconds,
+                    timezone_name=settings.app_timezone,
                 )
                 while True:
                     try:

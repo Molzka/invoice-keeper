@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import DEFAULT_TIMEZONE
 from app.delivery.locking import lock_payments
 from app.models import PaymentOccurrence, RecurringPayment
 from app.schemas.payments import PaymentStateUpdate, RecurringPaymentCreate
@@ -74,6 +75,8 @@ async def create_recurring_payment(
     db: AsyncSession,
     payload: RecurringPaymentCreate,
     today: date,
+    *,
+    timezone_name: str = DEFAULT_TIMEZONE,
 ) -> RecurringPayment:
     await lock_payments(db)
     payment = RecurringPayment(
@@ -86,7 +89,7 @@ async def create_recurring_payment(
     )
     db.add(payment)
     await db.flush()
-    await ensure_payment_periods(db, payment.id, today)
+    await ensure_payment_periods(db, payment.id, today, timezone_name=timezone_name)
     await db.commit()
     return payment
 
@@ -115,8 +118,12 @@ async def stop_recurring_payment(
     db: AsyncSession,
     payment_id: UUID,
     today: date,
+    *,
+    timezone_name: str = DEFAULT_TIMEZONE,
 ) -> None:
-    payment = await ensure_payment_periods(db, payment_id, today, through=today)
+    payment = await ensure_payment_periods(
+        db, payment_id, today, through=today, timezone_name=timezone_name
+    )
     if payment is None:
         raise api_error(404, "RECURRING_PAYMENT_NOT_FOUND", "Регулярный платёж не найден")
     if payment.is_active:

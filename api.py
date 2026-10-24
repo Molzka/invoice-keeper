@@ -8,7 +8,7 @@ import re
 import time
 from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import aiohttp
 
@@ -94,6 +94,7 @@ class PaymentsClient:
         self._authenticated = False
         self._auth_failed = False
         self._retry_at = 0.0
+        self._timezone = None
 
     def _configure(self):
         self._base = _url(os.environ.get("API_BASE_URL", "").strip(), "API_BASE_URL")
@@ -163,6 +164,11 @@ class PaymentsClient:
             self._session.cookie_jar.clear()
             self._auth_failed = True
             raise ApiAuthError("Для бота нужна отдельная обычная учётная запись")
+        try:
+            self._timezone = ZoneInfo(data["timezone"])
+        except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
+            self._session.cookie_jar.clear()
+            raise ApiDataError("Сервер не вернул корректный часовой пояс") from None
         self._authenticated = True
 
     async def fetch_payments(self, kind, *, limit=5, offset=0):
@@ -172,12 +178,17 @@ class PaymentsClient:
             raise ValueError("limit должен быть от 1 до 100")
         if type(offset) is not int or offset < 0:
             raise ValueError("offset должен быть неотрицательным целым")
-        today = datetime.now(ZoneInfo("Europe/Moscow")).date()
-        params = {"status": "unpaid", "limit": limit, "offset": offset}
-        if kind == "upcoming":
-            params.update(date_from=today.isoformat(), date_to=(today + timedelta(days=6)).isoformat())
-        else:
-            params["is_overdue"] = "true"
+        def params():
+            today = datetime.now(self._timezone).date()
+            values = {"status": "unpaid", "limit": limit, "offset": offset}
+            if kind == "upcoming":
+                values.update(
+                    date_from=today.isoformat(), date_to=(today + timedelta(days=6)).isoformat()
+                )
+            else:
+                values["is_overdue"] = "true"
+            return values
+
         async with self._lock:
             if self._auth_failed:
                 raise ApiAuthError("Исправьте настройки API и перезапустите бота")
@@ -188,12 +199,12 @@ class PaymentsClient:
             if not self._authenticated:
                 await self._login()
             try:
-                data = await self._request("GET", "/payment-occurrences", params=params)
+                data = await self._request("GET", "/payment-occurrences", params=params())
             except _SessionExpired:
                 self._authenticated = False
                 await self._login()
                 try:
-                    data = await self._request("GET", "/payment-occurrences", params=params)
+                    data = await self._request("GET", "/payment-occurrences", params=params())
                 except _SessionExpired:
                     self._auth_failed = True
                     raise ApiAuthError("Не удалось восстановить сессию бота") from None

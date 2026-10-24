@@ -36,9 +36,10 @@ async def change(client, csrf_token, **values):
 
 
 @pytest.mark.parametrize("role", ["admin", "user"])
-async def test_change_password_keeps_current_browser_and_revokes_only_own_other_sessions(
+async def test_change_password_respects_role_and_preserves_session_contract(
     app, client, create_user, login, role
 ):
+    app.state.settings.app_timezone = "Asia/Tokyo"
     user = await create_user("owner", role=role)
     await create_user("another", role="user")
     auth = await login(client, "owner")
@@ -57,10 +58,31 @@ async def test_change_password_keeps_current_browser_and_revokes_only_own_other_
             expires_at = current.expires_at
 
         response = await change(client, auth["csrf_token"])
+        if role == "admin":
+            assert_error(response, 403, "ADMIN_ACCOUNT_PROTECTED")
+            assert "set-cookie" not in response.headers
+            assert client.cookies[cookie_name] == old_token
+            assert (await client.get("/api/v1/auth/me")).json() == auth
+            assert (await other_session.get("/api/v1/auth/me")).status_code == 200
+            assert (await unrelated.get("/api/v1/auth/me")).status_code == 200
+            async with app.state.database.session_factory() as db:
+                assert (await db.get(User, user.id)).password_hash == original_hash
+                sessions = (
+                    await db.scalars(select(UserSession).where(UserSession.user_id == user.id))
+                ).all()
+                assert len(sessions) == 2
+                assert any(
+                    session.token_hash == hashlib.sha256(old_token.encode()).hexdigest()
+                    and session.expires_at == expires_at
+                    for session in sessions
+                )
+            await login(other_session, "owner", PASSWORD)
+            return
         assert response.status_code == 200, response.text
         changed = response.json()
         assert changed["user"] == auth["user"]
         assert changed["csrf_token"] != auth["csrf_token"]
+        assert changed["timezone"] == "Asia/Tokyo"
         assert response.headers["cache-control"] == "no-store"
         cookie = response.headers["set-cookie"].lower()
         assert "httponly" in cookie and "samesite=lax" in cookie and "path=/" in cookie
@@ -97,7 +119,7 @@ async def test_change_password_keeps_current_browser_and_revokes_only_own_other_
 async def test_password_limits_and_whitespace_are_preserved(
     app, client, create_user, login, new_password
 ):
-    await create_user()
+    await create_user(role="user")
     auth = await login(client)
     response = await change(client, auth["csrf_token"], new_password=new_password)
     assert response.status_code == 200, response.text
@@ -115,7 +137,7 @@ async def test_password_limits_and_whitespace_are_preserved(
 async def test_password_errors_preserve_password_and_sessions(
     app, client, create_user, login, values, code, field
 ):
-    user = await create_user()
+    user = await create_user(role="user")
     auth = await login(client)
     token = client.cookies[app.state.settings.session_cookie_name]
     async with app.state.database.session_factory() as db:
@@ -161,7 +183,7 @@ async def test_password_errors_preserve_password_and_sessions(
 async def test_password_request_validation_never_echoes_input(
     client, create_user, login, payload, field, code
 ):
-    await create_user()
+    await create_user(role="user")
     auth = await login(client)
     response = await client.post(PATH, json=payload, headers={"X-CSRF-Token": auth["csrf_token"]})
     assert_error(response, 422, "VALIDATION_ERROR")
@@ -176,7 +198,7 @@ async def test_password_request_validation_never_echoes_input(
 
 async def test_password_change_requires_session_csrf_origin_and_json(client, create_user, login):
     assert_error(await change(client, "not-authenticated"), 401, "AUTH_REQUIRED")
-    await create_user()
+    await create_user(role="user")
     auth = await login(client)
     for token in ("", "incorrect"):
         assert_error(await change(client, token), 403, "CSRF_FAILED")
@@ -216,7 +238,7 @@ async def test_password_change_requires_session_csrf_origin_and_json(client, cre
 async def test_password_change_limit_is_shared_across_sessions_and_separate_from_login(
     app, client, create_user, login
 ):
-    user = await create_user()
+    user = await create_user(role="user")
     app.state.settings.password_change_rate_limit_attempts = 2
     app.state.settings.password_change_rate_limit_window_seconds = 60
     auth = await login(client)
@@ -246,7 +268,7 @@ async def test_password_change_limit_is_shared_across_sessions_and_separate_from
 async def test_concurrent_password_changes_cannot_restore_a_revoked_session(
     app, client, create_user, login
 ):
-    user = await create_user()
+    user = await create_user(role="user")
     auth = await login(client)
     async with browser(app) as other:
         second_auth = await login(other)
@@ -266,10 +288,11 @@ async def test_concurrent_password_changes_cannot_restore_a_revoked_session(
         )
 
 
-async def test_session_revoked_during_password_hashing_cannot_change_password(
-    app, client, create_user, login, monkeypatch
+@pytest.mark.parametrize("account_change", ["logout", "promote_to_admin"])
+async def test_account_changed_during_password_hashing_cannot_change_password(
+    app, client, create_user, login, monkeypatch, account_change
 ):
-    user = await create_user()
+    user = await create_user(role="user")
     auth = await login(client)
     started, release = asyncio.Event(), asyncio.Event()
     original_hash = auth_service.hash_password
@@ -284,22 +307,33 @@ async def test_session_revoked_during_password_hashing_cannot_change_password(
     changing = asyncio.create_task(change(client, auth["csrf_token"]))
     try:
         await asyncio.wait_for(started.wait(), 5)
-        assert (
-            await client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": auth["csrf_token"]})
-        ).status_code == 204
+        if account_change == "logout":
+            assert (
+                await client.post(
+                    "/api/v1/auth/logout", headers={"X-CSRF-Token": auth["csrf_token"]}
+                )
+            ).status_code == 204
+        else:
+            async with app.state.database.session_factory() as db:
+                await db.execute(update(User).where(User.id == user.id).values(role="admin"))
+                await db.commit()
     finally:
         release.set()
         response = await changing
-    assert_error(response, 401, "AUTH_REQUIRED")
+    if account_change == "logout":
+        assert_error(response, 401, "AUTH_REQUIRED")
+    else:
+        assert_error(response, 403, "ADMIN_ACCOUNT_PROTECTED")
     async with app.state.database.session_factory() as db:
         assert await verify_password(PASSWORD, (await db.get(User, user.id)).password_hash)
-        assert await db.scalar(select(func.count()).select_from(UserSession)) == 0
+        expected_sessions = 0 if account_change == "logout" else 1
+        assert await db.scalar(select(func.count()).select_from(UserSession)) == expected_sessions
 
 
 async def test_failed_commit_rolls_back_password_and_session_revocation(
     app, client, create_user, login, monkeypatch
 ):
-    user = await create_user()
+    user = await create_user(role="user")
     auth = await login(client)
 
     def fail_commit(connection):

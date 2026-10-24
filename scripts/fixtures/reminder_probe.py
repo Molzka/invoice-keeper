@@ -129,7 +129,7 @@ async def inspect(database, payments):
 
 async def run(mode, state):
     database = Database(settings.database_url)
-    today = datetime.now(ZoneInfo("Europe/Moscow")).date()
+    today = datetime.now(ZoneInfo(settings.app_timezone)).date()
     try:
         async with database.session_factory() as session:
             db_name = await session.scalar(text("SELECT current_database()"))

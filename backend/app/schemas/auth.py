@@ -20,3 +20,4 @@ class ChangePasswordRequest(BaseModel):
 class AuthResponse(BaseModel):
     user: UserRead
     csrf_token: str
+    timezone: str = Field(description="Единый часовой пояс приложения в формате IANA")

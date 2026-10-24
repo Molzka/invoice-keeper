@@ -4,10 +4,12 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.core.config import DEFAULT_TIMEZONE
 from app.delivery.contracts import (
     PaymentSnapshot,
     PaymentSource,
@@ -16,7 +18,7 @@ from app.delivery.contracts import (
     RetryableRejection,
 )
 from app.delivery.locking import lock_payments
-from app.delivery.queue import MOSCOW, enqueue_payment_reminder, reminder_at, utc_time
+from app.delivery.queue import enqueue_payment_reminder, reminder_at, utc_time
 from app.delivery.schema import deliveries
 
 
@@ -39,12 +41,14 @@ class DeliveryWorker:
         send_timeout: float = 20,
         poll_seconds: int = 30,
         max_attempts: int = 5,
+        timezone_name: str = DEFAULT_TIMEZONE,
     ):
         if batch_size < 1 or send_timeout <= 0 or poll_seconds < 1 or max_attempts < 1:
             raise ValueError("Worker limits must be positive")
         self.sessions, self.source, self.sender = sessions, source, sender
         self.batch_size, self.send_timeout = batch_size, send_timeout
         self.poll_seconds, self.max_attempts = poll_seconds, max_attempts
+        self.timezone = ZoneInfo(timezone_name)
         self.recovery_cursor: UUID | None = None
 
     async def recover_periods(self, now: datetime | None = None) -> int:
@@ -66,7 +70,7 @@ class DeliveryWorker:
                 await lock_payments(db)
                 if await self.source.lock_rule(db, payment_id):
                     await self.source.ensure_payment_periods(
-                        db, payment_id, now.astimezone(MOSCOW).date()
+                        db, payment_id, now.astimezone(self.timezone).date()
                     )
                     for item in await self.source.unpaid_occurrences(db, payment_id):
                         if item.payment_id != payment_id:
@@ -80,6 +84,7 @@ class DeliveryWorker:
                                 occurrence_id=item.occurrence_id,
                                 due_date=item.due_date,
                                 now=now,
+                                timezone_name=self.timezone.key,
                             )
             self.recovery_cursor = payment_id
         if len(ids) < self.batch_size:
@@ -96,7 +101,7 @@ class DeliveryWorker:
                 or snapshot.occurrence_id != row["occurrence_id"]
             ):
                 raise ValueError("PaymentSource returned the wrong occurrence")
-            scheduled_at = reminder_at(snapshot.due_date)
+            scheduled_at = reminder_at(snapshot.due_date, self.timezone.key)
             if snapshot.is_paid:
                 # Keep the job resumable if payment is later undone; never touch sent.
                 values = {

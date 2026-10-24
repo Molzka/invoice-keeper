@@ -20,11 +20,13 @@ def assert_error(response, status, code):
 
 
 async def test_login_me_logout_and_revoked_token_replay(app, client, create_user, login):
+    app.state.settings.app_timezone = "Asia/Tokyo"
     user = await create_user()
     authentication = await login(client)
     token = client.cookies[app.state.settings.session_cookie_name]
     assert authentication["user"]["id"] == str(user.id)
     assert authentication["csrf_token"]
+    assert authentication["timezone"] == "Asia/Tokyo"
     assert "password" not in authentication["user"]
     assert "password_hash" not in authentication["user"]
 
