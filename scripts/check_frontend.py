@@ -46,7 +46,7 @@ def fetch(base_url, path, expected_status, expected_type=None):
     return body, headers
 
 
-def check(base_url):
+def check(base_url, api_ready=False):
     index, headers = fetch(base_url, "/index.html", 200, {"text/html"})
     require(b'<div id="root"></div>' in index, "Missing React root in index.html")
     require("no-cache" in headers.get("Cache-Control", ""), "index.html must not be cached without revalidation")
@@ -71,7 +71,11 @@ def check(base_url):
     health, _ = fetch(base_url, "/healthz", 200, {"text/plain"})
     require(health == b"ok\n", "Unexpected frontend health response")
 
-    for path in ("/api", "/api/v1/health"):
+    if api_ready:
+        body, _ = fetch(base_url, "/api/v1/ready", 200, {"application/json"})
+        require(json.loads(body) == {"status": "ok"}, "API is not ready")
+
+    for path in (() if api_ready else ("/api", "/api/v1/health")):
         body, _ = fetch(base_url, path, 503, {"application/json"})
         payload = json.loads(body)
         require(isinstance(payload, dict) and isinstance(payload.get("error"), dict),
@@ -90,12 +94,13 @@ def check(base_url):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("url", help="Frontend address, e.g. http://127.0.0.1:8080")
+    parser.add_argument("--api-ready", action="store_true", help="Expect a running API and database")
     args = parser.parse_args()
     address = urlsplit(args.url)
     if address.scheme not in {"http", "https"} or not address.netloc or address.path not in {"", "/"} or address.query or address.fragment:
         parser.error("Provide an HTTP(S) origin without a path, query or fragment")
     try:
-        check(args.url.rstrip("/"))
+        check(args.url.rstrip("/"), api_ready=args.api_ready)
     except (RuntimeError, URLError, OSError, ValueError) as error:
         print(f"Frontend check failed: {error}", file=sys.stderr)
         return 1

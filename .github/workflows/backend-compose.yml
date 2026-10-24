@@ -1,0 +1,149 @@
+name: Backend Compose
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-compose-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: Backend / Compose, Nginx and browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      COMPOSE_PROJECT_NAME: invoice-keeper-api-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_DB: invoice_keeper_ci
+      POSTGRES_USER: invoice_keeper_ci
+      POSTGRES_PORT: "0"
+      FRONTEND_PORT: "0"
+      FRONTEND_API_MODE: real
+      APP_ENV: test
+      ADMIN_USERNAME: compose_admin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate temporary credentials
+        run: |
+          database_password="$(openssl rand -hex 24)@:/#%"
+          admin_password=$(openssl rand -hex 24)
+          echo "::add-mask::$database_password"
+          echo "::add-mask::$admin_password"
+          echo "POSTGRES_PASSWORD=$database_password" >> "$GITHUB_ENV"
+          echo "ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
+
+      - name: Install Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked browser test dependencies
+        working-directory: frontend
+        run: |
+          npm install --global npm@11.6.2
+          npm ci
+          npm run typecheck
+          npm run lint
+          npx playwright install --with-deps chromium
+
+      - name: Build locked backend and frontend images
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example build backend frontend
+
+      - name: Start PostgreSQL and Nginx on free ports
+        run: |
+          docker compose --env-file .env.example up -d --no-deps --wait --wait-timeout 90 postgres frontend
+          address=$(docker compose --env-file .env.example port frontend 8080)
+          echo "FRONTEND_URL=http://$address" >> "$GITHUB_ENV"
+          echo "ALLOWED_ORIGINS=[\"http://$address\"]" >> "$GITHUB_ENV"
+
+      - name: Apply migrations and create administrator
+        run: |
+          docker compose --env-file .env.example run --rm -T backend alembic upgrade head
+          docker compose --env-file .env.example run --rm -T backend alembic check
+          docker compose --env-file .env.example run --rm -T backend python -m app.cli create-admin
+          replacement=$(openssl rand -hex 24)
+          echo "::add-mask::$replacement"
+          set +e
+          docker compose --env-file .env.example run --rm -T -e "ADMIN_PASSWORD=$replacement" backend python -m app.cli create-admin > "$RUNNER_TEMP/admin-duplicate.log" 2>&1
+          result=$?
+          set -e
+          test "$result" = 1
+
+      - name: Start API and check runtime
+        run: |
+          docker compose --env-file .env.example up -d --wait --wait-timeout 90 backend
+          container=$(docker compose --env-file .env.example ps -q backend)
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true
+          docker inspect --format '{{json .HostConfig.PortBindings}}' "$container" | python3 -c 'import json, sys; assert not json.load(sys.stdin)'
+          docker compose --env-file .env.example exec -T backend sh -ec '
+            test "$(id -u)" != 0
+            test ! -e /app/.env
+            test ! -d /app/tests
+            python -c "import importlib.util; assert importlib.util.find_spec(\"pytest\") is None"
+          '
+
+      - name: Check real authentication through Nginx
+        run: |
+          python3 scripts/check_backend.py "$FRONTEND_URL"
+          python3 scripts/check_frontend.py "$FRONTEND_URL" --api-ready
+
+      - name: Check proxy recovery after replacing API container
+        run: |
+          docker compose --env-file .env.example rm --stop --force backend
+          curl --fail --silent --show-error "$FRONTEND_URL/" > /dev/null
+          status=$(curl --silent --show-error -o "$RUNNER_TEMP/api-offline.json" -w '%{http_code}' "$FRONTEND_URL/api/v1/health")
+          test "$status" = 503
+          python3 -c 'import json, os; from pathlib import Path; data = json.loads((Path(os.environ["RUNNER_TEMP"]) / "api-offline.json").read_text()); assert data["error"]["code"] == "API_NOT_AVAILABLE"'
+          docker compose --env-file .env.example up -d --wait --wait-timeout 90 backend
+          python3 scripts/check_backend.py "$FRONTEND_URL"
+
+      - name: Check authentication and users in Chromium
+        working-directory: frontend
+        run: |
+          E2E_BASE_URL="$FRONTEND_URL" \
+          E2E_ADMIN_USERNAME="$ADMIN_USERNAME" \
+          E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+          npm run test:e2e
+
+      - name: Save browser report and failure details
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: auth-e2e-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env.example ps -a
+          docker compose --env-file .env.example logs --no-color --tail=80 backend frontend postgres
+
+      - name: Remove temporary Compose project
+        if: always()
+        run: |
+          docker compose --env-file .env.example down --volumes --timeout 10
+          test -z "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
+          test -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"

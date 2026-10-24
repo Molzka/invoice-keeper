@@ -14,6 +14,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
 from app.core.config import Settings
+from app.db.session import Database
 from app.main import create_app
 from app.models import LoginRateLimit, PaymentOccurrence, RecurringPayment, User, UserSession
 
@@ -132,3 +133,29 @@ def login():
         return response.json()
 
     return authenticate
+
+
+@pytest_asyncio.fixture
+async def delivery_db(migrated_database_url):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    from app.delivery.schema import create_delivery_schema, drop_delivery_schema
+
+    from .delivery_helpers import metadata
+
+    database = Database(migrated_database_url)
+    async with database.engine.begin() as connection:
+        await connection.run_sync(
+            lambda sync: create_delivery_schema(Operations(MigrationContext.configure(sync)))
+        )
+        await connection.run_sync(metadata.create_all)
+    try:
+        yield database
+    finally:
+        async with database.engine.begin() as connection:
+            await connection.run_sync(metadata.drop_all)
+            await connection.run_sync(
+                lambda sync: drop_delivery_schema(Operations(MigrationContext.configure(sync)))
+            )
+        await database.dispose()

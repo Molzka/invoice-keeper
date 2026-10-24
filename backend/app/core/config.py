@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, repr=False)
     admin_username: str | None = None
     admin_password: SecretStr | None = Field(default=None, repr=False)
+    bot_token: SecretStr | None = Field(default=None, repr=False)
+    chat_id: str | None = None
     session_cookie_name: str = "session_id"
     session_cookie_secure: bool = False
     session_ttl_seconds: int = Field(default=604800, ge=60, le=2592000)
