@@ -1,0 +1,106 @@
+"""Check a running frontend container over HTTP (Python 3.10+, no dependencies)."""
+
+import argparse
+import json
+import sys
+from html.parser import HTMLParser
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import urlopen
+
+
+class Assets(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.paths = set()
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "script" and attrs.get("src"):
+            self.paths.add(attrs["src"])
+        if tag == "link" and attrs.get("rel") == "stylesheet":
+            self.paths.add(attrs.get("href", ""))
+
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+
+def fetch(base_url, path, expected_status, expected_type=None):
+    url = base_url + path
+    try:
+        response = urlopen(url, timeout=10)
+    except HTTPError as error:
+        response = error
+    with response:
+        require(response.status == expected_status,
+                f"{path}: expected HTTP {expected_status}, got {response.status}")
+        require(response.geturl() == url, f"{path}: unexpected redirect")
+        if expected_type:
+            require(response.headers.get_content_type() in expected_type,
+                    f"{path}: unexpected Content-Type {response.headers.get('Content-Type')}")
+        body = response.read()
+        headers = response.headers
+    print(f"OK {expected_status} {path}")
+    return body, headers
+
+
+def check(base_url):
+    index, headers = fetch(base_url, "/index.html", 200, {"text/html"})
+    require(b'<div id="root"></div>' in index, "Missing React root in index.html")
+    require("no-cache" in headers.get("Cache-Control", ""), "index.html must not be cached without revalidation")
+    home, headers = fetch(base_url, "/", 200, {"text/html"})
+    require(home == index, "/ must serve index.html")
+    require("no-cache" in headers.get("Cache-Control", ""), "/ must not be cached without revalidation")
+
+    parser = Assets()
+    parser.feed(index.decode("utf-8"))
+    require(any(path.endswith(".js") for path in parser.paths), "No built JavaScript in index.html")
+    require(any(path.endswith(".css") for path in parser.paths), "No built stylesheet in index.html")
+    for path in sorted(parser.paths):
+        require(path.startswith("/assets/") and not urlsplit(path).netloc,
+                f"Expected a local built asset, got {path}")
+        types = {"text/css"} if path.endswith(".css") else {"text/javascript", "application/javascript"}
+        body, headers = fetch(base_url, path, 200, types)
+        require(body and not body.lstrip().startswith(b"<!doctype html>"), f"{path}: missing asset contents")
+        require("immutable" in headers.get("Cache-Control", ""), f"{path}: missing immutable cache policy")
+
+    fetch(base_url, "/favicon.svg", 200, {"image/svg+xml"})
+    fetch(base_url, "/glass-calendar.png", 200, {"image/png"})
+    health, _ = fetch(base_url, "/healthz", 200, {"text/plain"})
+    require(health == b"ok\n", "Unexpected frontend health response")
+
+    for path in ("/api", "/api/v1/health"):
+        body, _ = fetch(base_url, path, 503, {"application/json"})
+        payload = json.loads(body)
+        require(isinstance(payload, dict) and isinstance(payload.get("error"), dict),
+                f"{path}: missing error object")
+        error = payload["error"]
+        require(error.get("code") == "API_NOT_AVAILABLE", f"{path}: unexpected error code")
+        require(isinstance(error.get("message"), str) and error["message"].strip(),
+                f"{path}: missing error message")
+        require(error.get("details") == [], f"{path}: expected an empty details array")
+
+    for path in ("/assets/nonexistent.js", "/.env", "/.env.local", "/src/.env"):
+        fetch(base_url, path, 404)
+    print("Frontend HTTP checks passed")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("url", help="Frontend address, e.g. http://127.0.0.1:8080")
+    args = parser.parse_args()
+    address = urlsplit(args.url)
+    if address.scheme not in {"http", "https"} or not address.netloc or address.path not in {"", "/"} or address.query or address.fragment:
+        parser.error("Provide an HTTP(S) origin without a path, query or fragment")
+    try:
+        check(args.url.rstrip("/"))
+    except (RuntimeError, URLError, OSError, ValueError) as error:
+        print(f"Frontend check failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

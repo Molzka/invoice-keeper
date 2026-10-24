@@ -1,0 +1,111 @@
+/* Short, quiet motion keeps the working space responsive. */
+:root {
+  --motion-fast: 160ms;
+  --motion-normal: 240ms;
+  --motion-enter: 340ms;
+  --ease-out: cubic-bezier(.2, .75, .25, 1);
+  --ease-press: cubic-bezier(.25, .1, .25, 1);
+}
+
+.btn, .icon-button, .nav-link, .status-tab, .segment,
+.password-toggle, .toast-close, .login-demo button {
+  transition: color var(--motion-fast), background-color var(--motion-fast),
+    border-color var(--motion-fast), box-shadow var(--motion-normal),
+    opacity var(--motion-fast), transform var(--motion-fast) var(--ease-press);
+}
+
+.field input, .field select, .field textarea, .static-field {
+  transition: color var(--motion-fast), background-color var(--motion-fast),
+    border-color var(--motion-fast), box-shadow var(--motion-normal);
+}
+
+.currency-card {
+  transition: border-color var(--motion-normal), box-shadow var(--motion-normal);
+}
+
+.data-table tbody tr { transition: background-color var(--motion-normal); }
+.status, .pill { transition: color var(--motion-fast), background-color var(--motion-normal), border-color var(--motion-normal); }
+.nav-link:active, .status-tab:active, .segment:active { transform: scale(.98); }
+.btn:active:not(:disabled), .icon-button:active:not(:disabled),
+.password-toggle:active:not(:disabled), .toast-close:active { transform: scale(.975); }
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled), .icon-button:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn:active:not(:disabled), .icon-button:active:not(:disabled) { transform: translateY(0) scale(.975); }
+}
+
+.page-heading .page-intro,
+.app-main > .panel,
+.app-main > section:not(.panel) > .panel,
+.login-card {
+  animation: workspace-arrive var(--motion-enter) var(--ease-out) both;
+}
+
+.app-main > .panel, .app-main > section:not(.panel) > .panel { animation-delay: 35ms; }
+.summary-grid > .currency-card { animation: card-arrive var(--motion-enter) var(--ease-out) both; }
+.summary-grid > .currency-card:nth-child(2) { animation-delay: 35ms; }
+.summary-grid > .currency-card:nth-child(3) { animation-delay: 70ms; }
+.data-table tbody tr { animation: row-arrive 220ms ease-out both; }
+.data-table tbody tr:nth-child(2) { animation-delay: 15ms; }
+.data-table tbody tr:nth-child(3) { animation-delay: 30ms; }
+.data-table tbody tr:nth-child(4) { animation-delay: 45ms; }
+.data-table tbody tr:nth-child(n + 5) { animation-delay: 60ms; }
+.empty-state, .notice, .error-banner, .summary-error, .history-chip {
+  animation: workspace-arrive 240ms var(--ease-out) both;
+}
+.field-error, .query-error { animation: row-arrive 160ms ease-out both; }
+.toast { animation: toast-arrive 260ms var(--ease-out) both; }
+
+.drawer-popover-root { display: contents; }
+.drawer-backdrop { animation: backdrop-arrive 220ms ease-out both; }
+.drawer {
+  border-radius: 24px 0 0 24px;
+  overflow: hidden;
+  animation: drawer-arrive 300ms var(--ease-out) both;
+}
+.drawer-backdrop[data-state='closing'] { animation: backdrop-leave 180ms ease-in both; }
+.drawer-backdrop[data-state='closing'] [data-drawer-popover-root] > * { pointer-events: none; }
+.drawer-backdrop[data-state='closing'] .drawer {
+  animation: drawer-leave 180ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes workspace-arrive {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes card-arrive {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes row-arrive { from { opacity: 0; } to { opacity: 1; } }
+@keyframes toast-arrive {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes backdrop-arrive { from { opacity: 0; } to { opacity: 1; } }
+@keyframes backdrop-leave { from { opacity: 1; } to { opacity: 0; } }
+@keyframes drawer-arrive {
+  from { opacity: .65; transform: translateX(36px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes drawer-leave {
+  from { opacity: 1; transform: none; }
+  to { opacity: .6; transform: translateX(32px); }
+}
+
+@media (max-width: 520px) {
+  .drawer { border-radius: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .btn:hover:not(:disabled), .icon-button:hover:not(:disabled),
+  .btn:active:not(:disabled), .icon-button:active:not(:disabled),
+  .nav-link:active, .status-tab:active, .segment:active,
+  .password-toggle:active:not(:disabled), .toast-close:active { transform: none; }
+}
