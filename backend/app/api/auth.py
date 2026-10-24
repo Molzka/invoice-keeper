@@ -49,15 +49,19 @@ async def login(
     )
     response.headers["Cache-Control"] = "no-store"
     return AuthResponse(
-        user=UserRead.model_validate(user), csrf_token=csrf_token_for_session(token)
+        user=UserRead.model_validate(user),
+        csrf_token=csrf_token_for_session(token),
+        timezone=settings.app_timezone,
     )
 
 
 @router.get("/me", response_model=AuthResponse)
-async def me(auth: CurrentSession, response: Response) -> AuthResponse:
+async def me(auth: CurrentSession, request: Request, response: Response) -> AuthResponse:
     response.headers["Cache-Control"] = "no-store"
     return AuthResponse(
-        user=UserRead.model_validate(auth.user), csrf_token=csrf_token_for_session(auth.token)
+        user=UserRead.model_validate(auth.user),
+        csrf_token=csrf_token_for_session(auth.token),
+        timezone=request.app.state.settings.app_timezone,
     )
 
 
@@ -65,6 +69,23 @@ async def me(auth: CurrentSession, response: Response) -> AuthResponse:
     "/change-password",
     response_model=AuthResponse,
     dependencies=[Depends(require_json_request), Depends(require_csrf)],
+    summary="Изменить собственный пароль обычного пользователя",
+    responses={
+        403: {
+            "description": "Аккаунт администратора защищён либо проверка CSRF не пройдена",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": {
+                            "code": "ADMIN_ACCOUNT_PROTECTED",
+                            "message": "Аккаунт администратора защищён",
+                            "details": [],
+                        }
+                    }
+                }
+            },
+        }
+    },
 )
 async def change_password(
     payload: ChangePasswordRequest,
@@ -94,7 +115,9 @@ async def change_password(
     )
     response.headers["Cache-Control"] = "no-store"
     return AuthResponse(
-        user=UserRead.model_validate(user), csrf_token=csrf_token_for_session(token)
+        user=UserRead.model_validate(user),
+        csrf_token=csrf_token_for_session(token),
+        timezone=settings.app_timezone,
     )
 
 

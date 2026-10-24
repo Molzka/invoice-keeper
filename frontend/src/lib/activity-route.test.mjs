@@ -39,8 +39,8 @@ test('invalid calendar ranges and unsupported URL values never reach the source'
 })
 
 test('activity groups technical timestamps by Moscow day across UTC midnight', () => {
-  assert.equal(activityDay('2026-10-22T20:59:59Z'), '2026-10-22')
-  assert.equal(activityDay('2026-10-22T21:00:00Z'), '2026-10-23')
-  assert.equal(activityDay('2026-10-23T00:30:00+03:00'), '2026-10-23')
-  assert.equal(activityDay('not-a-timestamp'), '')
+  assert.equal(activityDay('2026-10-22T20:59:59Z', 'Europe/Moscow'), '2026-10-22')
+  assert.equal(activityDay('2026-10-22T21:00:00Z', 'Europe/Moscow'), '2026-10-23')
+  assert.equal(activityDay('2026-10-23T00:30:00+03:00', 'Europe/Moscow'), '2026-10-23')
+  assert.equal(activityDay('not-a-timestamp', 'Europe/Moscow'), '')
 })

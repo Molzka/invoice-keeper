@@ -1,17 +1,19 @@
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_TIMEZONE = "Europe/Moscow"
 
 
 class Settings(BaseSettings):
     app_name: str = "Invoice Keeper"
-    app_timezone: str = "Europe/Moscow"
+    app_timezone: str = DEFAULT_TIMEZONE
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str | None = Field(default=None, repr=False)
     admin_username: str | None = None
@@ -34,6 +36,15 @@ class Settings(BaseSettings):
     login_rate_limit_window_seconds: int = Field(default=900, ge=1, le=86400)
     password_change_rate_limit_attempts: int = Field(default=5, ge=1, le=1000)
     password_change_rate_limit_window_seconds: int = Field(default=900, ge=1, le=86400)
+
+    @field_validator("app_timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("APP_TIMEZONE must be a valid IANA timezone") from None
+        return value
 
     @field_validator("database_url")
     @classmethod

@@ -78,7 +78,9 @@ async def create_payment(
     request: Request,
 ) -> dict:
     today = today_in_timezone(request.app.state.settings.app_timezone)
-    payment = await create_recurring_payment(db, payload, today)
+    payment = await create_recurring_payment(
+        db, payload, today, timezone_name=request.app.state.settings.app_timezone
+    )
     return recurring_payment_data(payment, today)
 
 
@@ -119,7 +121,9 @@ async def delete_recurring_payment(
     request: Request,
 ) -> Response:
     today = today_in_timezone(request.app.state.settings.app_timezone)
-    await stop_recurring_payment(db, payment_id, today)
+    await stop_recurring_payment(
+        db, payment_id, today, timezone_name=request.app.state.settings.app_timezone
+    )
     return Response(status_code=204)
 
 

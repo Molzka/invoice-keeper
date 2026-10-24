@@ -55,7 +55,7 @@ button svg { flex-shrink: 0; }
 .nav-link:hover { color: var(--ink); background: #f6f7f8; }
 .nav-link.active { background: #eff2f3; color: #141616; }
 .user-menu { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-shrink: 0; }
-.user-menu > div:not(.user-avatar) { display: flex; flex-direction: column; gap: 4px; }
+.user-menu > div:not(.user-avatar):not(.account-identity) { display: flex; flex-direction: column; gap: 4px; }
 .user-menu strong { display: block; font-size: 13px; max-width: 140px; overflow-wrap: anywhere; }
 .user-menu small { font-size: 11px; color: var(--muted); }
 .user-avatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; color: #2a4245; background: #e9f1f1; font-size: 13px; font-weight: 750; }
@@ -242,7 +242,7 @@ button svg { flex-shrink: 0; }
   .brand-logo:hover, .brand-logo:focus-visible, .brand-logo[data-open='true'] { width: 54px; }
   .topbar { gap: 18px; }
   .main-nav { justify-content: center; }
-  .user-menu > div:not(.user-avatar) { display: none; }
+  .user-menu > div:not(.user-avatar):not(.account-identity) { display: none; }
   .hero-art { right: 168px; width: 130px; height: 145px; opacity: .7; }
   .page-head > :first-child { max-width: 480px; }
   .page-subtitle { max-width: 420px; }

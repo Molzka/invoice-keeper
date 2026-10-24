@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import DEFAULT_TIMEZONE
 from app.delivery.locking import lock_payments
 from app.delivery.queue import enqueue_payment_reminder
 from app.models import PaymentOccurrence, RecurringPayment
@@ -21,6 +22,7 @@ async def create_missing_periods(
     db: AsyncSession,
     payment: RecurringPayment,
     through: date,
+    timezone_name: str = DEFAULT_TIMEZONE,
 ) -> None:
     due_dates = monthly_due_dates(payment.first_due_date, payment.anchor_day, through)
     if not due_dates:
@@ -58,6 +60,7 @@ async def create_missing_periods(
                 payment_id=payment.id,
                 occurrence_id=occurrence_id,
                 due_date=due_date,
+                timezone_name=timezone_name,
             )
 
 
@@ -66,6 +69,8 @@ async def ensure_payment_periods(
     payment_id: UUID,
     today: date,
     through: date | None = None,
+    *,
+    timezone_name: str = DEFAULT_TIMEZONE,
 ) -> RecurringPayment | None:
     """Lock a rule and fill periods without committing the caller's transaction."""
     await lock_payments(db)
@@ -80,5 +85,6 @@ async def ensure_payment_periods(
             db,
             payment,
             through if through is not None else active_generation_end(payment, today),
+            timezone_name,
         )
     return payment

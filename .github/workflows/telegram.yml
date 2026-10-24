@@ -61,7 +61,8 @@ jobs:
               test "$(id -u)" != "0"
               test ! -e /app/.env
               test ! -d /app/.git
-              python -c "import aiogram, dotenv, bot, reminders; from zoneinfo import ZoneInfo; print(ZoneInfo(\"Europe/Moscow\")); print(\"Bot modules import successfully\")"
+              python -c "import aiogram, dotenv, bot, api, smoke, reminders; from zoneinfo import ZoneInfo; print(ZoneInfo(\"Europe/Moscow\")); print(\"Bot modules import successfully\")"
+              python smoke.py --dry-run
             '
 
           # CHAT_ID stays optional so /id can be used during first-time setup.

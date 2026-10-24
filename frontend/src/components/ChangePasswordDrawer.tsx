@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AlertCircle, Check, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react'
 import { api, ApiError } from '../api/client'
-import type { User } from '../types/api'
+import type { AuthResponse, User } from '../types/api'
 import { validatePasswordFields } from '../lib/password-fields'
 import type { PasswordErrors, PasswordField, PasswordFields } from '../lib/password-fields'
 import { Drawer } from './UI'
@@ -11,7 +11,7 @@ type Props = {
   user: User
   retryAt: number
   onRateLimit: (deadline: number) => void
-  onUserUpdated: (user: User) => void
+  onSessionUpdated: (session: AuthResponse) => void
   onClose: () => void
   onSaved: () => void
   onSignIn: (message: string) => void
@@ -24,7 +24,7 @@ const definitions: { key: PasswordField; label: string; autoComplete: string; hi
   { key: 'confirm_password', label: 'Повторите новый пароль', autoComplete: 'new-password' },
 ]
 
-export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated, onClose, onSaved, onSignIn }: Props) {
+export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onSessionUpdated, onClose, onSaved, onSignIn }: Props) {
   const [values, setValues] = useState<PasswordFields>(emptyFields)
   const [shown, setShown] = useState<Partial<Record<PasswordField, boolean>>>({})
   const [fields, setFields] = useState<PasswordErrors>({})
@@ -56,7 +56,7 @@ export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated
       const data = await api.me()
       if (!mounted.current) return
       if (data.user.id !== user.id || data.user.role !== user.role) { clearPasswords(); onSignIn('Аккаунт изменился в другой вкладке. Войдите снова.'); return }
-      onUserUpdated(data.user)
+      onSessionUpdated(data)
       if (uncertain) { setRecovery('uncertain-restored'); setInfo('Сессия действует. Это не подтверждает, что пароль изменён.') }
       else { setRecovery('none'); setInfo('Сессия обновлена. Заполните форму ещё раз.'); setError('') }
     } catch (reason) {
@@ -72,7 +72,7 @@ export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (guard.current || retryAt > Date.now() || recovery !== 'none') return
+    if (user.role !== 'user' || guard.current || retryAt > Date.now() || recovery !== 'none') return
     const nextFields = validatePasswordFields(values)
     if (Object.keys(nextFields).length) { showFields(nextFields); return }
     guard.current = true; setBusy(true); setError(''); setInfo(''); setFields({})
@@ -82,12 +82,15 @@ export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated
       if (!mounted.current) return
       clearPasswords()
       if (response.user.id !== user.id || response.user.role !== user.role) { onSignIn('Аккаунт изменился в другой вкладке. Войдите снова.'); return }
-      onUserUpdated(response.user); onSaved()
+      onSessionUpdated(response); onSaved()
     } catch (reason) {
       if (!mounted.current) return
       const apiError = reason instanceof ApiError ? reason : null
       if (apiError?.status === 401) return // The shared client opens the sign-in screen.
-      if (apiError?.code === 'CSRF_RECOVERED') {
+      if (apiError?.code === 'ADMIN_ACCOUNT_PROTECTED') {
+        clearPasswords(); setRecovery('csrf-unverified'); setError('Учётная запись администратора защищена от изменения через панель.')
+        await checkSession(false)
+      } else if (apiError?.code === 'CSRF_RECOVERED') {
         clearPasswords(); setRecovery('none'); setError(''); setInfo('Сессия обновлена. Заполните форму ещё раз.')
       } else if (apiError?.code === 'CSRF_REFRESH_FAILED') {
         clearPasswords(); setRecovery('csrf-unverified'); setError(apiError.message)
@@ -119,8 +122,9 @@ export function ChangePasswordDrawer({ user, retryAt, onRateLimit, onUserUpdated
   }
   const blocked = recovery !== 'none'
   const uncertain = recovery.startsWith('uncertain')
+  if (user.role !== 'user') return null
   return <Drawer title="Сменить пароль" subtitle="Безопасность вашей учётной записи." canClose={!busy && !checking} onClose={() => { if (!guard.current && !checking) onClose() }}>
-    <div className="password-account"><span className="password-account-icon" aria-hidden="true"><KeyRound size={22}/></span><div><strong>{user.username}</strong><span>{user.role === 'admin' ? 'Администратор' : 'Пользователь'}</span></div></div>
+    <div className="password-account"><span className="password-account-icon" aria-hidden="true"><KeyRound size={22}/></span><div><strong>{user.username}</strong><span>Пользователь</span></div></div>
     <div className="notice password-session-note"><ShieldCheck size={20} aria-hidden="true"/><p>Этот браузер останется в системе. На остальных устройствах потребуется войти снова.</p></div>
     <form className="change-password-form" onSubmit={submit} noValidate>
       <input type="text" name="username" autoComplete="username" value={user.username} readOnly hidden/>

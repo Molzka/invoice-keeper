@@ -90,6 +90,11 @@ services:
       BOT_TOKEN: ${BOT_TOKEN:-}
       CHAT_ID: ${CHAT_ID:-}
       PANEL_URL: ${PANEL_URL:-}
+      API_BASE_URL: ${API_BASE_URL:-http://backend:8000/api/v1}
+      API_USERNAME: ${API_USERNAME:-}
+      API_PASSWORD: ${API_PASSWORD:-}
+      API_ORIGIN: ${API_ORIGIN:-http://localhost:${FRONTEND_PORT:-8080}}
+      API_TIMEOUT: ${API_TIMEOUT:-10}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
       TZ: ${APP_TIMEZONE:-Europe/Moscow}
     read_only: true
