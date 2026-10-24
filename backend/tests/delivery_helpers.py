@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert
 
 from app.delivery.contracts import PaymentSnapshot
+from app.models import PaymentOccurrence, RecurringPayment
 
 # A test implementation of the participant-2 boundary, backed by real PostgreSQL.
 # These are explicitly not production payment models or a guessed migration 0003.
@@ -72,10 +73,11 @@ class TestPaymentSource:
             .where(rules.c.id == payment_id)
             .values(ensure_calls=rules.c.ensure_calls + 1)
         )
+        occurrence_id = uuid4()
         await db.execute(
             insert(periods)
             .values(
-                id=uuid4(),
+                id=occurrence_id,
                 payment_id=payment_id,
                 due_date=row["due_date"],
                 is_paid=False,
@@ -83,6 +85,16 @@ class TestPaymentSource:
                 currency="RUB",
             )
             .on_conflict_do_nothing(index_elements=[periods.c.payment_id, periods.c.due_date])
+        )
+        await db.execute(
+            insert(PaymentOccurrence)
+            .values(
+                id=occurrence_id,
+                recurring_payment_id=payment_id,
+                due_date=row["due_date"],
+                status="unpaid",
+            )
+            .on_conflict_do_nothing(index_elements=["recurring_payment_id", "due_date"])
         )
 
     async def unpaid_occurrences(self, db, payment_id):
@@ -141,6 +153,18 @@ async def add_payment(
                 ensure_calls=0,
             )
         )
+        await db.execute(
+            insert(RecurringPayment).values(
+                id=payment_id,
+                title="Office <rent>",
+                amount=Decimal("123.45"),
+                currency="RUB",
+                first_due_date=due_date,
+                periodicity="monthly",
+                anchor_day=due_date.day,
+                is_active=active,
+            )
+        )
         if create_period:
             await db.execute(
                 insert(periods).values(
@@ -150,6 +174,15 @@ async def add_payment(
                     is_paid=paid,
                     amount=Decimal("123.45"),
                     currency="RUB",
+                )
+            )
+            await db.execute(
+                insert(PaymentOccurrence).values(
+                    id=occurrence_id,
+                    recurring_payment_id=payment_id,
+                    due_date=due_date,
+                    status="paid" if paid else "unpaid",
+                    paid_on=due_date if paid else None,
                 )
             )
     return payment_id, occurrence_id

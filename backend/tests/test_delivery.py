@@ -21,6 +21,7 @@ from app.delivery.queue import (
 from app.delivery.schema import deliveries
 from app.delivery.telegram import build_reminder_text
 from app.delivery.worker import DeliveryWorker
+from app.models import PaymentOccurrence, RecurringPayment
 
 from .delivery_helpers import TestPaymentSource, add_payment, periods, rules
 
@@ -94,6 +95,19 @@ async def test_rule_period_and_queue_rollback_together(delivery_db):
                 ensure_calls=0,
             )
         )
+        db.add(
+            RecurringPayment(
+                id=payment_id,
+                title="Atomic",
+                amount=Decimal("123.45"),
+                currency="RUB",
+                first_due_date=date(2026, 11, 10),
+                periodicity="monthly",
+                anchor_day=10,
+                is_active=True,
+            )
+        )
+        await db.flush()
         source = TestPaymentSource()
         await source.lock_rule(db, payment_id)
         await source.ensure_payment_periods(db, payment_id, NOW.date())
@@ -199,6 +213,14 @@ async def test_each_period_has_independent_payment_and_delivery_state(delivery_d
                 is_paid=False,
                 amount=Decimal("123.45"),
                 currency="RUB",
+            )
+        )
+        db.add(
+            PaymentOccurrence(
+                id=unpaid_period_id,
+                recurring_payment_id=payment_id,
+                due_date=date(2026, 10, 10),
+                status="unpaid",
             )
         )
     sender = Sender()
