@@ -11,6 +11,7 @@ import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,7 @@ from aiogram.types import Message, Update
 
 import bot as application
 import api as api_module
+from formatting import format_amount, format_date
 
 
 def require(condition, message):
@@ -77,6 +79,13 @@ def smoke_and_environment():
             return json.load(response)
 
     before = sessions()
+    local = subprocess.run(
+        [sys.executable, "/app/smoke.py"], env=env, capture_output=True,
+        text=True, timeout=30, check=False,
+    )
+    require(local.returncode == 0 and local.stdout.count("--- ") == 5,
+            "Default smoke did not render all local cases without Telegram")
+    require(sessions() == before, "Local smoke unexpectedly contacted the API")
     for value in ("-1", "0", "101"):
         result = subprocess.run(
             [sys.executable, "/app/smoke.py", "--backend", "--limit", value],
@@ -90,7 +99,7 @@ def smoke_and_environment():
     require(sessions() == before, "Invalid CLI limit logged into the API")
     with tempfile.TemporaryDirectory(prefix="bot-env-fixture-") as temporary:
         target = Path(temporary)
-        for name in ("bot.py", "api.py", "smoke.py", "reminders.py", "formatting.py", "texts.json"):
+        for name in ("bot.py", "api.py", "smoke.py", "reminders.py", "formatting.py", "features.py", "texts.json"):
             shutil.copyfile(Path("/app") / name, target / name)
         # Dummy file only; the real repository .env is neither mounted nor opened.
         (target / ".env").write_text(
@@ -111,7 +120,13 @@ def smoke_and_environment():
             check=False,
         )
         require(result.returncode == 0, "A dummy .env overrode the container environment")
-    print("PASS: real-backend smoke dry-run, negative limit rejected, dummy .env precedence")
+    alias = subprocess.run(
+        [sys.executable, "/app/smoke.py", "--from-api", "--limit", "3"],
+        env=env, capture_output=True, text=True, timeout=30, check=False,
+    )
+    require(alias.returncode == 0 and alias.stdout.count("Bot upcoming") == 3,
+            "API smoke alias did not default to no-send output")
+    print("PASS: local/API smoke default to no-send, dry-run/alias, bounded limits and env precedence")
 
 
 async def main():
@@ -133,6 +148,20 @@ async def main():
         return await real_fetch(kind, **kwargs)
 
     application.api_client.fetch_payments = traced_fetch
+    other_calls = []
+    real_detail = application.api_client.fetch_payment
+    real_summary = application.api_client.fetch_summary
+
+    async def traced_detail(occurrence_id):
+        other_calls.append(("card", str(occurrence_id)))
+        return await real_detail(occurrence_id)
+
+    async def traced_summary():
+        other_calls.append(("summary",))
+        return await real_summary()
+
+    application.api_client.fetch_payment = traced_detail
+    application.api_client.fetch_summary = traced_summary
 
     async def dispatch(*, command=None, callback=None, chat=allowed):
         before = len(telegram.calls)
@@ -164,9 +193,14 @@ async def main():
         ]
         require(len(messages) == 1, "Command did not render exactly one page")
         output = messages[0]
-        require(
-            output.text.count("\n• ") == len(rows), "Bot page size differs from the server page"
-        )
+        card_ids = [
+            button.callback_data.removeprefix("card:")
+            for row in output.reply_markup.inline_keyboard
+            for button in row
+            if button.callback_data and button.callback_data.startswith("card:")
+        ] if output.reply_markup else []
+        require(card_ids == [item["id"] for item in rows],
+                "Card buttons do not match the bounded API page and its stable UUIDs")
         for item in rows:
             require(
                 html.escape(item["title"], quote=False) in output.text,
@@ -240,7 +274,54 @@ async def main():
                 "Expired API session did not relogin once",
             )
             print("PASS: cookie session reused, expired server session renewed")
-            before = len(api_calls)
+            check_page(await dispatch(command="/all"), expected["all"][:5])
+            for page in range(1, (len(expected["all"]) + 4) // 5):
+                check_page(await dispatch(callback=f"pg:all:{page}"),
+                           expected["all"][page * 5:page * 5 + 5])
+            require(any(item["status"] == "paid" for item in expected["all"]),
+                    "All-list did not exercise paid obligations")
+            require(any(not item["recurring_payment_is_active"] for item in expected["all"]),
+                    "All-list did not exercise stopped obligations")
+            require(any(item["due_date"] > expected["upcoming"][-1]["due_date"] for item in expected["all"]),
+                    "All-list did not exercise dates outside the upcoming window")
+            require(all(kwargs == {"limit": 5, "offset": index * 5}
+                        for index, (_, kwargs) in enumerate(call for call in api_calls if call[0] == "all")),
+                    "All-list did not use bounded server pagination")
+            summary_calls = await dispatch(command="/summary")
+            summary_messages = [call for call in summary_calls if call.__api_method__ == "sendMessage"]
+            require(len(summary_messages) == 1, "Summary did not render one API result")
+            summary_text = summary_messages[0].text
+            for currency, totals in expected["summary"]["totals"].items():
+                require(currency in summary_text, "Summary omitted a currency")
+                for amount in totals.values():
+                    require(html.escape(format_amount(amount, currency), quote=False) in summary_text,
+                            "Summary differs from the real API's per-currency totals")
+            require(format_date(expected["summary"]["as_of_date"]) in summary_text,
+                    "Summary omitted the API as-of date")
+            print("PASS: /all keeps paid/stopped/outside-window records; monthly summary uses real currency totals")
+
+            chosen = expected["upcoming"][0]
+            paid = await control("/pay-first", "POST")
+            require(paid["id"] == chosen["id"] and paid["status"] == "paid",
+                    "Fixture did not update the selected occurrence through the API")
+            changed_list = await application.api_client.fetch_payments("upcoming", limit=5, offset=0)
+            require(all(item["id"] != chosen["id"] for item in changed_list["items"]),
+                    "Fixture mutation did not change the list before opening the old card")
+            card_calls = await dispatch(callback="card:" + chosen["id"])
+            card_messages = [call for call in card_calls if call.__api_method__ == "sendMessage"]
+            require(len(card_messages) == 1 and html.escape(chosen["title"], quote=False) in card_messages[0].text,
+                    "Old card callback opened a different occurrence after the list changed")
+            require("Оплач" in card_messages[0].text, "Card did not show the saved paid state")
+            missing = await dispatch(callback="card:" + str(UUID(int=1)))
+            require(any(getattr(call, "text", None) == application.T["PAYMENT_NOT_FOUND"] for call in missing),
+                    "A missing UUID was not handled as an expired card")
+            print("PASS: UUID card reads fresh data after list changes; missing period handled safely")
+
+            before = (len(api_calls), len(other_calls))
+            for callback in ("card:not-a-uuid", "card:1", "pg:all:-1", "pg:unknown:0", "pg:all:bad"):
+                await dispatch(callback=callback)
+            require((len(api_calls), len(other_calls)) == before,
+                    "Malformed callbacks queried the API")
             denied = await dispatch(command="/payments", chat=allowed - 1)
             require(
                 len(denied) == 1 and denied[0].text == application.T["DENIED"],
@@ -252,8 +333,13 @@ async def main():
                 "Foreign callback was not denied",
             )
             await dispatch(callback="pg:upcoming:1", chat=allowed - 1)
-            require(len(api_calls) == before, "Foreign chat queried payment data")
-            print("PASS: foreign chat and callbacks cannot query payments")
+            for command in ("/all", "/summary", "/overdue"):
+                await dispatch(command=command, chat=allowed - 1)
+            for callback in ("cmd:all", "cmd:summary", "pg:all:1", "card:" + chosen["id"]):
+                await dispatch(callback=callback, chat=allowed - 1)
+            require((len(api_calls), len(other_calls)) == before,
+                    "Foreign chat queried lists, cards or summary")
+            print("PASS: malformed and foreign-chat callbacks cannot query financial data")
     finally:
         await application.api_client.close()
         await bot.session.close()

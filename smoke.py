@@ -1,9 +1,10 @@
-"""Ручная проверка отправки.
+"""Проверка текстов напоминаний; отправка только с явным --send.
 
-  python smoke.py                       5 тестовых сообщений (RUB, USD, EUR, длинное название, спецсимволы)
-  python smoke.py --backend             платежи с бэкенда (по умолчанию первые 3)
-  python smoke.py --backend --kind overdue --limit 5
-  python smoke.py --backend --dry-run   показать тексты, ничего не отправляя
+  python smoke.py                             показать локальные примеры
+  python smoke.py --backend --dry-run         показать платежи из API
+  python smoke.py --from-api --kind overdue --limit 5
+  python smoke.py --send                      отправить локальные примеры
+  python smoke.py --backend --send --limit 3   отправить платежи из API
 """
 import argparse
 import asyncio
@@ -13,10 +14,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env", override=False)
-
-from api import ApiDataError, ApiNotConfigured, ApiUnavailable, PaymentsClient  # noqa: E402
-from reminders import build_text, send_reminder  # noqa: E402
+from api import ApiDataError, ApiNotConfigured, ApiUnavailable, PaymentsClient
+from reminders import build_text, send_reminder
 
 CASES = [
     ("Аренда офиса", "1 500,00", "RUB", "2026-11-01"),
@@ -41,6 +40,8 @@ async def load_backend_cases(kind: str = "upcoming", limit: int = 3) -> list[tup
 
 
 async def main(args) -> int:
+    if args.backend or args.send:
+        load_dotenv(Path(__file__).parent / ".env", override=False)
     if args.backend:
         try:
             cases = await load_backend_cases(args.kind, args.limit)
@@ -63,7 +64,7 @@ async def main(args) -> int:
     failed = 0
     for i, case in enumerate(cases, 1):
         try:
-            if args.dry_run:
+            if not args.send:
                 print(f"--- {i} ---\n{build_text(*case[:4])}")
             else:
                 print(i, await send_reminder(*case))
@@ -86,8 +87,10 @@ def positive_limit(value):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="Проверка отправки напоминаний")
-    parser.add_argument("--backend", action="store_true", help="брать платежи с бэкенда")
+    parser.add_argument("--backend", "--from-api", dest="backend", action="store_true", help="брать платежи с бэкенда")
     parser.add_argument("--kind", choices=["upcoming", "overdue"], default="upcoming")
-    parser.add_argument("--limit", type=positive_limit, default=3, help="сколько платежей отправить (с --backend)")
-    parser.add_argument("--dry-run", action="store_true", help="только показать тексты")
+    parser.add_argument("--limit", type=positive_limit, default=3, help="сколько платежей показать или отправить (с --backend)")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="только показать тексты (по умолчанию)")
+    mode.add_argument("--send", action="store_true", help="отправить сообщения в настроенный Telegram-чат")
     sys.exit(asyncio.run(main(parser.parse_args())))

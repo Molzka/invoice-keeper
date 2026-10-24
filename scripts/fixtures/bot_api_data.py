@@ -1,5 +1,6 @@
 """Internal-only fixture service for the disposable bot/API integration stack."""
 
+import asyncio
 import json
 import os
 from datetime import UTC, datetime, timedelta
@@ -52,14 +53,14 @@ def seed():
     )
     today = datetime.now(ZoneInfo(auth["timezone"])).date()
 
-    def payment(title, due, *, paid=False, stopped=False):
+    def payment(title, due, *, paid=False, stopped=False, amount="123.45", currency="RUB"):
         created = request(
             "POST",
             "/recurring-payments",
             {
                 "title": title,
-                "amount": "123.45",
-                "currency": "RUB",
+                "amount": amount,
+                "currency": currency,
                 "first_due_date": due.isoformat(),
                 "periodicity": "monthly",
             },
@@ -86,12 +87,15 @@ def seed():
             request("DELETE", "/recurring-payments/" + created["id"], status=204)
 
     for index in range(52):
-        payment(f"Bot upcoming {index:02d} <&>", today + timedelta(days=index % 7))
+        payment(
+            f"Bot upcoming {index:02d} <&>", today + timedelta(days=index % 7),
+            currency=("RUB", "USD", "EUR")[index % 3],
+        )
     payment("Bot day seven excluded", today + timedelta(days=7))
-    payment("Bot paid excluded", today, paid=True)
+    payment("Bot paid excluded", today, paid=True, amount="7.89", currency="USD")
     for index in range(3):
         payment(f"Bot overdue {index}", today - timedelta(days=index + 1), stopped=index == 2)
-    payment("Bot overdue paid excluded", today - timedelta(days=1), paid=True)
+    payment("Bot overdue paid excluded", today - timedelta(days=1), paid=True, currency="EUR")
     expected = {"timezone": auth["timezone"], "today": today.isoformat()}
     for kind, filters in {
         "upcoming": {"date_from": today, "date_to": today + timedelta(days=6)},
@@ -112,7 +116,12 @@ def seed():
         if page["total"] != (52 if kind == "upcoming" else 3):
             raise RuntimeError("Fixture dates or API payment filters changed")
         expected[kind] = page["items"]
-    return UUID(user["id"]), expected
+    all_page = request("GET", "/payment-occurrences?limit=100&offset=0")
+    if all_page["total"] > 100:
+        raise RuntimeError("Fixture all-list unexpectedly needs more than one API page")
+    expected["all"] = all_page["items"]
+    expected["summary"] = request("GET", "/payments/summary")
+    return UUID(user["id"]), expected, request
 
 
 async def application():
@@ -121,7 +130,7 @@ async def application():
         name = await session.scalar(text("SELECT current_database()"))
         if not name.startswith("bot_") or not name.endswith("_test"):
             raise RuntimeError("Refusing to use a non-fixture database")
-    user_id, expected = seed()
+    user_id, expected, api_request = seed()
 
     async def fixtures(_request):
         return web.json_response(expected)
@@ -151,6 +160,13 @@ async def application():
             )
         return web.json_response({"expired": True})
 
+    async def pay_first(_request):
+        item = await asyncio.to_thread(
+            api_request, "PATCH", "/payment-occurrences/" + expected["upcoming"][0]["id"],
+            {"status": "paid", "paid_on": expected["today"]},
+        )
+        return web.json_response(item)
+
     async def close(_app):
         await database.dispose()
 
@@ -160,6 +176,7 @@ async def application():
             web.get("/fixtures", fixtures),
             web.get("/sessions", sessions),
             web.post("/expire", expire),
+            web.post("/pay-first", pay_first),
         ]
     )
     app.on_cleanup.append(close)

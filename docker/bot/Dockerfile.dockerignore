@@ -13,3 +13,4 @@ docker/bot/**
 !docker/bot/uv.lock
 !texts.json
 !formatting.py
+!features.py
