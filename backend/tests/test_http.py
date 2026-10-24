@@ -12,10 +12,13 @@ async def test_liveness_and_http_errors_do_not_need_a_database_connection():
             _env_file=None,
             app_env="test",
             database_url="postgresql+asyncpg://unused:unused@127.0.0.1:1/unused_test",
+            allowed_origins=["http://testserver"],
         )
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver"
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        headers={"Origin": "http://testserver"},
     ) as client:
         health = await client.get("/api/v1/health")
         assert health.status_code == 200

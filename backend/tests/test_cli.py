@@ -13,7 +13,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_bootstrap_admin_can_log_in_and_duplicate_cannot_reset_account(app, client, login):
-    data = UserCreate(username=" ADMIN ", display_name="Administrator", password=PASSWORD)
+    data = UserCreate(username=" ADMIN ", password=PASSWORD)
     await create_admin(app.state.database, data)
     authentication = await login(client)
     assert authentication["user"]["username"] == "admin"
@@ -26,14 +26,13 @@ async def test_bootstrap_admin_can_log_in_and_duplicate_cannot_reset_account(app
             app.state.database,
             UserCreate(
                 username="admin",
-                display_name="Changed",
                 password="different-password-456",
             ),
         )
     async with app.state.database.session_factory() as session:
         unchanged = await session.scalar(select(User).where(User.username == "admin"))
         assert unchanged.password_hash == original_hash
-        assert unchanged.display_name == "Administrator"
+        assert unchanged.display_name is None
         assert unchanged.role == "admin"
         assert unchanged.is_active
     await login(client)

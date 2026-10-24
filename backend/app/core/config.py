@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     app_timezone: str = "Europe/Moscow"
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str | None = Field(default=None, repr=False)
-    session_cookie_name: str = "invoice_keeper_session"
+    session_cookie_name: str = "session_id"
     session_cookie_secure: bool = False
     session_ttl_seconds: int = Field(default=604800, ge=60, le=2592000)
     allowed_origins: list[str] = Field(

@@ -44,8 +44,20 @@ async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
-    # Do not reflect input, ctx or error messages: they can contain passwords.
-    details = [{"location": list(error["loc"]), "type": error["type"]} for error in exc.errors()]
+    errors = exc.errors()
+    if any(error["type"] == "json_invalid" for error in errors):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INVALID_JSON",
+                    "message": "Некорректный JSON",
+                    "details": [],
+                }
+            },
+        )
+    # Build messages from known error codes, never from reflected input or ctx.
+    details = [field_error(error) for error in errors]
     return JSONResponse(
         status_code=422,
         content={
@@ -56,6 +68,32 @@ async def validation_exception_handler(
             }
         },
     )
+
+
+def field_error(error: dict) -> dict[str, str]:
+    location = list(error.get("loc", ()))
+    source = location[0] if location else "body"
+    path = location[1:] if source == "body" else location
+    field = ".".join(str(part) for part in path) or "body"
+    error_type = error["type"]
+    messages = {
+        "missing": ("REQUIRED", "Обязательное поле"),
+        "string_too_short": ("TOO_SHORT", "Значение слишком короткое"),
+        "string_too_long": ("TOO_LONG", "Значение слишком длинное"),
+        "string_pattern_mismatch": ("INVALID_FORMAT", "Неверный формат поля"),
+        "string_type": ("INVALID_TYPE", "Передайте строку"),
+        "uuid_parsing": ("INVALID_UUID", "Некорректный UUID"),
+        "int_parsing": ("INVALID_INTEGER", "Передайте целое число"),
+        "int_type": ("INVALID_INTEGER", "Передайте целое число"),
+        "greater_than_equal": ("OUT_OF_RANGE", "Значение меньше допустимого"),
+        "less_than_equal": ("OUT_OF_RANGE", "Значение больше допустимого"),
+        "extra_forbidden": (
+            "UNKNOWN_QUERY_PARAMETER" if source == "query" else "UNKNOWN_FIELD",
+            "Неизвестный query-параметр" if source == "query" else "Неизвестное поле",
+        ),
+    }
+    code, message = messages.get(error_type, ("INVALID_VALUE", "Некорректное значение поля"))
+    return {"field": field, "code": code, "message": message}
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

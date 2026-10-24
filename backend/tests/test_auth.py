@@ -106,11 +106,11 @@ async def test_expired_and_unknown_sessions_are_rejected(app, client, create_use
 async def test_logout_requires_matching_csrf_token(client, create_user, login):
     await create_user()
     authentication = await login(client)
-    assert_error(await client.post("/api/v1/auth/logout"), 403, "CSRF_INVALID")
+    assert_error(await client.post("/api/v1/auth/logout"), 403, "CSRF_FAILED")
     assert_error(
         await client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": "incorrect"}),
         403,
-        "CSRF_INVALID",
+        "CSRF_FAILED",
     )
     assert (await client.get("/api/v1/auth/me")).status_code == 200
     assert (
@@ -121,7 +121,9 @@ async def test_logout_requires_matching_csrf_token(client, create_user, login):
     ).status_code == 204
 
 
-async def test_foreign_origin_rejected_and_referer_supported(client, create_user, login):
+async def test_foreign_origin_rejected_and_referer_cannot_replace_origin(
+    client, create_user, login
+):
     await create_user()
     assert_error(
         await client.post(
@@ -152,7 +154,7 @@ async def test_foreign_origin_rejected_and_referer_supported(client, create_user
             "X-CSRF-Token": authentication["csrf_token"],
         },
     )
-    assert response.status_code == 204
+    assert_error(response, 403, "ORIGIN_NOT_ALLOWED")
 
 
 async def test_username_rate_limit_blocks_correct_credentials_until_window_ends(
@@ -269,6 +271,6 @@ async def test_csrf_token_from_other_session_does_not_authorize_logout(
                 "/api/v1/auth/logout", headers={"X-CSRF-Token": first["csrf_token"]}
             ),
             403,
-            "CSRF_INVALID",
+            "CSRF_FAILED",
         )
         assert (await second_client.get("/api/v1/auth/me")).status_code == 200

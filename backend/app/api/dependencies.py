@@ -4,6 +4,7 @@ from typing import Annotated
 from urllib.parse import urlsplit
 
 from fastapi import Depends, Header, Request
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,21 @@ from app.services.errors import api_error
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
+def reject_unknown_query_parameters(request: Request) -> None:
+    """Reject typos even on routes that have no query parameters."""
+    allowed = set()
+    pending = [request.scope["route"].dependant]
+    while pending:
+        dependency = pending.pop()
+        allowed.update(field.alias for field in dependency.query_params)
+        pending.extend(dependency.dependencies)
+    unknown = sorted(set(request.query_params) - allowed)
+    if unknown:
+        raise RequestValidationError(
+            [{"loc": ("query", name), "type": "extra_forbidden"} for name in unknown]
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class AuthenticatedSession:
     user: User
@@ -22,7 +38,7 @@ class AuthenticatedSession:
     token: str
 
 
-def _origin(value: str, *, referer: bool = False) -> tuple[str, str, int] | None:
+def _origin(value: str) -> tuple[str, str, int] | None:
     try:
         parsed = urlsplit(value)
         if (
@@ -30,25 +46,23 @@ def _origin(value: str, *, referer: bool = False) -> tuple[str, str, int] | None
             or not parsed.hostname
             or parsed.username is not None
             or parsed.password is not None
-            or (not referer and (parsed.path not in {"", "/"} or parsed.query or parsed.fragment))
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
         ):
             return None
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
         return parsed.scheme, parsed.hostname.lower(), port
     except ValueError:
         return None
 
 
 def require_allowed_origin(request: Request) -> None:
-    """Validate browser-origin headers; headerless API clients remain supported."""
+    """Every unsafe request must carry an explicitly allowed Origin."""
     value = request.headers.get("origin")
-    referer = False
     if value is None:
-        value = request.headers.get("referer")
-        referer = True
-    if value is None:
-        return
-    source = _origin(value, referer=referer)
+        raise api_error(403, "ORIGIN_NOT_ALLOWED", "Отсутствует заголовок Origin")
+    source = _origin(value)
     allowed = {_origin(origin) for origin in request.app.state.settings.allowed_origins}
     if source is None or source not in allowed:
         raise api_error(403, "ORIGIN_NOT_ALLOWED", "Источник запроса не разрешён")
@@ -106,4 +120,4 @@ async def require_csrf(
 ) -> None:
     require_allowed_origin(request)
     if not verify_csrf_token(auth.token, x_csrf_token):
-        raise api_error(403, "CSRF_INVALID", "Отсутствует или неверен CSRF-токен")
+        raise api_error(403, "CSRF_FAILED", "Отсутствует или неверен CSRF-токен")

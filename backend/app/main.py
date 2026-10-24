@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from asyncpg import PostgresError
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.auth import router as auth_router
+from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
 from app.api.users import router as users_router
 from app.core.config import Settings, settings
 from app.core.exceptions import (
@@ -48,6 +49,17 @@ def create_app(config: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def private_responses(request, call_next):
+        if request.url.path.startswith("/api/v1/") and request.method in {
+            "POST",
+            "PATCH",
+            "DELETE",
+        }:
+            try:
+                require_allowed_origin(request)
+            except StarletteHTTPException as exc:
+                response = await http_exception_handler(request, exc)
+                response.headers["Cache-Control"] = "no-store"
+                return response
         response = await call_next(request)
         if request.url.path.startswith(("/api/v1/auth", "/api/v1/users")):
             response.headers["Cache-Control"] = "no-store"
@@ -57,10 +69,12 @@ def create_app(config: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=config.allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-CSRF-Token"],
     )
-    api_router = APIRouter(prefix="/api/v1")
+    api_router = APIRouter(
+        prefix="/api/v1", dependencies=[Depends(reject_unknown_query_parameters)]
+    )
 
     @api_router.get("/health", tags=["service"])
     async def health():

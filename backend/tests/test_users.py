@@ -1,235 +1,290 @@
 import asyncio
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pwdlib import PasswordHash
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.models import User
+from app.models import User, UserSession
 
 from .conftest import PASSWORD
 from .test_auth import assert_error
 
 pytestmark = pytest.mark.asyncio
-NEW_PASSWORD = "another-strong-password-456"
 
 
 async def test_users_require_authentication_and_admin_role(client, create_user, login):
     assert_error(await client.get("/api/v1/users"), 401, "AUTH_REQUIRED")
-    await create_user("member", role="member")
-    member_auth = await login(client, "member")
+    user = await create_user("ordinary", role="user")
+    authentication = await login(client, "ordinary")
+    headers = {"X-CSRF-Token": authentication["csrf_token"]}
     assert_error(await client.get("/api/v1/users"), 403, "FORBIDDEN")
-    assert_error(
-        await client.post(
-            "/api/v1/users",
-            headers={"X-CSRF-Token": member_auth["csrf_token"]},
-            json={
-                "username": "newuser",
-                "display_name": "New User",
-                "password": PASSWORD,
-            },
-        ),
-        403,
-        "FORBIDDEN",
-    )
+    for method, path, payload in [
+        ("POST", "/api/v1/users", {"username": "newuser", "password": PASSWORD}),
+        ("PATCH", f"/api/v1/users/{user.id}", {"username": "renamed"}),
+        ("DELETE", f"/api/v1/users/{user.id}", None),
+    ]:
+        assert_error(
+            await client.request(method, path, json=payload, headers=headers), 403, "FORBIDDEN"
+        )
 
 
-async def test_admin_can_create_user_and_list_paginated_public_profiles(
+async def test_create_with_eight_character_password_and_list_only_ordinary_users(
     app, client, create_user, login
 ):
     await create_user()
+    await create_user("second_admin")
     authentication = await login(client)
     response = await client.post(
         "/api/v1/users",
+        json={"username": "newuser", "password": "12345678"},
         headers={"X-CSRF-Token": authentication["csrf_token"]},
-        json={"username": "newuser", "display_name": "New User", "password": PASSWORD},
     )
     assert response.status_code == 201, response.text
     created = response.json()
-    assert created["username"] == "newuser"
-    assert created["display_name"] == "New User"
-    assert created["role"] == "member"
-    assert created["is_active"] is True
-    assert "password" not in created
-    assert "password_hash" not in created
+    assert set(created) == {"id", "username", "role", "created_at"}
+    assert created["role"] == "user"
+    assert created["created_at"].endswith("Z")
     async with app.state.database.session_factory() as session:
         user = await session.scalar(select(User).where(User.username == "newuser"))
-        assert user.password_hash != PASSWORD
-        assert user.password_hash.startswith("$argon2id$")
-        assert PasswordHash.recommended().verify(PASSWORD, user.password_hash)
-
-    first = await client.get("/api/v1/users?limit=1&offset=0")
-    second = await client.get("/api/v1/users?limit=1&offset=1")
-    assert first.status_code == second.status_code == 200
-    first_page, second_page = first.json(), second.json()
-    assert first_page["total"] == second_page["total"] == 2
-    assert first_page["limit"] == 1
-    assert first_page["offset"] == 0
-    assert second_page["offset"] == 1
-    assert len(first_page["items"]) == len(second_page["items"]) == 1
-    assert first_page["items"][0]["id"] != second_page["items"][0]["id"]
-    assert "password" not in first.text
-    assert "password" not in second.text
+        assert PasswordHash.recommended().verify("12345678", user.password_hash)
+    await create_user("another", role="user")
+    first = (await client.get("/api/v1/users?limit=1&offset=0")).json()
+    second = (await client.get("/api/v1/users?limit=1&offset=1")).json()
+    assert first == {"items": [first["items"][0]], "total": 2, "limit": 1, "offset": 0}
+    assert second["total"] == 2 and second["offset"] == 1
+    assert first["items"][0]["username"] == "another"
+    assert second["items"][0]["username"] == "newuser"
 
 
-async def test_create_requires_csrf_and_duplicate_username_is_conflict(client, create_user, login):
+async def test_admin_only_list_is_empty(client, create_user, login):
     await create_user()
-    authentication = await login(client)
-    payload = {"username": "unique", "display_name": "Unique", "password": PASSWORD}
-    assert_error(await client.post("/api/v1/users", json=payload), 403, "CSRF_INVALID")
-    headers = {"X-CSRF-Token": authentication["csrf_token"]}
-    assert (await client.post("/api/v1/users", json=payload, headers=headers)).status_code == 201
-    assert_error(
-        await client.post("/api/v1/users", json=payload, headers=headers),
-        409,
-        "USERNAME_TAKEN",
-    )
-    # A failed insert must not leave later requests in a failed transaction.
-    assert (await client.get("/api/v1/users")).status_code == 200
-
-
-async def test_last_active_admin_cannot_be_disabled_or_demoted(client, create_user, login):
-    admin = await create_user()
-    await create_user("disabled_admin", role="admin", is_active=False)
-    authentication = await login(client)
-    for payload in ({"role": "member"}, {"is_active": False}):
-        assert_error(
-            await client.patch(
-                f"/api/v1/users/{admin.id}",
-                json=payload,
-                headers={"X-CSRF-Token": authentication["csrf_token"]},
-            ),
-            409,
-            "LAST_ACTIVE_ADMIN",
-        )
-    response = await client.get("/api/v1/auth/me")
-    assert response.status_code == 200
-    assert response.json()["user"]["role"] == "admin"
-    assert response.json()["user"]["is_active"] is True
+    await login(client)
+    assert (await client.get("/api/v1/users")).json() == {
+        "items": [],
+        "total": 0,
+        "limit": 50,
+        "offset": 0,
+    }
 
 
 @pytest.mark.parametrize(
-    "change", [{"is_active": False}, {"role": "admin"}, {"password": NEW_PASSWORD}]
+    "field,value",
+    [("role", "admin"), ("role", "user"), ("display_name", "Name"), ("is_active", False)],
 )
-async def test_sensitive_account_changes_revoke_all_target_sessions(
+async def test_create_and_patch_reject_fields_outside_contract(
+    client, create_user, login, field, value
+):
+    await create_user()
+    user = await create_user("ordinary", role="user")
+    authentication = await login(client)
+    headers = {"X-CSRF-Token": authentication["csrf_token"]}
+    for method, path, payload in [
+        ("POST", "/api/v1/users", {"username": "newuser", "password": PASSWORD, field: value}),
+        ("PATCH", f"/api/v1/users/{user.id}", {"username": "renamed", field: value}),
+    ]:
+        response = await client.request(method, path, json=payload, headers=headers)
+        assert_error(response, 422, "VALIDATION_ERROR")
+        detail = next(
+            item for item in response.json()["error"]["details"] if item["field"] == field
+        )
+        assert detail["code"] == "UNKNOWN_FIELD"
+        assert set(detail) == {"field", "code", "message"}
+
+
+async def test_create_and_rename_conflicts_are_field_errors_and_rollback_sessions(
+    app, client, create_user, login
+):
+    await create_user()
+    user = await create_user("ordinary", role="user")
+    authentication = await login(client)
+    headers = {"X-CSRF-Token": authentication["csrf_token"]}
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        headers={"Origin": "http://testserver"},
+    ) as ordinary:
+        await login(ordinary, "ordinary")
+        for method, path, payload in [
+            ("POST", "/api/v1/users", {"username": " ADMIN ", "password": PASSWORD}),
+            ("PATCH", f"/api/v1/users/{user.id}", {"username": "admin", "password": "newpass8"}),
+        ]:
+            response = await client.request(method, path, json=payload, headers=headers)
+            assert_error(response, 409, "USERNAME_TAKEN")
+            assert response.json()["error"]["details"][0]["field"] == "username"
+        assert (await ordinary.get("/api/v1/auth/me")).status_code == 200
+        await login(ordinary, "ordinary")
+
+
+@pytest.mark.parametrize("payload", [{"username": "renamed_admin"}, {"password": "newpass8"}])
+async def test_all_admin_accounts_are_protected_from_patch_and_delete(
+    client, create_user, login, payload
+):
+    first = await create_user()
+    second = await create_user("second_admin")
+    authentication = await login(client)
+    headers = {"X-CSRF-Token": authentication["csrf_token"]}
+    for admin in (first, second):
+        assert_error(
+            await client.patch(f"/api/v1/users/{admin.id}", json=payload, headers=headers),
+            403,
+            "ADMIN_ACCOUNT_PROTECTED",
+        )
+        assert_error(
+            await client.delete(f"/api/v1/users/{admin.id}", headers=headers),
+            403,
+            "ADMIN_ACCOUNT_PROTECTED",
+        )
+    assert (await client.get("/api/v1/auth/me")).json()["user"]["username"] == "admin"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"username": "renamed"},
+        {"password": "newpass8"},
+        {"username": "renamed", "password": "newpass8"},
+    ],
+)
+async def test_username_and_password_changes_revoke_all_sessions(
     app, client, create_user, login, change
 ):
     await create_user()
-    member = await create_user("member", role="member")
-    admin_auth = await login(client)
+    user = await create_user("ordinary", role="user")
+    authentication = await login(client)
     async with (
         AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://testserver",
             headers={"Origin": "http://testserver"},
-        ) as first_member_client,
+        ) as first,
         AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://testserver",
             headers={"Origin": "http://testserver"},
-        ) as second_member_client,
+        ) as second,
     ):
-        await login(first_member_client, "member")
-        await login(second_member_client, "member")
+        await login(first, "ordinary")
+        await login(second, "ordinary")
         response = await client.patch(
-            f"/api/v1/users/{member.id}",
+            f"/api/v1/users/{user.id}",
             json=change,
-            headers={"X-CSRF-Token": admin_auth["csrf_token"]},
+            headers={"X-CSRF-Token": authentication["csrf_token"]},
         )
         assert response.status_code == 200, response.text
-        assert "password" not in response.json()
-        assert "password_hash" not in response.json()
-        assert_error(await first_member_client.get("/api/v1/auth/me"), 401, "AUTH_REQUIRED")
-        assert_error(await second_member_client.get("/api/v1/auth/me"), 401, "AUTH_REQUIRED")
+        assert response.json()["username"] == change.get("username", "ordinary")
+        for ordinary in (first, second):
+            assert_error(await ordinary.get("/api/v1/auth/me"), 401, "AUTH_REQUIRED")
+        assert_error(
+            await first.post(
+                "/api/v1/auth/login", json={"username": "ordinary", "password": PASSWORD}
+            ),
+            401,
+            "INVALID_CREDENTIALS",
+        )
+        await login(first, change.get("username", "ordinary"), change.get("password", PASSWORD))
         assert (await client.get("/api/v1/auth/me")).status_code == 200
 
-        if "password" in change:
-            assert_error(
-                await first_member_client.post(
-                    "/api/v1/auth/login",
-                    json={"username": "member", "password": PASSWORD},
-                ),
-                401,
-                "INVALID_CREDENTIALS",
-            )
-            updated_auth = await login(first_member_client, "member", NEW_PASSWORD)
-            assert updated_auth["user"]["id"] == str(member.id)
 
-
-async def test_display_name_change_preserves_existing_session(client, create_user, login):
+async def test_delete_user_revokes_all_sessions_and_removes_only_target(
+    app, client, create_user, login
+):
     admin = await create_user()
+    user = await create_user("ordinary", role="user")
+    await create_user("untouched", role="user")
     authentication = await login(client)
-    response = await client.patch(
-        f"/api/v1/users/{admin.id}",
-        json={"display_name": "Updated Name"},
-        headers={"X-CSRF-Token": authentication["csrf_token"]},
-    )
-    assert response.status_code == 200
-    current = await client.get("/api/v1/auth/me")
-    assert current.status_code == 200
-    assert current.json()["user"]["display_name"] == "Updated Name"
-
-
-async def test_concurrent_admin_demotions_leave_an_active_admin(app, client, create_user, login):
-    first_admin = await create_user()
-    second_admin = await create_user("second_admin")
-    first_auth = await login(client)
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://testserver",
-        headers={"Origin": "http://testserver"},
-    ) as second_client:
-        second_auth = await login(second_client, "second_admin")
-        responses = await asyncio.gather(
-            client.patch(
-                f"/api/v1/users/{first_admin.id}",
-                json={"role": "member"},
-                headers={"X-CSRF-Token": first_auth["csrf_token"]},
-            ),
-            second_client.patch(
-                f"/api/v1/users/{second_admin.id}",
-                json={"role": "member"},
-                headers={"X-CSRF-Token": second_auth["csrf_token"]},
-            ),
+    async with (
+        AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+            headers={"Origin": "http://testserver"},
+        ) as ordinary,
+        AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+            headers={"Origin": "http://testserver"},
+        ) as other_session,
+    ):
+        await login(ordinary, "ordinary")
+        await login(other_session, "ordinary")
+        assert_error(await client.delete(f"/api/v1/users/{user.id}"), 403, "CSRF_FAILED")
+        response = await client.delete(
+            f"/api/v1/users/{user.id}", headers={"X-CSRF-Token": authentication["csrf_token"]}
         )
-    assert sorted(response.status_code for response in responses) == [200, 409]
+        assert response.status_code == 204 and response.content == b""
+        assert_error(await ordinary.get("/api/v1/auth/me"), 401, "AUTH_REQUIRED")
+        assert_error(await other_session.get("/api/v1/auth/me"), 401, "AUTH_REQUIRED")
+        assert_error(
+            await ordinary.post(
+                "/api/v1/auth/login", json={"username": "ordinary", "password": PASSWORD}
+            ),
+            401,
+            "INVALID_CREDENTIALS",
+        )
     async with app.state.database.session_factory() as session:
-        admins = (
-            await session.scalars(
-                select(User).where(User.role == "admin", User.is_active.is_(True))
+        assert await session.get(User, user.id) is None
+        assert await session.get(User, admin.id) is not None
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(UserSession).where(UserSession.user_id == user.id)
             )
-        ).all()
-        assert len(admins) == 1
+            == 0
+        )
+    assert (await client.get("/api/v1/users")).json()["items"][0]["username"] == "untouched"
 
 
-async def test_users_validate_roles_ids_and_pagination(client, create_user, login):
-    admin = await create_user()
+@pytest.mark.parametrize(
+    "payload", [{}, {"username": None}, {"password": None}, {"password": "1234567"}]
+)
+async def test_invalid_patch_is_rejected(client, create_user, login, payload):
+    await create_user()
+    user = await create_user("ordinary", role="user")
     authentication = await login(client)
-    headers = {"X-CSRF-Token": authentication["csrf_token"]}
-    for url in ("/api/v1/users?limit=0", "/api/v1/users?offset=-1"):
-        response = await client.get(url)
-        assert response.status_code == 422
-        assert "error" in response.json()
-    response = await client.patch(
-        f"/api/v1/users/{admin.id}", json={"role": "superuser"}, headers=headers
+    assert_error(
+        await client.patch(
+            f"/api/v1/users/{user.id}",
+            json=payload,
+            headers={"X-CSRF-Token": authentication["csrf_token"]},
+        ),
+        422,
+        "VALIDATION_ERROR",
     )
-    assert response.status_code == 422
-    response = await client.patch(
-        "/api/v1/users/not-a-uuid", json={"display_name": "Other Name"}, headers=headers
-    )
-    assert response.status_code == 422
-    assert "error" in response.json()
 
 
-async def test_usernames_are_normalized_before_unique_check(client, create_user, login):
+async def test_unknown_and_invalid_user_ids(client, create_user, login):
     await create_user()
     authentication = await login(client)
     headers = {"X-CSRF-Token": authentication["csrf_token"]}
-    payload = {"username": " Mixed.Case ", "display_name": "Test", "password": PASSWORD}
-    response = await client.post("/api/v1/users", json=payload, headers=headers)
-    assert response.status_code == 201
-    assert response.json()["username"] == "mixed.case"
-    payload["username"] = "MIXED.CASE"
-    assert_error(
-        await client.post("/api/v1/users", json=payload, headers=headers), 409, "USERNAME_TAKEN"
+    for user_id, status, code in [
+        (str(uuid4()), 404, "USER_NOT_FOUND"),
+        ("invalid", 422, "VALIDATION_ERROR"),
+    ]:
+        assert_error(
+            await client.patch(
+                f"/api/v1/users/{user_id}", json={"username": "renamed"}, headers=headers
+            ),
+            status,
+            code,
+        )
+        assert_error(await client.delete(f"/api/v1/users/{user_id}", headers=headers), status, code)
+
+
+async def test_concurrent_renames_keep_unique_usernames(app, client, create_user, login):
+    await create_user()
+    first = await create_user("first", role="user")
+    second = await create_user("second", role="user")
+    authentication = await login(client)
+    headers = {"X-CSRF-Token": authentication["csrf_token"]}
+    responses = await asyncio.gather(
+        *[
+            client.patch(f"/api/v1/users/{user.id}", json={"username": "shared"}, headers=headers)
+            for user in (first, second)
+        ]
     )
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    async with app.state.database.session_factory() as session:
+        assert (
+            await session.scalar(select(func.count()).select_from(User).where(User.role == "user"))
+            == 2
+        )

@@ -26,7 +26,6 @@ async def create_admin(database: Database, data: UserCreate) -> None:
         session.add(
             User(
                 username=data.username,
-                display_name=data.display_name,
                 password_hash=password_hash,
                 role="admin",
                 is_active=True,
@@ -72,26 +71,21 @@ def main() -> None:
         "create-admin", help="Создать администратора, не изменяя существующих"
     )
     create.add_argument("--username", required=True)
-    create.add_argument("--display-name", required=True)
     commands.add_parser("cleanup-auth", help="Удалить истёкшие сессии и устаревшие счётчики входа")
     args = parser.parse_args()
     data = None
     try:
         if args.command == "create-admin":
-            password = getpass("Пароль (12–128 символов): ")
+            password = getpass("Пароль (8–128 символов): ")
             if password != getpass("Повторите пароль: "):
                 raise ValueError("Пароли не совпадают.")
             data = UserCreate(
                 username=args.username,
-                display_name=args.display_name,
                 password=password,
-                role="admin",
             )
         asyncio.run(run(args, data))
     except ValidationError:
-        parser.exit(
-            1, "Некорректные данные: логин 3–64 символа a-z/0-9/_.-, имя 1–100, пароль 12–128.\n"
-        )
+        parser.exit(1, "Некорректные данные: логин 3–64 символа a-z/0-9/_.-, пароль 8–128.\n")
     except ValueError as exc:
         parser.exit(1, f"{exc}\n")
     except IntegrityError:

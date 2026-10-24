@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,7 @@ from app.models import User, UserSession
 from app.schemas.users import UserCreate, UserUpdate
 from app.services.errors import api_error
 
-# Serialize admin changes across all workers before counting active admins.
+# Serialize user administration and bootstrap across workers.
 ADMIN_LOCK_KEY = 1202638163
 
 
@@ -30,10 +30,9 @@ async def create_user(db: AsyncSession, payload: UserCreate, actor_id: UUID) -> 
     await _lock_and_check_admin(db, actor_id)
     user = User(
         username=payload.username,
-        display_name=payload.display_name,
         password_hash=password_hash,
-        role=payload.role,
-        is_active=payload.is_active,
+        role="user",
+        is_active=True,
     )
     db.add(user)
     try:
@@ -41,7 +40,7 @@ async def create_user(db: AsyncSession, payload: UserCreate, actor_id: UUID) -> 
     except IntegrityError as exc:
         await db.rollback()
         if getattr(exc.orig, "sqlstate", None) == "23505":
-            raise api_error(409, "USERNAME_TAKEN", "Этот логин уже занят") from exc
+            raise username_taken() from exc
         raise
     return user
 
@@ -60,31 +59,44 @@ async def update_user(db: AsyncSession, user_id: UUID, payload: UserUpdate, acto
     if user is None:
         raise api_error(404, "USER_NOT_FOUND", "Пользователь не найден")
 
-    remains_active_admin = changes.get("role", user.role) == "admin" and changes.get(
-        "is_active", user.is_active
+    if user.role == "admin":
+        raise api_error(403, "ADMIN_ACCOUNT_PROTECTED", "Аккаунт администратора защищён")
+    revoke_sessions = password_hash is not None or (
+        "username" in changes and changes["username"] != user.username
     )
-    if user.role == "admin" and user.is_active and not remains_active_admin:
-        active_admin_count = await db.scalar(
-            select(func.count())
-            .select_from(User)
-            .where(User.role == "admin", User.is_active.is_(True))
-        )
-        if active_admin_count <= 1:
-            raise api_error(
-                409,
-                "LAST_ACTIVE_ADMIN",
-                "Нельзя отключить или понизить роль последнего активного администратора",
-            )
-
-    revoke_sessions = password_hash is not None or any(
-        field in changes and changes[field] != getattr(user, field)
-        for field in ("role", "is_active")
-    )
-    for field, value in changes.items():
-        setattr(user, field, value)
-    if password_hash is not None:
-        user.password_hash = password_hash
-    if revoke_sessions:
-        await db.execute(delete(UserSession).where(UserSession.user_id == user.id))
-    await db.commit()
+    try:
+        for field, value in changes.items():
+            setattr(user, field, value)
+        if password_hash is not None:
+            user.password_hash = password_hash
+        if revoke_sessions:
+            await db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if getattr(exc.orig, "sqlstate", None) == "23505":
+            raise username_taken() from exc
+        raise
     return user
+
+
+def username_taken():
+    message = "Этот логин уже занят"
+    return api_error(
+        409,
+        "USERNAME_TAKEN",
+        message,
+        details=[{"field": "username", "code": "USERNAME_TAKEN", "message": message}],
+    )
+
+
+async def delete_user(db: AsyncSession, user_id: UUID, actor_id: UUID) -> None:
+    await _lock_and_check_admin(db, actor_id)
+    user = await db.scalar(select(User).where(User.id == user_id).with_for_update())
+    if user is None:
+        raise api_error(404, "USER_NOT_FOUND", "Пользователь не найден")
+    if user.role == "admin":
+        raise api_error(403, "ADMIN_ACCOUNT_PROTECTED", "Аккаунт администратора защищён")
+    await db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+    await db.delete(user)
+    await db.commit()

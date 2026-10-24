@@ -25,9 +25,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 def migrated_database_url():
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
-        pytest.skip(
-            "Set TEST_DATABASE_URL to a disposable PostgreSQL database whose "
-            "name ends in _test; never use the development/production database."
+        raise pytest.UsageError(
+            "PostgreSQL tests require TEST_DATABASE_URL ending in _test. "
+            "Run: uv run --locked python scripts/test_postgres.py"
         )
     try:
         parsed_url = make_url(database_url)

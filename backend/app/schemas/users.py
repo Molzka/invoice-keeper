@@ -22,9 +22,8 @@ Username = Annotated[
     StringConstraints(min_length=3, max_length=64, pattern=r"^[a-z0-9_.-]+$"),
     BeforeValidator(normalize_username),
 ]
-Password = Annotated[str, StringConstraints(min_length=12, max_length=128)]
-DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-UserRole = Literal["admin", "member"]
+Password = Annotated[str, StringConstraints(min_length=8, max_length=128)]
+UserRole = Literal["admin", "user"]
 
 
 class UserRead(BaseModel):
@@ -32,13 +31,10 @@ class UserRead(BaseModel):
 
     id: UUID
     username: str
-    display_name: str
     role: UserRole
-    is_active: bool
     created_at: datetime
-    updated_at: datetime
 
-    @field_validator("created_at", "updated_at")
+    @field_validator("created_at")
     @classmethod
     def timestamps_in_utc(cls, value: datetime) -> datetime:
         return value.astimezone(UTC)
@@ -49,25 +45,25 @@ class UserCreate(BaseModel):
 
     username: Username
     password: Password = Field(repr=False)
-    display_name: DisplayName
-    role: UserRole = "member"
-    is_active: bool = True
 
 
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
-    display_name: DisplayName | None = None
-    role: UserRole | None = None
-    is_active: bool | None = None
+    username: Username | None = None
     password: Password | None = Field(default=None, repr=False)
+
+    @field_validator("username", "password", mode="before")
+    @classmethod
+    def reject_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("Поле не может быть null")
+        return value
 
     @model_validator(mode="after")
     def reject_null_updates(self) -> "UserUpdate":
         if not self.model_fields_set:
             raise ValueError("Укажите хотя бы одно поле для изменения")
-        if any(getattr(self, field) is None for field in self.model_fields_set):
-            raise ValueError("Поля пользователя не могут быть null")
         return self
 
 

@@ -77,16 +77,21 @@ async def login(
     if user is None or not valid_password or not user.is_active:
         raise api_error(401, "INVALID_CREDENTIALS", "Неверный логин или пароль")
 
-    # Password/role changes take this same user row lock before revoking sessions.
-    # Refresh after Argon2 so a concurrent password reset cannot issue a new session
-    # authenticated with the old password after the reset commits.
+    # Changes and deletion take the same user row lock before revoking sessions.
+    # Refresh after Argon2 so old credentials cannot create a session after a
+    # concurrent password or username change commits.
     user = await db.scalar(
         select(User)
         .where(User.id == user.id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
-    if user is None or not user.is_active or user.password_hash != password_hash:
+    if (
+        user is None
+        or not user.is_active
+        or user.password_hash != password_hash
+        or user.username != username
+    ):
         raise api_error(401, "INVALID_CREDENTIALS", "Неверный логин или пароль")
 
     if valid_session_token(previous_token):
