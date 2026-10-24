@@ -12,4 +12,7 @@ import './styles/button-polish.css';
 import './styles/recurring-preview.css';
 import './styles/summary-links.css';
 import './styles/change-password.css';
+import './styles/payment-calendar.css';
+import './styles/activity.css';
+import './styles/workspace-extras.css';
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
