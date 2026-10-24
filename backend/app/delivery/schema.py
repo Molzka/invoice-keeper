@@ -1,19 +1,17 @@
-"""Owned outbox schema, included by participant 2's forthcoming revision 0003.
+"""Owned outbox schema, integrated by revision 0003.
 
-Separate metadata keeps current head 0002 valid until the payment migration lands.
-At integration, Alembic's target_metadata must include `delivery_metadata` as well.
+The table joins the shared model metadata; production uses 0003's DDL snapshot.
 No schema creation takes place at application or worker startup.
 """
 
-from alembic.operations import Operations, ops
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     Column,
     DateTime,
+    ForeignKeyConstraint,
     Index,
     Integer,
-    MetaData,
     String,
     Table,
     UniqueConstraint,
@@ -22,7 +20,10 @@ from sqlalchemy import (
     text,
 )
 
-delivery_metadata = MetaData()
+from app.db.base import Base
+
+# Kept as an alias for the integration contract; the payment FKs share Base.metadata.
+delivery_metadata = Base.metadata
 deliveries = Table(
     "reminder_deliveries",
     delivery_metadata,
@@ -41,6 +42,18 @@ deliveries = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     UniqueConstraint("occurrence_id", name="uq_reminder_deliveries_occurrence_id"),
+    ForeignKeyConstraint(
+        ["payment_id"],
+        ["recurring_payments.id"],
+        name="fk_reminder_deliveries_payment_id_recurring_payments",
+        ondelete="RESTRICT",
+    ),
+    ForeignKeyConstraint(
+        ["occurrence_id"],
+        ["payment_occurrences.id"],
+        name="fk_reminder_deliveries_occurrence_id_payment_occurrences",
+        ondelete="RESTRICT",
+    ),
     CheckConstraint(
         "status IN ('pending', 'in_flight', 'retry', 'sent', 'unknown', 'cancelled', 'failed')",
         name="ck_reminder_deliveries_status",
@@ -57,15 +70,3 @@ deliveries = Table(
     Index("ix_reminder_deliveries_ready", "status", "available_at"),
     Index("ix_reminder_deliveries_payment_id", "payment_id"),
 )
-
-
-def create_delivery_schema(op: Operations) -> None:
-    """Call from 0003.upgrade(), after creating the payment tables."""
-    op.invoke(ops.CreateTableOp.from_table(deliveries))
-    for index in sorted(deliveries.indexes, key=lambda item: item.name):
-        op.invoke(ops.CreateIndexOp.from_index(index))
-
-
-def drop_delivery_schema(op: Operations) -> None:
-    """Call first in 0003.downgrade(), before dropping payment tables."""
-    op.drop_table(deliveries.name)
