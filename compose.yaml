@@ -1,6 +1,27 @@
 name: invoice-keeper
 
 services:
+  bot:
+    build:
+      context: .
+      dockerfile: docker/bot/Dockerfile
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      # Validate the token at bot startup, so other services work without it.
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      CHAT_ID: ${CHAT_ID:-}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
   frontend:
     build:
       context: ./frontend
