@@ -35,7 +35,7 @@ def build_text(title, amount, currency, due_date) -> str:
 def build_keyboard(payment_url=None, payment_id=None):
     rows = []
     if payment_id is not None:
-        # «Оплачено» первой строкой, под сообщением. Работает, если backend вернул ID платежа
+        # «Оплачено» первой строкой, под сообщением. Работает, если платёж есть в базе бота
         rows.append([InlineKeyboardButton(
             text=T["FIN"]["BTN_PAID"], callback_data=f"pay:{int(payment_id)}"
         )])
