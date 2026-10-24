@@ -18,7 +18,7 @@ export function monthRange(month: string) {
 }
 export function monthLabel(month: string): string {
   const [year, index] = month.split('-').map(Number)
-  return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, index - 1, 1))).replace(' г.', '')
+  return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${String(year).padStart(4, '0')}-${String(index).padStart(2, '0')}-01T12:00:00Z`)).replace(' г.', '')
 }
 export function statusInfo(item: PaymentOccurrence) {
   if (item.status === 'paid' && item.paid_late) return { text: 'Оплачено с опозданием', className: 'status-warning' }
