@@ -18,7 +18,7 @@ test('workspace hashes have safe defaults and history keeps an unbounded range',
   assert.deepEqual(defaultPaymentFilters('payments', '2028-02-29'), { date_from: '2028-02-01', date_to: '2028-02-29', currency: '', tab: 'all' })
   assert.equal(defaultPaymentFilters('payments', '2100-02-01').date_to, '2100-02-28')
   assert.throws(() => defaultPaymentFilters('payments', '2027-02-29'), RangeError)
-  for (const view of ['recurring', 'users']) {
+  for (const view of ['recurring', 'users', 'calendar', 'activity']) {
     assert.equal(viewHash(view), `#${view}`)
     assert.deepEqual(readPaymentRoute(`#${view}?status=paid&limit=24&offset=48&recurring_payment_id=a`, today), { view, filters: october, limit: 6, offset: 0, ruleId: null })
   }

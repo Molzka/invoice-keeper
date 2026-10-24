@@ -86,7 +86,7 @@ function PaymentFilterToolbar({ filters, history, today, onApply, onReset }: { f
   </form>{filterError && <p className="query-error" role="alert">{filterError}</p>}</>
 }
 
-function PaymentDrawer({ initial, today, onClose, onSaved, onHistory }: { initial: PaymentOccurrence; today: string; onClose: () => void; onSaved: (item: PaymentOccurrence) => void; onHistory: () => void }) {
+export function PaymentDrawer({ initial, today, onClose, onSaved, onHistory }: { initial: PaymentOccurrence; today: string; onClose: () => void; onSaved: (item: PaymentOccurrence) => void; onHistory: () => void }) {
   const [item, setItem] = useState(initial)
   const [paidOn, setPaidOn] = useState(initial.paid_on || today)
   const [loading, setLoading] = useState(true)
