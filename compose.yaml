@@ -46,6 +46,37 @@ services:
       retries: 12
       start_period: 10s
 
+  worker:
+    logging: *default-logging
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.delivery.cli", "run", "--adapter", "app.services.payment_source:make_source", "--poll-seconds", "${REMINDER_POLL_SECONDS:-30}"]
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-invoice_keeper}
+      POSTGRES_USER: ${POSTGRES_USER:-invoice_keeper}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
+      APP_ENV: ${APP_ENV:-development}
+      # Settings validates these in production even though this process has no HTTP server.
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS:-["http://localhost:${FRONTEND_PORT:-8080}","http://127.0.0.1:${FRONTEND_PORT:-8080}"]}'
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      CHAT_ID: ${CHAT_ID:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
   bot:
     logging: *default-logging
     build:
@@ -74,7 +105,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_MODE: ${FRONTEND_API_MODE:-mock}
+        VITE_API_MODE: ${FRONTEND_API_MODE:-real}
     restart: unless-stopped
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-8080}:8080"

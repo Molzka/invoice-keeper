@@ -24,6 +24,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: invoice-keeper-frontend-ci-${{ github.run_id }}-${{ github.run_attempt }}
       FRONTEND_PORT: "0"
+      FRONTEND_API_MODE: mock
 
     steps:
       - name: Checkout
