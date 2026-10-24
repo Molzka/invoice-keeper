@@ -106,4 +106,18 @@
   #payment-results .payments-table .payment-status-cell .payment-period { flex-basis:100%; margin-top:0; text-align:right; }
 }
 
-.payment-secondary-actions .payment-delete-button { grid-column:1 / -1; min-height:40px; }
+.payment-secondary-actions .payment-delete-button { min-height:44px; }
+
+/* Keep all regular-payment actions on one consistent baseline. */
+.recurring-table .inline-actions { flex-wrap:nowrap; align-items:center; gap:8px; margin:0; }
+.recurring-table .inline-actions > .btn { flex:0 0 auto; height:40px; min-height:40px; white-space:nowrap; }
+.recurring-table .inline-actions > .icon-button { flex:0 0 40px; width:40px; height:40px; min-height:40px; }
+@media (min-width:761px) {
+  .recurring-table { min-width:1020px; }
+  .recurring-table th:last-child, .recurring-table td:last-child { width:286px; }
+}
+@media (max-width:760px) {
+  .recurring-table .inline-actions { justify-content:flex-start; }
+  .recurring-table .inline-actions > .btn { height:44px; min-height:44px; padding:8px 12px; }
+  .recurring-table .inline-actions > .icon-button { flex-basis:44px; width:44px; height:44px; min-height:44px; }
+}

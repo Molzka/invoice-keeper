@@ -157,12 +157,13 @@ export function PaymentDrawer({ initial, today, timezone, onClose, onSaved, onHi
           <div className="payment-secondary-actions">
             {onEditAmount && item.status === 'unpaid' && <button type="button" className="btn btn-secondary payment-amount-button" aria-label="Изменить сумму и валюту" disabled={busy || loading} onClick={() => onEditAmount(item)}><PencilLine size={16}/><span>Сумма и валюта</span></button>}
             <button type="button" className="btn btn-secondary payment-history-button" aria-label="Вся история платежа" disabled={busy} onClick={onHistory}><History size={16}/><span>История платежа</span></button>
+            <button type="button" className="btn btn-secondary payment-receipt-button" disabled={busy} onClick={() => setReceiptOpen(true)}><Paperclip size={16}/><span>Чек или ссылка</span></button>
             {onDelete && item.status === "unpaid" && <button type="button" className="btn btn-danger payment-delete-button" disabled={busy || loading} onClick={() => onDelete(item)}><Trash2 size={16}/>Удалить платёж</button>}
           </div>
         </div>
       </form>}
       {item.is_cancelled && <p className="notice">Период удалён из обязательств и доступен только для просмотра.</p>}
-      <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setReceiptOpen(true)}><Paperclip size={16}/>Чек или ссылка</button>
+      {item.is_cancelled && <div className="payment-secondary-actions"><button type="button" className="btn btn-secondary" onClick={() => setReceiptOpen(true)}><Paperclip size={16}/><span>Чек или ссылка</span></button></div>}
     </div>
   </Drawer>
 }
