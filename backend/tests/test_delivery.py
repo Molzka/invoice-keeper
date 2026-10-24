@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -134,6 +135,80 @@ async def test_future_schedule_does_not_send_early(delivery_db):
     assert sender.calls == []
 
 
+async def test_schedule_boundary_and_restart_preserve_single_delivery(delivery_db):
+    due_date = date(2026, 11, 10)
+    _, occurrence_id = await add_payment(delivery_db, due_date=due_date)
+    scheduled_at = reminder_at(due_date)
+    sender = Sender()
+    engine = worker(delivery_db, sender)
+
+    assert (await engine.run_once(scheduled_at - timedelta(microseconds=1)))["sent"] == 0
+    assert (await engine.run_once(scheduled_at))["sent"] == 1
+    confirmed = dict(await row_for(delivery_db, occurrence_id))
+    assert (await worker(delivery_db, sender).run_once(scheduled_at + timedelta(days=1)))[
+        "sent"
+    ] == 0
+    assert dict(await row_for(delivery_db, occurrence_id)) == confirmed
+    assert len(sender.calls) == 1
+
+
+@pytest.mark.parametrize("days_until_due", [2, 0, -7])
+async def test_late_added_period_is_ready_in_first_cycle(delivery_db, days_until_due):
+    due_date = NOW.date() + timedelta(days=days_until_due)
+    _, occurrence_id = await add_payment(delivery_db, due_date=due_date)
+    sender = Sender()
+
+    assert (await worker(delivery_db, sender).run_once(NOW))["sent"] == 1
+    row = await row_for(delivery_db, occurrence_id)
+    assert row["scheduled_at"] == reminder_at(due_date) < NOW
+    assert row["sent_at"] == NOW
+    assert len(sender.calls) == 1
+
+
+@pytest.mark.parametrize("state", ["paid", "stopped"])
+async def test_recovery_does_not_queue_paid_or_stopped_periods(delivery_db, state):
+    await add_payment(delivery_db, paid=state == "paid", active=state != "stopped")
+    sender = Sender()
+
+    assert (await worker(delivery_db, sender).run_once(NOW))["sent"] == 0
+    assert sender.calls == []
+    async with delivery_db.session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(deliveries)) == 0
+
+
+async def test_each_period_has_independent_payment_and_delivery_state(delivery_db):
+    payment_id, paid_period_id = await add_payment(delivery_db, paid=True)
+    unpaid_period_id = uuid4()
+    async with delivery_db.session_factory() as db, db.begin():
+        await lock_payments(db)
+        await TestPaymentSource().lock_rule(db, payment_id)
+        await db.execute(
+            periods.insert().values(
+                id=unpaid_period_id,
+                payment_id=payment_id,
+                due_date=date(2026, 10, 10),
+                is_paid=False,
+                amount=Decimal("123.45"),
+                currency="RUB",
+            )
+        )
+    sender = Sender()
+    assert (await worker(delivery_db, sender).run_once(NOW))["sent"] == 1
+    assert [item.occurrence_id for item in sender.calls] == [unpaid_period_id]
+
+    async with delivery_db.session_factory() as db, db.begin():
+        await lock_payments(db)
+        await TestPaymentSource().lock_rule(db, payment_id)
+        await db.execute(
+            update(periods).where(periods.c.id == paid_period_id).values(is_paid=False)
+        )
+    assert (await worker(delivery_db, sender).run_once(NOW + timedelta(minutes=1)))["sent"] == 1
+    assert [item.occurrence_id for item in sender.calls] == [unpaid_period_id, paid_period_id]
+    assert (await worker(delivery_db, sender).run_once(NOW + timedelta(days=1)))["sent"] == 0
+    async with delivery_db.session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(deliveries)) == 2
+
+
 @pytest.mark.parametrize("change", ["paid", "inactive"])
 async def test_latest_state_is_rechecked_between_claim_and_network(delivery_db, change):
     payment_id, occurrence_id = await add_payment(delivery_db)
@@ -236,6 +311,30 @@ async def test_safe_rejection_retries_after_backoff_then_confirms(delivery_db):
     row = await row_for(delivery_db, occurrence_id)
     assert (
         row["status"] == "sent" and row["attempt_count"] == 2 and row["telegram_message_id"] == 888
+    )
+
+
+@pytest.mark.parametrize("change", ["paid", "inactive"])
+async def test_retry_rechecks_payment_and_rule_state(delivery_db, change):
+    payment_id, occurrence_id = await add_payment(delivery_db)
+    sender = Sender(RetryableRejection(120))
+    engine = worker(delivery_db, sender)
+    await engine.run_once(NOW)
+    assert (await row_for(delivery_db, occurrence_id))["status"] == "retry"
+    async with delivery_db.session_factory() as db, db.begin():
+        await lock_payments(db)
+        await TestPaymentSource().lock_rule(db, payment_id)
+        if change == "paid":
+            await db.execute(
+                update(periods).where(periods.c.id == occurrence_id).values(is_paid=True)
+            )
+        else:
+            await db.execute(update(rules).where(rules.c.id == payment_id).values(is_active=False))
+
+    assert (await worker(delivery_db, sender).run_once(NOW + timedelta(minutes=3)))["sent"] == 0
+    assert len(sender.calls) == 1
+    assert (await row_for(delivery_db, occurrence_id))["status"] == (
+        "pending" if change == "paid" else "cancelled"
     )
 
 

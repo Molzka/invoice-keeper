@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Table,
+    UniqueConstraint,
     Uuid,
     select,
     update,
@@ -36,11 +37,12 @@ periods = Table(
     "delivery_test_periods",
     metadata,
     Column("id", Uuid, primary_key=True),
-    Column("payment_id", Uuid, ForeignKey("delivery_test_rules.id"), nullable=False, unique=True),
+    Column("payment_id", Uuid, ForeignKey("delivery_test_rules.id"), nullable=False),
     Column("due_date", Date, nullable=False),
     Column("is_paid", Boolean, nullable=False),
     Column("amount", Numeric(14, 2), nullable=False),
     Column("currency", String, nullable=False),
+    UniqueConstraint("payment_id", "due_date"),
 )
 
 
@@ -80,7 +82,7 @@ class TestPaymentSource:
                 amount=Decimal("123.45"),
                 currency="RUB",
             )
-            .on_conflict_do_nothing(index_elements=[periods.c.payment_id])
+            .on_conflict_do_nothing(index_elements=[periods.c.payment_id, periods.c.due_date])
         )
 
     async def unpaid_occurrences(self, db, payment_id):
