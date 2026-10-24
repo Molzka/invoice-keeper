@@ -27,7 +27,6 @@ jobs:
       POSTGRES_USER: invoice_keeper_ci
       POSTGRES_PORT: "0"
       FRONTEND_PORT: "0"
-      FRONTEND_API_MODE: real
       APP_ENV: test
       ADMIN_USERNAME: compose_admin
 
@@ -123,6 +122,12 @@ jobs:
           E2E_ADMIN_USERNAME="$ADMIN_USERNAME" \
           E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
           npm run test:e2e
+
+      - name: Check reminder worker with PostgreSQL and a local Telegram stub
+        run: |
+          container=$(docker compose --env-file .env.example ps -q backend)
+          image=$(docker inspect --format '{{.Image}}' "$container")
+          python3 scripts/check_reminder_worker.py --image "$image"
 
       - name: Save browser report and failure details
         if: ${{ !cancelled() }}
