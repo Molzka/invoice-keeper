@@ -14,7 +14,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 WORKDIR /app
 COPY --from=dependencies /app/.venv /app/.venv
+
 COPY bot.py api.py smoke.py reminders.py formatting.py texts.json ./
+
 USER 10001:10001
 
 # A missing token must not prevent Compose from starting unrelated services.

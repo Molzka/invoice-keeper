@@ -32,8 +32,13 @@ def build_text(title, amount, currency, due_date) -> str:
     )
 
 
-def build_keyboard(payment_url=None):
+def build_keyboard(payment_url=None, payment_id=None):
     rows = []
+    if payment_id is not None:
+        # «Оплачено» первой строкой, под сообщением. Работает, если backend вернул ID платежа
+        rows.append([InlineKeyboardButton(
+            text=T["FIN"]["BTN_PAID"], callback_data=f"pay:{int(payment_id)}"
+        )])
     if payment_url:
         rows.append([InlineKeyboardButton(text=T["BTN_PAYMENT"], url=payment_url)])
     panel_url = (os.getenv("PANEL_URL") or "").strip()
@@ -44,14 +49,14 @@ def build_keyboard(payment_url=None):
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
-async def send_reminder(title, amount, currency, due_date, payment_url=None) -> int:
+async def send_reminder(title, amount, currency, due_date, payment_url=None, payment_id=None) -> int:
     """Одна попытка отправки. Возвращает message_id, ошибки пробрасывает наружу."""
     token = os.environ["BOT_TOKEN"]
     chat_id = os.environ["CHAT_ID"]
 
     # Формат данных проверяется до создания Bot: при ValueError сессия не открывается
     text = build_text(title, amount, currency, due_date)
-    markup = build_keyboard(payment_url)
+    markup = build_keyboard(payment_url, payment_id)
 
     bot = Bot(
         token=token,

@@ -1,336 +1,168 @@
-import asyncio
-import html
-import json
-import logging
-import os
+"""Telegram-интерфейс Invoice Keeper. Данные счетов получаются через HTTP API; локальная БД не используется."""
+import asyncio, contextlib, html, json, logging, os
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-
+import aiohttp
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import (
-    TelegramAPIError,
-    TelegramBadRequest,
-    TelegramUnauthorizedError,
-)
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart
-from aiogram.types import (
-    BotCommand,
-    CallbackQuery,
-    ErrorEvent,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
-from aiogram.utils.token import TokenValidationError
+from aiogram.types import BotCommand, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
+from api import ApiDataError, ApiNotConfigured, ApiUnavailable, fetch_payments
 
-from api import (
-    ApiAuthError,
-    ApiDataError,
-    ApiNotConfigured,
-    ApiRateLimited,
-    ApiUnavailable,
-    PaymentsClient,
-)
-
-T = json.loads((Path(__file__).parent / "texts.json").read_text(encoding="utf-8"))
-
-load_dotenv(Path(__file__).parent / ".env", override=False)
-
+BASE = Path(__file__).parent
+T = json.loads((BASE / 'texts.json').read_text(encoding='utf-8'))
+load_dotenv(BASE / '.env', override=True)
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("bot")
-
-# ---------- настройки ----------
-
-def load_chat_id():
-    """CHAT_ID необязателен. Пусто или неверно: платежи отключены, публичные команды работают."""
-    raw = os.environ.get("CHAT_ID", "").strip()
-    if not raw:
-        log.warning("CHAT_ID не задан: платежи отключены. Узнайте ID командой /id и впишите в CHAT_ID")
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        log.error("CHAT_ID должен быть числом, сейчас: %r. Платежи отключены", raw)
-        return None
-
-
-def load_panel_url():
-    """PANEL_URL необязателен. Принимаются только http(s)-адреса."""
-    url = os.environ.get("PANEL_URL", "").strip()
-    if not url:
-        return None
-    if not url.lower().startswith(("http://", "https://")):
-        log.error("PANEL_URL должен начинаться с http:// или https://, сейчас: %r. Ссылка отключена", url)
-        return None
-    return url
-
-
-ALLOWED_CHAT = load_chat_id()
-
+log = logging.getLogger('bot')
 PAGE_SIZE = 5
-api_client = PaymentsClient()
 
-# ---------- форматирование ----------
+def allowed_chat():
+    try: return int(os.getenv('CHAT_ID', '').strip())
+    except (ValueError, TypeError): return None
 
-def format_amount(amount, currency) -> str:
-    raw = str(amount).replace("\u00a0", "").replace(" ", "").replace(",", ".")
-    try:
-        value = Decimal(raw)
-    except InvalidOperation:
-        raise ValueError(f"Некорректная сумма: {amount!r}")
-    value = value.quantize(Decimal("0.01"), ROUND_HALF_UP)
-    text = f"{value:,.2f}".replace(",", " ").replace(".", ",")
-    return f"{text} {currency}"
+def money(amount, currency):
+    try: value = Decimal(str(amount).replace(' ', '').replace('\u00a0','').replace(',', '.')).quantize(Decimal('0.01'), ROUND_HALF_UP)
+    except InvalidOperation as e: raise ValueError('Некорректная сумма') from e
+    return f"{value:,.2f}".replace(',', ' ').replace('.', ',') + f' {currency}'
 
+def date_text(value):
+    if isinstance(value, datetime): value = value.date()
+    if isinstance(value, date): return value.strftime('%d.%m.%Y')
+    for fmt in ('%Y-%m-%d', '%d.%m.%Y'):
+        try: return datetime.strptime(str(value).strip(), fmt).strftime('%d.%m.%Y')
+        except ValueError: pass
+    raise ValueError('Некорректная дата')
 
-def format_date(value) -> str:
-    if isinstance(value, datetime):
-        value = value.date()
-    if isinstance(value, date):
-        return value.strftime("%d.%m.%Y")
-    s = str(value).strip()
-    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+def status(payment, today=None):
+    today = today or date.today()
+    due = datetime.strptime(date_text(payment['due_date']), '%d.%m.%Y').date()
+    return 'Просрочен' if due < today else ('К оплате сегодня' if due == today else 'Ожидает оплаты')
+
+def main_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='📋 Все счета', callback_data='list:upcoming:0'), InlineKeyboardButton(text='⚠️ Просроченные', callback_data='list:overdue:0')],
+        [InlineKeyboardButton(text='📅 На ближайшие 7 дней', callback_data='list:upcoming:0'), InlineKeyboardButton(text='📊 Сводка', callback_data='summary')],
+        [InlineKeyboardButton(text='❔ Помощь', callback_data='help')],
+    ])
+
+def payment_card(payment, index=1):
+    title = html.escape(str(payment['title']), quote=False)
+    amount = html.escape(money(payment['amount'], payment['currency']), quote=False)
+    due = html.escape(date_text(payment['due_date']), quote=False)
+    return f"<b>{index}. {title}</b>\nСумма: {amount}\nСрок: {due}\nСтатус: {html.escape(status(payment))}"
+
+def summary_text(items):
+    overdue = [p for p in items if status(p) == 'Просрочен']
+    total = sum((Decimal(str(p['amount']).replace(',', '.')) for p in items), Decimal('0'))
+    currencies = {p['currency'] for p in items}
+    total_text = money(total, next(iter(currencies))) if len(currencies) == 1 else 'суммы в разных валютах'
+    return f'<b>Финансовая сводка</b>\nВсего счетов: {len(items)}\nПросрочено: {len(overdue)}\nСумма счетов: {html.escape(total_text)}'
+
+async def fetch(kind): return await fetch_payments(kind)
+
+async def reminder_loop(bot, chat_id):
+    # Дедупликация в памяти: после перезапуска ключи сбрасываются. Постоянное хранение не используется.
+    sent = set()
+    while True:
         try:
-            return datetime.strptime(s, fmt).strftime("%d.%m.%Y")
-        except ValueError:
-            pass
-    raise ValueError(f"Некорректная дата: {value!r}")
-
-
-# ---------- роутеры ----------
-# secure: данные платежей только в нашем чате. Подключается первым.
-# public: команды, доступные в любом чате.
-
-def is_allowed(chat_id) -> bool:
-    return ALLOWED_CHAT is not None and chat_id == ALLOWED_CHAT
-
-
-secure = Router()
-secure.message.filter(lambda message: is_allowed(message.chat.id))
-secure.callback_query.filter(
-    lambda cb: cb.message is not None and is_allowed(cb.message.chat.id)
-)
-
-public = Router()
-
-
-def help_keyboard() -> InlineKeyboardMarkup:
-    buttons = [
-        InlineKeyboardButton(text=label, callback_data=f"cmd:{name}")
-        for label, name in T["HELP_BUTTONS"]
-    ]
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def panel_text() -> str:
-    url = load_panel_url()
-    return T["PANEL"].format(url=html.escape(url, quote=False)) if url else T["PANEL_NOT_SET"]
-
-
-def chat_id_text(chat_id: int) -> str:
-    return T["CHAT_ID"].format(chat_id=chat_id)
-
-
-# ---------- публичные команды ----------
-
-@public.message(CommandStart())
-async def start(message: Message):
-    await message.answer(T["START"])
-
-
-@public.message(Command("help"))
-async def help_(message: Message):
-    await message.answer(T["HELP"], reply_markup=help_keyboard())
-
-
-@public.message(Command("id"))
-async def chat_id(message: Message):
-    await message.answer(chat_id_text(message.chat.id))
-
-
-@public.message(Command("site"))
-async def panel(message: Message):
-    await message.answer(panel_text())
-
-
-@public.callback_query(F.data == "cmd:start")
-async def cb_start(callback: CallbackQuery):
-    await callback.message.answer(T["START"])
-    await callback.answer()
-
-
-@public.callback_query(F.data == "cmd:id")
-async def cb_id(callback: CallbackQuery):
-    await callback.message.answer(chat_id_text(callback.message.chat.id))
-    await callback.answer()
-
-
-@public.callback_query(F.data == "cmd:site")
-async def cb_panel(callback: CallbackQuery):
-    await callback.message.answer(panel_text())
-    await callback.answer()
-
-
-# Платежи запросили в чужом чате или при незаданном CHAT_ID
-# (в нашем чате сработает secure раньше)
-@public.message(Command("payments", "overdue"))
-async def msg_denied(message: Message):
-    await message.answer(T["DENIED"])
-
-
-@public.callback_query(F.data.in_({"cmd:payments", "cmd:overdue"}))
-async def cb_denied(callback: CallbackQuery):
-    await callback.answer(T["DENIED"], show_alert=True)
-
-
-# ---------- платежи (только в нашем чате) ----------
-
-async def build_view(kind: str, page: int):
-    title, empty = T["PAYMENT_KINDS"][kind]
-    page = max(page, 0)
-    try:
-        result = await api_client.fetch_payments(kind, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
-        pages = max(1, (result["total"] + PAGE_SIZE - 1) // PAGE_SIZE)
-        if page >= pages:
-            page = pages - 1
-            result = await api_client.fetch_payments(kind, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
-            pages = max(1, (result["total"] + PAGE_SIZE - 1) // PAGE_SIZE)
-    except ApiNotConfigured:
-        return T["API_NOT_CONFIGURED"], None
-    except ApiAuthError:
-        return T["API_AUTH_FAILED"], None
-    except ApiRateLimited:
-        return T["API_RATE_LIMITED"], None
-    except ApiDataError:
-        log.error("bad payment response: kind=%s", kind)
-        return T["BAD_DATA"], None
-    except ApiUnavailable:
-        log.warning("payments api unavailable: kind=%s", kind)
-        return T["API_UNAVAILABLE"], None
-
-    if not result["items"]:
-        return empty, None
-
-    def e(value):
-        return html.escape(str(value), quote=False)
-
-    try:
-        lines = [
-            T["PAYMENT_LINE"].format(
-                title=e(p["title"]),
-                amount=e(format_amount(p["amount"], p["currency"])),
-                due_date=e(format_date(p["due_date"])),
-            )
-            for p in result["items"]
-        ]
-    except (ValueError, KeyError, InvalidOperation) as exc:
-        log.error("bad payment data: %s", type(exc).__name__)
-        return T["BAD_DATA"], None
-
-    header = T["PAGE_HEADER"].format(title=title, page=page + 1, pages=pages)
-    text = header + "\n" + "\n".join(lines)
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton(text=T["NAV_PREV"], callback_data=f"pg:{kind}:{page - 1}"))
-    if page < pages - 1:
-        nav.append(InlineKeyboardButton(text=T["NAV_NEXT"], callback_data=f"pg:{kind}:{page + 1}"))
-    return text, (InlineKeyboardMarkup(inline_keyboard=[nav]) if nav else None)
-
-
-@secure.message(Command("payments"))
-async def payments(message: Message):
-    text, markup = await build_view("upcoming", 0)
-    await message.answer(text, reply_markup=markup)
-
-
-@secure.message(Command("overdue"))
-async def overdue(message: Message):
-    text, markup = await build_view("overdue", 0)
-    await message.answer(text, reply_markup=markup)
-
-
-@secure.callback_query(F.data.in_({"cmd:payments", "cmd:overdue"}))
-async def cb_payments(callback: CallbackQuery):
-    await callback.answer()
-    kind = "upcoming" if callback.data == "cmd:payments" else "overdue"
-    text, markup = await build_view(kind, 0)
-    await callback.message.answer(text, reply_markup=markup)
-
-
-@secure.callback_query(F.data.startswith("pg:"))
-async def paginate(callback: CallbackQuery):
-    try:
-        _, kind, page = callback.data.split(":")
-        page = int(page)
-    except ValueError:
-        await callback.answer()
-        return
-    if kind not in T["PAYMENT_KINDS"]:
-        await callback.answer()
-        return
-    await callback.answer()
-    text, markup = await build_view(kind, page)
-    try:
-        await callback.message.edit_text(text, reply_markup=markup)
-    except TelegramBadRequest:
-        pass  # "message is not modified"
-
-
-# ---------- запуск ----------
-
-async def on_error(event: ErrorEvent) -> bool:
-    """Ошибка в обработчике не должна останавливать бота. Содержимое сообщений не логируется."""
-    log.error(
-        "ошибка в обработчике: %s", type(event.exception).__name__,
-    )
-    return True
-
+            items = await fetch('upcoming')
+            items += await fetch('overdue')
+            today = date.today()
+            for p in items:
+                due = datetime.strptime(date_text(p['due_date']), '%d.%m.%Y').date()
+                days = (due - today).days
+                if days > int(os.getenv('REMIND_DAYS', '3')):
+                    continue
+                key = (str(p['title']), str(p['due_date']), str(p['amount']), str(p['currency']))
+                if key in sent: continue
+                label = 'Просрочен' if days < 0 else ('Срок оплаты сегодня' if days == 0 else f'До срока оплаты {days} дн.')
+                msg = f"<b>Напоминание об оплате</b>\n{html.escape(str(p['title']))}\nСумма: {html.escape(money(p['amount'], p['currency']))}\nСрок: {html.escape(date_text(p['due_date']))}\nСтатус: {label}"
+                await bot.send_message(chat_id, msg)
+                sent.add(key)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning('Цикл напоминаний: %s', type(exc).__name__)
+        await asyncio.sleep(max(5, int(os.getenv('REMINDER_CHECK_MINUTES', '30'))) * 60)
+async def answer_list(message, kind, page):
+    try: items = await fetch(kind)
+    except ApiNotConfigured: return await message.answer('Источник счетов пока не настроен. Попробуйте позже.')
+    except (ApiUnavailable, ApiDataError, asyncio.TimeoutError, aiohttp.ClientError) as e:
+        log.warning('Не удалось получить счета: %s', type(e).__name__)
+        return await message.answer('Не удалось загрузить счета. Попробуйте позже.')
+    if kind == 'overdue': items = [p for p in items if status(p) == 'Просрочен']
+    if not items: return await message.answer('Счетов в этом разделе нет.', reply_markup=main_keyboard())
+    pages = (len(items) + PAGE_SIZE - 1) // PAGE_SIZE
+    page = max(0, min(page, pages - 1)); chunk = items[page*PAGE_SIZE:(page+1)*PAGE_SIZE]
+    text = f'<b>{"Просроченные счета" if kind == "overdue" else "Счета на ближайшие 7 дней"}</b> · {page+1}/{pages}\n\n'
+    text += '\n\n'.join(payment_card(p, page*PAGE_SIZE+i+1) for i,p in enumerate(chunk))
+    rows = [[InlineKeyboardButton(text='Открыть карточку ' + str(page*PAGE_SIZE+i+1), callback_data=f'card:{kind}:{page*PAGE_SIZE+i}') ] for i,p in enumerate(chunk)]
+    nav=[]
+    if page: nav.append(InlineKeyboardButton(text='⬅️', callback_data=f'list:{kind}:{page-1}'))
+    if page < pages-1: nav.append(InlineKeyboardButton(text='➡️', callback_data=f'list:{kind}:{page+1}'))
+    if nav: rows.append(nav)
+    rows.append([InlineKeyboardButton(text='🏠 Меню', callback_data='menu')])
+    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 async def main():
-    token = os.environ.get("BOT_TOKEN", "").strip()
-    if not token:
-        raise SystemExit("BOT_TOKEN не задан: укажите его в .env или в environment Compose")
-
-    log.info(
-        "конфигурация: CHAT_ID %s, PANEL_URL %s",
-        "задан" if ALLOWED_CHAT is not None else "не задан",
-        load_panel_url() or "не задан",
-    )
-
-    dp = Dispatcher()
-    dp.errors.register(on_error)
-    dp.include_router(secure)  # порядок важен: secure раньше public
-    dp.include_router(public)
-
+    token = os.getenv('BOT_TOKEN', '').strip()
+    if not token: raise SystemExit('BOT_TOKEN не задан в .env')
+    chat_id = allowed_chat(); router = Router(); public = Router()
+    def permitted(m): return chat_id is not None and m.chat.id == chat_id
+    @public.message(CommandStart())
+    async def start(m: Message): await m.answer('<b>Invoice Keeper</b>\nКонтроль счетов и сроков оплаты.', reply_markup=main_keyboard())
+    @public.message(Command('help'))
+    async def help_cmd(m: Message): await m.answer('Команды: /start, /payments, /overdue, /summary. Используйте кнопки меню.')
+    @public.message(Command('payments'))
+    async def payments(m: Message):
+        if not permitted(m): return await m.answer('Эта команда недоступна в данном чате.')
+        await answer_list(m, 'upcoming', 0)
+    @public.message(Command('overdue'))
+    async def overdue(m: Message):
+        if not permitted(m): return await m.answer('Эта команда недоступна в данном чате.')
+        await answer_list(m, 'overdue', 0)
+    @public.message(Command('summary'))
+    async def summary(m: Message):
+        if not permitted(m): return await m.answer('Эта команда недоступна в данном чате.')
+        try: items = await fetch('upcoming')
+        except (ApiNotConfigured, ApiUnavailable, ApiDataError, asyncio.TimeoutError, aiohttp.ClientError): return await m.answer('Не удалось загрузить сводку. Проверьте подключение источника счетов.')
+        await m.answer(summary_text(items), reply_markup=main_keyboard())
+    @public.callback_query(F.data == 'menu')
+    async def menu(c: CallbackQuery): await c.message.answer('Главное меню', reply_markup=main_keyboard()); await c.answer()
+    @public.callback_query(F.data == 'help')
+    async def help_cb(c: CallbackQuery): await c.message.answer('Выберите «Все счета», «Просроченные» или «Сводка».'); await c.answer()
+    @public.callback_query(F.data.startswith('list:'))
+    async def list_cb(c: CallbackQuery):
+        if not permitted(c.message): return await c.answer('Недоступно в этом чате', show_alert=True)
+        _,kind,page=c.data.split(':'); await answer_list(c.message,kind,int(page)); await c.answer()
+    @public.callback_query(F.data == 'summary')
+    async def summary_cb(c: CallbackQuery):
+        if not permitted(c.message): return await c.answer('Недоступно в этом чате', show_alert=True)
+        try: items=await fetch('upcoming'); await c.message.answer(summary_text(items), reply_markup=main_keyboard())
+        except (ApiNotConfigured, ApiUnavailable, ApiDataError, asyncio.TimeoutError, aiohttp.ClientError): await c.message.answer('Не удалось загрузить сводку.')
+        await c.answer()
+    @public.callback_query(F.data.startswith('card:'))
+    async def card_cb(c: CallbackQuery):
+        if not permitted(c.message): return await c.answer('Недоступно в этом чате', show_alert=True)
+        _,kind,raw=c.data.split(':'); idx=int(raw)
+        try: items=await fetch(kind)
+        except (ApiNotConfigured, ApiUnavailable, ApiDataError, asyncio.TimeoutError, aiohttp.ClientError): await c.answer('Не удалось загрузить счёт',show_alert=True); return
+        if kind=='overdue': items=[p for p in items if status(p)=='Просрочен']
+        if idx < 0 or idx >= len(items): await c.answer('Счёт больше недоступен',show_alert=True); return
+        await c.message.answer('<b>Карточка счёта</b>\n\n'+payment_card(items[idx],idx+1), reply_markup=main_keyboard()); await c.answer()
+    dp=Dispatcher(); dp.include_router(public)
+    bot=Bot(token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     try:
-        bot = Bot(token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    except TokenValidationError:
-        raise SystemExit("BOT_TOKEN имеет неверный формат")
-
-    try:
-        try:
-            await bot.set_my_commands(
-                [BotCommand(command=c, description=d) for c, d in T["COMMANDS"]]
-            )
-        except TelegramUnauthorizedError:
-            raise
-        except TelegramAPIError as exc:
-            # меню команд вторично: бот работает и без него
-            log.error("не удалось задать меню команд: %s", type(exc).__name__)
-        await dp.start_polling(bot)
-    except TelegramUnauthorizedError:
-        raise SystemExit("Telegram отклонил токен (401): проверьте BOT_TOKEN, при утечке сделайте /revoke")
-    finally:
-        try:
-            await api_client.close()
+        with contextlib.suppress(TelegramAPIError): await bot.set_my_commands([BotCommand(command='start',description='Главное меню'),BotCommand(command='payments',description='Счета на 7 дней'),BotCommand(command='overdue',description='Просроченные счета'),BotCommand(command='summary',description='Финансовая сводка'),BotCommand(command='help',description='Помощь')])
+        reminder_task = asyncio.create_task(reminder_loop(bot, chat_id)) if chat_id is not None else None
+        try: await dp.start_polling(bot)
         finally:
-            await bot.session.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+            if reminder_task:
+                reminder_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError): await reminder_task
+    finally: await bot.session.close()
+if __name__=='__main__': asyncio.run(main())
