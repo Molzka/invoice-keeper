@@ -4,7 +4,7 @@ export interface ApiRequestContext { method: string; path: string }
 
 /** HTTP context is optional for backwards compatibility; it never contains query or request data. */
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string, public details: ErrorDetail[] = [], public request?: ApiRequestContext) {
+  constructor(public status: number, public code: string, message: string, public details: ErrorDetail[] = [], public request?: ApiRequestContext, public retryAfterSeconds?: number) {
     super(message); this.name = 'ApiError'
   }
 }

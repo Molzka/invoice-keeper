@@ -11,4 +11,5 @@ import './styles/dashboard-detail.css';
 import './styles/button-polish.css';
 import './styles/recurring-preview.css';
 import './styles/summary-links.css';
+import './styles/change-password.css';
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
