@@ -26,4 +26,4 @@ Migration 0009 follows the colleague's audit, receipt, MFA and registration revi
 
 Frontend mock scenarios cover exact amounts, paid/no-op conflicts, individual conditions, current/history preservation, next-month generation, currency totals, roles and CSRF. PostgreSQL migration and concurrency scenarios passed against an isolated PostgreSQL 17.11 instance. Final checks are recorded in docs/development/technical-verification-2026-10-24.md at repository root.
 
-The snapshot migration follows current main audit/receipt revisions 0005 and 0006. The production extension contract is at repository-root docs/api/payment-lifecycle.md.
+Snapshot migration 0009 follows MFA revision 0007 and registration revision 0008; lifecycle revision 0010 follows the snapshots. The production extension contract is at repository-root docs/api/payment-lifecycle.md.
