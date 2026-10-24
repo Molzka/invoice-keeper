@@ -10,6 +10,7 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
     TelegramUnauthorizedError,
 )
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.delivery.contracts import PaymentSnapshot, PermanentRejection, RetryableRejection
 
@@ -31,7 +32,19 @@ class TelegramSender:
     async def __call__(self, payment: PaymentSnapshot) -> int:
         try:
             message = await self.bot.send_message(
-                chat_id=self.chat_id, text=build_reminder_text(payment), parse_mode="HTML"
+                chat_id=self.chat_id,
+                text=build_reminder_text(payment),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="Открыть платёж",
+                                callback_data=f"card:{payment.occurrence_id}",
+                            )
+                        ]
+                    ]
+                ),
             )
         except TelegramRetryAfter as exc:
             raise RetryableRejection(exc.retry_after) from None

@@ -231,6 +231,21 @@ async def run(mode, state):
                 and today.isoformat() in fields["text"][0],
                 "Wrong Telegram destination, amount or due date",
             )
+            markup_values = fields.get("reply_markup", [])
+            require(len(markup_values) == 1, "Reminder is missing its payment button")
+            keyboard = json.loads(markup_values[0]).get("inline_keyboard", [])
+            require(
+                len(keyboard) == 1 and len(keyboard[0]) == 1,
+                "Reminder must have exactly one payment button",
+            )
+            occurrence_id = next(
+                row["occurrence_id"] for row in sent if str(row["payment_id"]) == state[title]
+            )
+            require(
+                keyboard[0][0].get("text") == "Открыть платёж"
+                and keyboard[0][0].get("callback_data") == f"card:{occurrence_id}",
+                "Reminder button does not identify its persisted payment occurrence",
+            )
         return {"confirmed": sent, "requests": len(requests)}
     finally:
         await database.dispose()

@@ -10,7 +10,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, DummyCookieJar, web
 from app.core.config import settings
 from app.db.session import Database
 from app.models import UserSession
@@ -87,8 +87,12 @@ def seed():
             request("DELETE", "/recurring-payments/" + created["id"], status=204)
 
     for index in range(52):
+        title = f"Bot upcoming {index:02d} <&>"
+        if index == 0:
+            title = (title + " 🧾Кириллица<&>" * 20)[:200]
         payment(
-            f"Bot upcoming {index:02d} <&>", today + timedelta(days=index % 7),
+            title,
+            today + timedelta(days=index % 7),
             currency=("RUB", "USD", "EUR")[index % 3],
         )
     payment("Bot day seven excluded", today + timedelta(days=7))
@@ -131,6 +135,9 @@ async def application():
         if not name.startswith("bot_") or not name.endswith("_test"):
             raise RuntimeError("Refusing to use a non-fixture database")
     user_id, expected, api_request = seed()
+    changed_periods = set()
+    proxy_client = ClientSession(cookie_jar=DummyCookieJar(), timeout=ClientTimeout(total=15))
+    proxy_state = {"fail_next": False, "failures": 0, "forwarded": 0}
 
     async def fixtures(_request):
         return web.json_response(expected)
@@ -162,12 +169,85 @@ async def application():
 
     async def pay_first(_request):
         item = await asyncio.to_thread(
-            api_request, "PATCH", "/payment-occurrences/" + expected["upcoming"][0]["id"],
+            api_request,
+            "PATCH",
+            "/payment-occurrences/" + expected["upcoming"][0]["id"],
             {"status": "paid", "paid_on": expected["today"]},
         )
+        changed_periods.add(item["id"])
         return web.json_response(item)
 
+    async def pay_periods(items):
+        for item in items:
+            await asyncio.to_thread(
+                api_request,
+                "PATCH",
+                "/payment-occurrences/" + item["id"],
+                {"status": "paid", "paid_on": expected["today"]},
+            )
+            changed_periods.add(item["id"])
+
+    async def pay_last_upcoming(_request):
+        await pay_periods(expected["upcoming"][-2:])
+        return web.json_response({"paid_ids": [item["id"] for item in expected["upcoming"][-2:]]})
+
+    async def pay_overdue(_request):
+        await pay_periods(expected["overdue"])
+        return web.json_response({"paid_count": len(expected["overdue"])})
+
+    async def restore_payments(_request):
+        for identifier in sorted(changed_periods):
+            await asyncio.to_thread(
+                api_request,
+                "PATCH",
+                "/payment-occurrences/" + identifier,
+                {"status": "unpaid", "paid_on": None},
+            )
+        changed_periods.clear()
+        return web.json_response({"restored": True})
+
+    async def fail_next(_request):
+        proxy_state["fail_next"] = True
+        return web.json_response(proxy_state)
+
+    async def proxy_status(_request):
+        return web.json_response(proxy_state)
+
+    async def proxy(request):
+        # Keep the real backend's authentication, cookies, payloads and PostgreSQL.
+        # Only one requested GET can be replaced with a deliberate HTTP 503.
+        if proxy_state["fail_next"] and request.method == "GET":
+            proxy_state["fail_next"] = False
+            proxy_state["failures"] += 1
+            return web.json_response(
+                {"error": {"code": "FIXTURE_UNAVAILABLE", "message": "Fixture outage"}},
+                status=503,
+                headers={"Cache-Control": "no-store"},
+            )
+        target = os.environ["API_BASE_URL"] + request.raw_path.removeprefix("/api/v1")
+        headers = {
+            key: request.headers[key]
+            for key in ("Accept", "Content-Type", "Cookie", "Origin", "X-CSRF-Token")
+            if key in request.headers
+        }
+        async with proxy_client.request(
+            request.method,
+            target,
+            headers=headers,
+            data=await request.read(),
+            allow_redirects=False,
+        ) as response:
+            body = await response.read()
+            proxy_state["forwarded"] += 1
+            headers = [
+                (key, value)
+                for key, value in response.headers.items()
+                if key.lower() in {"content-type", "set-cookie", "cache-control", "retry-after"}
+            ]
+            return web.Response(status=response.status, body=body, headers=headers)
+
     async def close(_app):
+        await proxy_client.close()
         await database.dispose()
 
     app = web.Application()
@@ -177,6 +257,12 @@ async def application():
             web.get("/sessions", sessions),
             web.post("/expire", expire),
             web.post("/pay-first", pay_first),
+            web.post("/pay-last-upcoming", pay_last_upcoming),
+            web.post("/pay-overdue", pay_overdue),
+            web.post("/restore-payments", restore_payments),
+            web.post("/fail-next", fail_next),
+            web.get("/proxy-status", proxy_status),
+            web.route("*", "/api/v1/{path:.*}", proxy),
         ]
     )
     app.on_cleanup.append(close)
