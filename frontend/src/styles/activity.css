@@ -50,7 +50,7 @@
 .activity-pagination { display: flex; align-items: center; gap: 14px; padding: 16px 24px; border-top: 1px solid var(--line); }
 .activity-page-size { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
 .activity-page-size > label { color: var(--muted); font-size: 11px; }
-.activity-page-size .ik-select { width: 65px; }
+.activity-page-size .ik-select { width: 90px; }
 .activity-pagination .pagination { flex: 1; margin: 0; padding: 0; border: 0; }
 .activity-footer { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 22px 0 0; color: #77838b; font-size: 11px; line-height: 1.5; text-align: center; }
 .activity-footer svg { flex-shrink: 0; }
