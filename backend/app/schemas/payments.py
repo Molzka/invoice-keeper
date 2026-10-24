@@ -22,9 +22,7 @@ MIN_PAYMENT_AMOUNT = Decimal("0.01")
 
 
 def validate_iso_date(value: object) -> date:
-    if not isinstance(value, str) or re.fullmatch(
-        r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value
-    ) is None:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
         raise PydanticCustomError("date_format", "Передайте дату в формате YYYY-MM-DD")
     try:
         return date.fromisoformat(value)
