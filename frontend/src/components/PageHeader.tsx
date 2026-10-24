@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
+import type { WorkspaceArtKind } from './WorkspaceArt'
 import { WorkspaceArt } from './WorkspaceArt'
 
 
 interface PageHeaderProps {
-  kind: 'payments' | 'recurring' | 'history' | 'users'
+  kind: WorkspaceArtKind
   title: string
   eyebrow: ReactNode
   description: string
