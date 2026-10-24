@@ -1,0 +1,100 @@
+/* Colour belongs to the decoration; financial text keeps its contrast. */
+.currency-card {
+  --currency-accent: #18889a;
+  --currency-soft: #ecf9fa;
+  --currency-line: #cee8ec;
+  --currency-ink: #236675;
+  isolation: isolate;
+  background: linear-gradient(120deg, #fff 52%, var(--currency-soft) 190%);
+}
+.currency-card[data-currency='USD'] {
+  --currency-accent: #8c72b9;
+  --currency-soft: #f5f0fc;
+  --currency-line: #e4d9f3;
+  --currency-ink: #6c558c;
+}
+.currency-card[data-currency='EUR'] {
+  --currency-accent: #b68d48;
+  --currency-soft: #fff8eb;
+  --currency-line: #eedfc5;
+  --currency-ink: #87652e;
+}
+.currency-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 25px auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--currency-line), transparent);
+  pointer-events: none;
+}
+.currency-card > :not(.currency-art) { position: relative; z-index: 1; }
+.currency-card .currency-label strong::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--currency-accent);
+}
+.currency-card .currency-label .pill {
+  color: var(--currency-ink);
+  background: var(--currency-soft);
+  border: 1px solid var(--currency-line);
+  letter-spacing: .4px;
+}
+.currency-art {
+  position: absolute;
+  z-index: 0;
+  top: 14px;
+  right: 13px;
+  width: 120px;
+  height: 120px;
+  opacity: .9;
+  pointer-events: none;
+  overflow: visible;
+  transition: opacity 350ms ease;
+  animation: currency-ink-arrive 650ms 100ms ease both;
+}
+.currency-art-symbol { opacity: .57; }
+.currency-art-orbit { opacity: .42; }
+.currency-art-plate, .currency-art-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 600ms var(--ease-out);
+}
+.currency-art-spark { opacity: .75; }
+@keyframes currency-ink-arrive {
+  from { opacity: 0; transform: translateY(7px); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .currency-card:hover { border-color: var(--currency-line); }
+  .currency-card:hover .currency-art { opacity: 1; }
+  .currency-card:hover .currency-art-plate { transform: translateY(-3px) rotate(4deg); }
+  .currency-card:hover .currency-art-spark { transform: rotate(-8deg) translateY(1px); }
+}
+/* Keep error text beside its icon, including on wide screens. */
+.app-main .error-banner, .app-main .summary-error {
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 18px;
+}
+.app-main .error-banner > svg, .app-main .summary-error > svg { flex: 0 0 20px; margin-top: 2px; }
+.app-main .error-banner > div, .app-main .summary-error > div { min-width: 0; flex: 1; }
+.app-main .summary-error h3 { margin: 0 0 7px; font-size: 15px; }
+.app-main .summary-error p { margin: 0; }
+.app-main .summary-error .btn { margin-top: 12px; }
+.api-request-detail { margin: 12px 0 0; }
+.api-request-detail summary { cursor: pointer; width: fit-content; text-underline-offset: 3px; }
+.api-request-detail[open] summary { margin-bottom: 8px; }
+.api-request-detail code { display: block; padding: 8px 10px; border: 1px solid currentColor; border-radius: 8px; width: fit-content; max-width: 100%; overflow-wrap: anywhere; font-size: 11px; }
+@media (max-width: 760px) {
+  .currency-art { width: 114px; height: 114px; top: 16px; right: 13px; }
+  .app-main .error-banner, .app-main .summary-error { padding: 18px; gap: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .currency-art { animation: none; transition: none; }
+  .currency-art-plate, .currency-art-spark { transition: none; }
+  .currency-card:hover .currency-art-plate, .currency-card:hover .currency-art-spark { transform: none; }
+}

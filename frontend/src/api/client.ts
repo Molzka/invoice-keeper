@@ -1,15 +1,14 @@
 import type {
-  AuthResponse, CreateRecurringPaymentRequest, CreateUserRequest, ErrorDetail, ErrorResponse,
+  AuthResponse, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
   RecurringPayment, RecurringPaymentFilters, SummaryParams, UpdateOccurrenceRequest, UpdateUserRequest, User,
 } from '../types/api'
 import { mockFetch } from '../mocks/transport'
 
-export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string, public details: ErrorDetail[] = []) {
-    super(message); this.name = 'ApiError'
-  }
-}
+import { ApiError } from './errors'
+export { ApiError, isMissingPaymentRoute } from './errors'
+export type { ApiRequestContext } from './errors'
+
 export const API_MODE = import.meta.env.VITE_API_MODE === 'real' ? 'real' : 'mock'
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 const REQUEST_TIMEOUT_MS = 12000
@@ -21,6 +20,7 @@ function query(params?: object): string {
   return search.size ? '?' + search.toString() : ''
 }
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const requestContext = { method: method.toUpperCase(), path: path.split(/[?#]/, 1)[0] }
   const headers = new Headers({ Accept: 'application/json' })
   if (body !== undefined) headers.set('Content-Type', 'application/json')
   if (['POST', 'PATCH', 'DELETE'].includes(method) && path !== '/auth/login' && csrfToken) headers.set('X-CSRF-Token', csrfToken)
@@ -36,11 +36,11 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       if (response.status === 401) { csrfToken = null; window.dispatchEvent(new CustomEvent('invoice:unauthorized')) }
       // A disconnected or timed-out response body still has an unknown mutation outcome.
       if (abort.signal.aborted || error instanceof TypeError) throw error
-      throw new ApiError(response.status, 'INVALID_RESPONSE', 'Сервер вернул ответ в неизвестном формате')
+      throw new ApiError(response.status, 'INVALID_RESPONSE', 'Сервер вернул ответ в неизвестном формате', [], requestContext)
     }
     if (!response.ok) {
       const serverError = (payload as Partial<ErrorResponse>)?.error
-      const error = new ApiError(response.status, serverError?.code || 'HTTP_ERROR', serverError?.message || 'Не удалось выполнить запрос', Array.isArray(serverError?.details) ? serverError.details : [])
+      const error = new ApiError(response.status, serverError?.code || 'HTTP_ERROR', serverError?.message || 'Не удалось выполнить запрос', Array.isArray(serverError?.details) ? serverError.details : [], requestContext)
       if (response.status === 401 && !(path === '/auth/login' && error.code === 'INVALID_CREDENTIALS')) {
         csrfToken = null
         window.dispatchEvent(new CustomEvent('invoice:unauthorized'))
@@ -50,8 +50,8 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     return payload as T
   } catch (error) {
     if (error instanceof ApiError) throw error
-    if (abort.signal.aborted) throw new ApiError(0, 'TIMEOUT', 'Сервер не ответил вовремя. Перед повторным созданием проверьте список: запись могла сохраниться.')
-    throw new ApiError(0, 'NETWORK_ERROR', 'Нет связи с сервером. Проверьте подключение и попробуйте ещё раз.')
+    if (abort.signal.aborted) throw new ApiError(0, 'TIMEOUT', 'Сервер не ответил вовремя. Перед повторным созданием проверьте список: запись могла сохраниться.', [], requestContext)
+    throw new ApiError(0, 'NETWORK_ERROR', 'Нет связи с сервером. Проверьте подключение и попробуйте ещё раз.', [], requestContext)
   } finally { clearTimeout(timeout) }
 }
 
@@ -71,6 +71,7 @@ export const api = {
   deleteUser: (id: string) => request<void>('/users/' + encodeURIComponent(id), 'DELETE'),
   getSummary: (params: SummaryParams = {}) => request<PaymentSummary>('/payments/summary' + query(params)),
 }
+
 
 
 

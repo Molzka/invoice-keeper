@@ -1,0 +1,157 @@
+/* Workspace controls: clear feedback, a little character, and no movement at rest. */
+:is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button) {
+  transition: color 180ms ease, background-color 180ms ease,
+    border-color 180ms ease, box-shadow 240ms ease,
+    background-position 420ms cubic-bezier(.2,.75,.25,1),
+    transform 180ms cubic-bezier(.2,.75,.25,1);
+}
+
+:is(.app-shell, .drawer-backdrop) .btn-primary {
+  background-color: #141616;
+  background-image: linear-gradient(115deg, #141616 0%, #141616 38%, #303b3c 65%, #141616 100%);
+  background-size: 240% 100%;
+  background-position: 0 50%;
+  border-color: #141616;
+  box-shadow: inset 0 1px 0 #ffffff12, 0 2px 3px #1416160c;
+}
+
+:is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button) > svg {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 300ms cubic-bezier(.2,.75,.25,1), color 180ms ease;
+}
+
+.app-shell .nav-link::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: #169daf;
+  opacity: 0;
+  transform: translateX(-50%) scaleX(.4);
+  transition: transform 260ms cubic-bezier(.2,.75,.25,1), opacity 180ms ease;
+  pointer-events: none;
+}
+.app-shell .nav-link.active::after {
+  opacity: 1;
+  transform: translateX(-50%) scaleX(1);
+}
+.app-shell .nav-link > svg { transition: transform 300ms cubic-bezier(.2,.75,.25,1), color 180ms ease; }
+.app-shell :is(.status-tab, .segment) { transition: color 180ms, background-color 200ms, box-shadow 240ms, transform 180ms; }
+.app-shell :is(.status-tab, .segment).active {
+  background: #141616;
+  color: #fff;
+  box-shadow: inset 0 -2px 0 #4bc3ce70, 0 2px 5px #1416160a;
+}
+
+/* Keyboard users get the same surface feedback and a distinct focus ring. */
+:is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button, .nav-link, .status-tab, .segment, .password-toggle):focus-visible {
+  outline: 3px solid #16879a;
+  outline-offset: 3px;
+}
+:is(.app-shell, .drawer-backdrop) .btn-primary:focus-visible:not(:disabled) {
+  background-image: linear-gradient(115deg, #141616 0%, #141616 38%, #303b3c 65%, #141616 100%);
+  background-position: 100% 50%;
+  border-color: #3d5559;
+  box-shadow: inset 0 1px 0 #ffffff1c, 0 4px 12px #15383c16;
+}
+:is(.app-shell, .drawer-backdrop) .btn-secondary:focus-visible:not(:disabled),
+:is(.app-shell, .drawer-backdrop) .icon-button:not(.danger-text):focus-visible:not(:disabled) {
+  background: #eff9fa;
+  border-color: #91c7cf;
+}
+.app-shell .nav-link:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) scaleX(1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(.app-shell, .drawer-backdrop) .btn-primary:hover:not(:disabled) {
+    background-color: #141616;
+    background-image: linear-gradient(115deg, #141616 0%, #141616 38%, #303b3c 65%, #141616 100%);
+    background-position: 100% 50%;
+    border-color: #3d5559;
+    box-shadow: inset 0 1px 0 #ffffff1c, 0 5px 14px #15383c16;
+  }
+  :is(.app-shell, .drawer-backdrop) .btn-secondary:hover:not(:disabled) {
+    background: #f1f9fa;
+    border-color: #aed3d9;
+    box-shadow: 0 3px 9px #1664710a;
+  }
+  :is(.app-shell, .drawer-backdrop) .icon-button:not(.danger-text):hover:not(:disabled) {
+    background: #edf8f9;
+    border-color: #a5ced4;
+    color: #176f7c;
+    box-shadow: 0 3px 8px #1664710a;
+  }
+  :is(.app-shell, .drawer-backdrop) .btn:not(:disabled):hover > .lucide-plus,
+  .app-shell :is(.page-heading-action, .empty-state) .btn-primary:not(:disabled):hover > svg {
+    transform: rotate(90deg);
+  }
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button):not(:disabled):hover > .lucide-refresh-cw {
+    transform: rotate(65deg);
+  }
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button):not(:disabled):hover > .lucide-history {
+    transform: rotate(-18deg);
+  }
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button):not(:disabled):hover > .lucide-chevron-left {
+    transform: translateX(-2px);
+  }
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button):not(:disabled):hover > .lucide-chevron-right,
+  :is(.app-shell, .drawer-backdrop) .icon-button:not(:disabled):hover > .lucide-log-out {
+    transform: translateX(2px);
+  }
+  :is(.app-shell, .drawer-backdrop) .btn:not(:disabled):hover > .lucide-check {
+    transform: translateY(-1px) scale(1.08);
+  }
+  .app-shell .inline-actions .btn-secondary:not(:disabled):hover > span[aria-hidden='true'] {
+    transform: translate(2px, -2px);
+  }
+  .app-shell .nav-link:hover::after {
+    opacity: .65;
+    transform: translateX(-50%) scaleX(1);
+  }
+  .app-shell .nav-link:hover > svg { transform: translateY(-2px); }
+  .app-shell .nav-link:hover > .lucide-repeat-2 { transform: rotate(-12deg); }
+  .app-shell .nav-link:hover > .lucide-receipt-text { transform: translateY(-1px) rotate(7deg); }
+  .app-shell :is(.status-tab, .segment):not(.active):hover {
+    background: #edf6f7;
+    color: #155f6a;
+    box-shadow: inset 0 -2px 0 #9bd9df70;
+  }
+  :is(.app-shell, .drawer-backdrop) .btn-danger:hover:not(:disabled),
+  :is(.app-shell, .drawer-backdrop) .icon-button.danger-text:hover:not(:disabled) {
+    transform: none;
+    background: #fff1f3;
+    border-color: #dfaab3;
+  }
+  :is(.app-shell, .drawer-backdrop) .btn-danger:hover > svg,
+  :is(.app-shell, .drawer-backdrop) .icon-button.danger-text:hover > svg { transform: none; }
+}
+
+.app-shell .inline-actions .btn-secondary > span[aria-hidden='true'] {
+  display: inline-block;
+  transition: transform 240ms cubic-bezier(.2,.75,.25,1);
+}
+:is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button):disabled {
+  transform: none;
+  box-shadow: none;
+}
+:is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button):disabled > svg {
+  transform: none;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button, .nav-link, .status-tab, .segment),
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button, .nav-link) > svg,
+  .app-shell .inline-actions .btn-secondary > span[aria-hidden='true'],
+  .app-shell .nav-link::after { transition: none !important; }
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button, .nav-link, .status-tab, .segment),
+  :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button, .nav-link) > svg,
+  .app-shell .inline-actions .btn-secondary > span[aria-hidden='true'] { transform: none !important; }
+  .app-shell .nav-link::after { transform: translateX(-50%) !important; }
+}
