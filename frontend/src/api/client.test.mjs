@@ -203,3 +203,14 @@ test('a password-change 401 follows the existing global session-expiry flow', as
   assert.equal(calls.length, 1)
   assert.deepEqual(events, ['invoice:unauthorized'])
 })
+
+
+test('real activity source reports unavailable without inventing an endpoint or making a network request', async () => {
+  const { api, calls } = await clientFixture(() => { throw new Error('Unexpected request') })
+  await assert.rejects(api.listAuditEvents({ date_from: '', date_to: '', actor: '', action: '', query: '', limit: 12, offset: 0 }), error => {
+    assert.equal(error.status, 501)
+    assert.equal(error.code, 'AUDIT_NOT_AVAILABLE')
+    return true
+  })
+  assert.equal(calls.length, 0)
+})
