@@ -67,6 +67,8 @@ test('вход, восстановление сессии и выход во в�
     await responseAfter(page, 'POST', '/auth/logout', 204,
       () => page.getByRole('button', { name: 'Выйти из системы' }).click());
     await expect(page.getByRole('heading', { name: 'Вход в систему', exact: true })).toBeVisible();
+    await expect(anotherTab.getByRole('heading', { name: 'Вход в систему', exact: true })).toBeVisible();
+    await expect(anotherTab.getByRole('heading', { name: 'Пользователи', exact: true })).toHaveCount(0);
     await expectSignedOutAfterReload(page);
     await expectSignedOutAfterReload(anotherTab);
   });
