@@ -51,6 +51,33 @@ jobs:
       - name: Start PostgreSQL
         run: docker compose --env-file .env.example up -d --wait --wait-timeout 90 postgres
 
+      - name: Check log limits for every service
+        run: |
+          python3 - <<'PY'
+          import json
+          import subprocess
+
+          compose = ["docker", "compose", "--env-file", ".env.example"]
+          expected = {"driver": "local", "options": {
+              "max-size": "10m", "max-file": "3", "compress": "true",
+          }}
+          config = json.loads(subprocess.check_output(
+              [*compose, "config", "--format", "json"], text=True))
+          for name, service in config["services"].items():
+              if service.get("logging") != expected:
+                  raise SystemExit(f"Missing or incorrect log limits: {name}")
+              print(f"OK log limits: {name}")
+
+          container = subprocess.check_output(
+              [*compose, "ps", "-q", "postgres"], text=True).strip()
+          actual = json.loads(subprocess.check_output([
+              "docker", "inspect", "--format", "{{json .HostConfig.LogConfig}}", container,
+          ], text=True))
+          if actual != {"Type": expected["driver"], "Config": expected["options"]}:
+              raise SystemExit("PostgreSQL container did not receive the log limits")
+          print("OK log limits applied to the running PostgreSQL container")
+          PY
+
       - name: Check SQL authentication and data persistence
         run: |
           sql() {

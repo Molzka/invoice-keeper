@@ -1,7 +1,15 @@
 name: invoice-keeper
 
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+    compress: "true"
+
 services:
   backend:
+    logging: *default-logging
     build:
       context: ./backend
     restart: unless-stopped
@@ -37,6 +45,7 @@ services:
       start_period: 10s
 
   bot:
+    logging: *default-logging
     build:
       context: .
       dockerfile: docker/bot/Dockerfile
@@ -58,6 +67,7 @@ services:
       - no-new-privileges:true
 
   frontend:
+    logging: *default-logging
     build:
       context: ./frontend
       args:
@@ -80,6 +90,7 @@ services:
       start_period: 5s
 
   postgres:
+    logging: *default-logging
     image: postgres:18.6-bookworm@sha256:bbf83594798e144bff365a9c191c5d779f181fb3135902064ab8ff11918020fc
     restart: unless-stopped
     stop_grace_period: 30s
