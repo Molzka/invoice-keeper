@@ -1074,6 +1074,9 @@
               "anyOf": [
                 {
                   "enum": [
+                    "account.login",
+                    "account.login_failed",
+                    "account.logout",
                     "payment.amount_changed",
                     "payment.terms_changed",
                     "payment.deleted",
@@ -3415,8 +3418,15 @@
       "AuditActor": {
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
           "username": {
@@ -3487,8 +3497,15 @@
             "title": "Type"
           },
           "id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
           "title": {
@@ -3553,6 +3570,9 @@
           "action": {
             "type": "string",
             "enum": [
+              "account.login",
+              "account.login_failed",
+              "account.logout",
               "payment.amount_changed",
               "payment.terms_changed",
               "payment.deleted",

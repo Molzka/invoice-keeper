@@ -15,7 +15,9 @@ from .conftest import BACKEND_DIR
 
 
 @pytest.mark.asyncio
-async def test_upgrade_preserves_existing_accounts_passwords_and_sessions(migrated_database_url):
+async def test_upgrade_preserves_existing_accounts_passwords_and_sessions(
+    app, migrated_database_url
+):
     env = os.environ.copy()
     env["DATABASE_URL"] = migrated_database_url
 
@@ -85,6 +87,7 @@ async def test_upgrade_preserves_existing_accounts_passwords_and_sessions(migrat
 
 @pytest.mark.asyncio
 async def test_amount_snapshot_upgrade_backfills_existing_paid_and_unpaid_history(
+    app,
     migrated_database_url,
 ):
     env = os.environ.copy()
@@ -216,8 +219,60 @@ def test_lifecycle_audit_migration_preserves_registration_and_security_actions()
     }
     assert actions(lifecycle["OLD_ACTIONS"]) == previous
     assert actions(lifecycle["NEW_ACTIONS"]) == previous | added
-    assert set(get_args(AuditAction)) == previous | added
+    authentication = runpy.run_path(str(versions / "0011_auth_audit.py"))
+    auth_actions = {"account.login", "account.login_failed", "account.logout"}
+    assert actions(authentication["OLD_ACTIONS"]) == previous | added
+    assert actions(authentication["AUTH_ACTIONS"]) == auth_actions
+    assert set(get_args(AuditAction)) == previous | added | auth_actions
     constraint = next(
         item for item in AuditEvent.__table__.constraints if item.name == "ck_audit_events_action"
     )
-    assert actions(str(constraint.sqltext)) == previous | added
+    assert actions(str(constraint.sqltext)) == previous | added | auth_actions
+
+
+@pytest.mark.asyncio
+async def test_auth_audit_migration_preserves_old_events_and_refuses_lossy_downgrade(
+    app, migrated_database_url
+):
+    env = {**os.environ, "DATABASE_URL": migrated_database_url}
+
+    def migrate(direction, target):
+        return subprocess.run(
+            [sys.executable, "-m", "alembic", direction, target],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            check=False,
+        )
+
+    connection = await asyncpg.connect(
+        make_url(migrated_database_url)
+        .set(drivername="postgresql")
+        .render_as_string(hide_password=False)
+    )
+    old_id, new_id, user_id = uuid4(), uuid4(), uuid4()
+    try:
+        assert migrate("downgrade", "0010").returncode == 0
+        await connection.execute(
+            "INSERT INTO audit_events(id, actor_id, actor_username, action, entity_type, entity_id, entity_title) "
+            "VALUES ($1, $2, 'original', 'user.created', 'user', $2, 'original')",
+            old_id,
+            user_id,
+        )
+        before = await connection.fetchrow("SELECT * FROM audit_events WHERE id=$1", old_id)
+        assert migrate("upgrade", "head").returncode == 0
+        assert await connection.fetchrow("SELECT * FROM audit_events WHERE id=$1", old_id) == before
+        await connection.execute(
+            "INSERT INTO audit_events(id, actor_username, action, entity_type, entity_title) "
+            "VALUES ($1, 'missing', 'account.login_failed', 'account', 'missing')",
+            new_id,
+        )
+        refused = migrate("downgrade", "0010")
+        assert refused.returncode != 0
+        assert b"authentication history exists" in refused.stderr
+        assert await connection.fetchval("SELECT version_num FROM alembic_version") == "0011"
+        assert await connection.fetchval("SELECT count(*) FROM audit_events") == 2
+    finally:
+        await connection.execute("DELETE FROM audit_events WHERE id IN ($1, $2)", old_id, new_id)
+        await connection.close()
+        assert migrate("upgrade", "head").returncode == 0

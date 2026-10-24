@@ -16,7 +16,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models import LoginRateLimit, User, UserSession
-from app.services.audit import record_audit_event
+from app.services.audit import record_audit_event, record_auth_event
 from app.services.errors import api_error
 
 
@@ -199,6 +199,8 @@ async def login(
     password_hash = user.password_hash if user is not None else None
     valid_password = await verify_password(password, password_hash)
     if user is None or not valid_password or not user.is_active:
+        record_auth_event(db, "account.login_failed", user, username)
+        await db.commit()
         raise api_error(401, "INVALID_CREDENTIALS", "Неверный логин или пароль")
 
     # Changes and deletion take the same user row lock before revoking sessions.
@@ -216,6 +218,8 @@ async def login(
         or user.password_hash != password_hash
         or user.username != username
     ):
+        record_auth_event(db, "account.login_failed", user, username)
+        await db.commit()
         raise api_error(401, "INVALID_CREDENTIALS", "Неверный логин или пароль")
 
     if valid_session_token(previous_token):
@@ -239,5 +243,6 @@ async def login(
             expires_at=now + timedelta(seconds=settings.session_ttl_seconds),
         )
     )
+    record_auth_event(db, "account.login", user, user.username)
     await db.commit()
     return user, token, None

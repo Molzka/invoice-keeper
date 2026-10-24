@@ -67,7 +67,19 @@ async def setup_authenticated(app, client, create_user, login, *, role="admin", 
 
 async def audit_events(app):
     async with app.state.database.session_factory() as db:
-        return list((await db.scalars(select(AuditEvent).order_by(AuditEvent.occurred_at))).all())
+        return list(
+            (
+                await db.scalars(
+                    select(AuditEvent)
+                    .where(
+                        AuditEvent.action.not_in(
+                            ("account.login", "account.login_failed", "account.logout")
+                        )
+                    )
+                    .order_by(AuditEvent.occurred_at)
+                )
+            ).all()
+        )
 
 
 async def test_receipts_require_auth_before_reading_upload(app, client):

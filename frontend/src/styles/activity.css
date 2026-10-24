@@ -98,7 +98,7 @@
   .activity-demo-note > svg { margin-top: 2px; }
   .activity-demo-note > span { display: none; }
   .activity-filters { padding: 0 16px 20px; gap: 14px 12px; }
-  .activity-filters .activity-search, .activity-filters > .field:nth-child(3) { grid-column: span 2; }
+  .activity-filters .activity-search, .activity-filters > .field:nth-child(2), .activity-filters > .field:nth-child(3) { grid-column: span 2; }
   .activity-filter-actions .btn { padding-left: 11px; padding-right: 11px; }
   .activity-timeline { padding: 22px 13px 0; }
   .activity-day > h3 { margin-left: 39px; font-size: 10px; }

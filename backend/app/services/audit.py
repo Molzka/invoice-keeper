@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -9,6 +10,26 @@ from app.core.config import DEFAULT_TIMEZONE
 from app.models import AuditEvent, User
 from app.schemas.audit import AUDIT_ACTION_LABELS, SAFE_CHANGE_FIELDS, AuditChange
 from app.services.errors import api_error
+
+
+def record_auth_event(
+    db: AsyncSession,
+    action: Literal["account.login", "account.login_failed", "account.logout"],
+    user: User | None,
+    username: str,
+) -> None:
+    """Record only the outcome and account identity, in the caller's transaction."""
+    db.add(
+        AuditEvent(
+            actor_id=user.id if user else None,
+            actor_username=username,
+            action=action,
+            entity_type="account",
+            entity_id=user.id if user else None,
+            entity_title=username,
+            changes=[],
+        )
+    )
 
 
 def record_audit_event(

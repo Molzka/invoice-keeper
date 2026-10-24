@@ -18,13 +18,18 @@ class AuditEvent(Base):
             "'payment.unpaid', 'payment.date_changed', 'user.created', 'user.updated', "
             "'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted', "
             "'registration.approved', 'registration.rejected', 'account.mfa_enabled', "
-            "'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated')",
+            "'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated', "
+            "'account.login', 'account.login_failed', 'account.logout')",
             name="action",
         ),
         CheckConstraint(
             "entity_type IN ('payment', 'user', 'account', 'registration')", name="entity_type"
         ),
         CheckConstraint("jsonb_typeof(changes) = 'array'", name="changes_array"),
+        CheckConstraint(
+            "(actor_id IS NOT NULL AND entity_id IS NOT NULL) OR action = 'account.login_failed'",
+            name="identified_actor",
+        ),
         Index("ix_audit_events_occurred_at_id", "occurred_at", "id"),
         Index("ix_audit_events_action_occurred_at", "action", "occurred_at"),
     )
@@ -34,11 +39,11 @@ class AuditEvent(Base):
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False
     )
     # Deliberately not foreign keys: both IDs and names are historical evidence.
-    actor_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    actor_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     actor_username: Mapped[str] = mapped_column(String(64), nullable=False)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    entity_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    entity_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     entity_title: Mapped[str] = mapped_column(String(200), nullable=False)
     changes: Mapped[list[dict]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb"), nullable=False

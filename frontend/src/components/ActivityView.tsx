@@ -15,6 +15,9 @@ import { PageHeader } from './PageHeader'
 
 type Props = { isAdmin: boolean; revision: number; today: string; timezone: string; onHistory: (id: string, title: string) => void }
 const actionVisuals = {
+  'account.login': { icon: ShieldCheck, tone: 'green' },
+  'account.login_failed': { icon: ShieldCheck, tone: 'amber' },
+  'account.logout': { icon: UserRound, tone: 'muted' },
   'payment.deleted': { icon: X, tone: 'muted' },
   'payment.period_deleted': { icon: X, tone: 'muted' },
   'payment.amount_changed': { icon: SquarePen, tone: 'cyan' },
@@ -87,14 +90,16 @@ function ActivityFilters({ filters, today, onApply, onReset }: { filters: AuditF
 function ActivityDetails({ event, onClose, onHistory, timezone }: { event: AuditEvent; onClose: () => void; onHistory: Props['onHistory']; timezone: string }) {
   const visual = actionVisuals[event.action]
   const Icon = visual.icon
+  const paymentId = event.entity.type === 'payment' ? event.entity.id : null
   // A second display boundary prevents credentials accidentally added by a future adapter from rendering.
   const changes = event.changes.filter(change => !/password|пароль|token|токен|secret|cookie|session|csrf/i.test(change.field + ' ' + change.label))
   return <Drawer title="Подробности события" subtitle="События доступны только для просмотра." onClose={onClose}>
     <div className="activity-detail-title"><span className="activity-event-icon" data-tone={visual.tone}><Icon size={21} aria-hidden="true"/></span><div><p>{auditActionLabels[event.action]}</p><h3>{event.entity.title}</h3></div></div>
     <dl className="activity-detail-meta"><div><dt>Пользователь</dt><dd><UserRound size={15} aria-hidden="true"/>{event.actor.username}</dd></div><div><dt>Когда</dt><dd>{dateLabel(activityDay(event.occurred_at, timezone))}, {timestampTime(event.occurred_at, timezone)} {timezone}</dd></div><div><dt>Объект</dt><dd>{event.entity.type === 'payment' ? 'Регулярный платёж' : event.entity.type === 'user' ? 'Пользователь' : event.entity.type === 'registration' ? 'Заявка на доступ' : 'Учётная запись'}</dd></div></dl>
-    {changes.length > 0 ? <section className="activity-diff" aria-label="Изменённые поля"><h4>Что изменилось</h4><div className="activity-diff-columns" aria-hidden="true"><span>До</span><ArrowRight size={14}/><span>После</span></div>{changes.map((change, index) => <div className="activity-change" key={change.field + ':' + index}><strong>{change.label}</strong><div><span className="activity-before"><span className="sr-only">До: </span>{changeValue(change.field, change.before)}</span><ArrowRight size={15} aria-hidden="true"/><span className="activity-after"><span className="sr-only">После: </span>{changeValue(change.field, change.after)}</span></div></div>)}</section> : <div className="activity-private-note"><ShieldCheck size={19} aria-hidden="true"/><p>{(event.action === 'password.changed' || event.action.startsWith('account.')) ? 'В журнале сохраняется только факт изменения защиты. Пароли, секреты, коды и данные сессии не отображаются.' : 'Для этого события дополнительные изменения полей не переданы.'}</p></div>}
+    {changes.length > 0 ? <section className="activity-diff" aria-label="Изменённые поля"><h4>Что изменилось</h4><div className="activity-diff-columns" aria-hidden="true"><span>До</span><ArrowRight size={14}/><span>После</span></div>{changes.map((change, index) => <div className="activity-change" key={change.field + ':' + index}><strong>{change.label}</strong><div><span className="activity-before"><span className="sr-only">До: </span>{changeValue(change.field, change.before)}</span><ArrowRight size={15} aria-hidden="true"/><span className="activity-after"><span className="sr-only">После: </span>{changeValue(change.field, change.after)}</span></div></div>)}</section> : <div className="activity-private-note"><ShieldCheck size={19} aria-hidden="true"/><p>{(event.action === 'password.changed' || event.action.startsWith('account.')) ? 'Сохранены только событие и логин. Пароли, секреты, коды и данные сессии не записываются в журнал.' : 'Для этого события дополнительные изменения полей не переданы.'}</p></div>}
+    {event.action === 'account.login_failed' && <p className="activity-retention-note">Логин указан в попытке входа; личность отправителя не подтверждена.</p>}
     {event.action === 'payment.stopped' && <p className="activity-retention-note">Прекращение останавливает будущие периоды. История уже созданных платежей сохраняется.</p>}
-    <div className="activity-detail-actions">{event.entity.type === 'payment' && <button type="button" className="btn btn-primary" onClick={() => onHistory(event.entity.id, event.entity.title)}>История платежа<ArrowUpRight size={16} aria-hidden="true"/></button>}<button type="button" className="btn btn-secondary" data-drawer-close="">Закрыть</button></div>
+    <div className="activity-detail-actions">{paymentId && <button type="button" className="btn btn-primary" onClick={() => onHistory(paymentId, event.entity.title)}>История платежа<ArrowUpRight size={16} aria-hidden="true"/></button>}<button type="button" className="btn btn-secondary" data-drawer-close="">Закрыть</button></div>
   </Drawer>
 }
 

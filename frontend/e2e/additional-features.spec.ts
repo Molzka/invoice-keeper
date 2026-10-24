@@ -6,6 +6,10 @@ test.use({ reducedMotion: 'reduce' });
 
 test('дневные итоги, бюджет и подтверждения используют настоящие суммы и периоды', async ({ page, baseURL }, info) => {
   const origin = new URL(baseURL!).origin;
+  const unknownUsername = `missing_${randomUUID().slice(0, 8)}`;
+  expect((await page.request.post('/api/v1/auth/login', {
+    headers: { Origin: origin }, data: { username: unknownUsername, password: 'invalid-private-password' },
+  })).status()).toBe(401);
   const auth = await page.request.post('/api/v1/auth/login', {
     headers: { Origin: origin }, data: { username: process.env.E2E_ADMIN_USERNAME, password: process.env.E2E_ADMIN_PASSWORD },
   });
@@ -72,6 +76,23 @@ test('дневные итоги, бюджет и подтверждения ис
     await receipt.getByRole('button', { name: 'Удалить подтверждение', exact: true }).click();
     await expect(receipt.getByText('К этому периоду ещё не прикреплено подтверждение.', { exact: true })).toBeVisible();
     expect((await (await page.request.get(`/api/v1/payment-occurrences/${items[0].id}`)).json() as PaymentOccurrence).status).toBe('paid');
+    await page.goto(`/#activity?action=account.login_failed&q=${unknownUsername}`);
+    await page.getByRole('button', { name: `Подробнее: Неудачная попытка входа, ${unknownUsername}`, exact: true }).click();
+    const details = page.getByRole('dialog', { name: 'Подробности события', exact: true });
+    await expect(details).toContainText('личность отправителя не подтверждена');
+    await expect(page.getByText('invalid-private-password', { exact: true })).toHaveCount(0);
+    await details.getByRole('button', { name: 'Закрыть', exact: true }).click();
+    await page.getByLabel('Тема оформления', { exact: true }).click();
+    await page.getByRole('radio', { name: 'Тёмная', exact: true }).check();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      expect(await page.locator('html').evaluate(el => el.scrollWidth)).toBeLessThanOrEqual(width);
+      const path = info.outputPath(`auth-journal-dark-${width}.png`);
+      await page.screenshot({ path, fullPage: true });
+      await info.attach(`auth-journal-dark-${width}`, { path, contentType: 'image/png' });
+    }
+    await page.goto(`/#activity?action=account.login&actor=${process.env.E2E_ADMIN_USERNAME}`);
+    await expect(page.getByRole('button', { name: `Подробнее: Вход в систему, ${process.env.E2E_ADMIN_USERNAME}`, exact: true }).first()).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     if (info.status !== 'timedOut') for (const item of items) {

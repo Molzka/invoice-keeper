@@ -12,7 +12,9 @@ from .conftest import BACKEND_DIR
 
 
 @pytest.mark.asyncio
-async def test_audit_upgrade_and_downgrade_preserve_existing_business_data(migrated_database_url):
+async def test_audit_upgrade_and_downgrade_preserve_existing_business_data(
+    app, migrated_database_url
+):
     environment = os.environ.copy()
     environment["DATABASE_URL"] = migrated_database_url
 
