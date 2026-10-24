@@ -48,7 +48,7 @@ jobs:
       - name: Check HTTP responses and runtime
         run: |
           address=$(docker compose --env-file .env.example port frontend 8080)
-          python3 scripts/check_frontend.py "http://$address"
+          python3 scripts/checks/check_frontend.py "http://$address"
 
           container=$(docker compose --env-file .env.example ps -q frontend)
           test "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = "healthy"

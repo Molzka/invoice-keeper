@@ -1,6 +1,6 @@
 """Exercise the Compose reminder worker against a disposable DB and local Telegram stub.
 
-Run from any directory: python scripts/check_reminder_worker.py [--image sha256:...]
+Run from any directory: python scripts/checks/check_reminder_worker.py [--image sha256:...]
 Requires Docker Compose; host Python uses only the standard library. Never reads .env.
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def check(image=None, timezone="Europe/Moscow"):
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     project = "invoice-keeper-worker-check-" + secrets.token_hex(6)
     env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_")}
     env.update(
@@ -133,7 +133,7 @@ def check(image=None, timezone="Europe/Moscow"):
             image = run(["docker", "image", "inspect", "--format", "{{.Id}}", image])
             fixture_mount = {
                 "type": "bind",
-                "source": str(root / "scripts" / "fixtures"),
+                "source": str(root / "scripts" / "checks" / "fixtures"),
                 "target": "/harness",
                 "read_only": True,
             }

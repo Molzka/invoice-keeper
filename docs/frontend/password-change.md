@@ -8,7 +8,7 @@
 
 ## Контракт и запрос
 
-Реализация следует [контракту backend на коммите `253ca9f`](https://github.com/Molzka/invoice-keeper/blob/253ca9f/backend/docs/frontend-password-change.md). Для работы с настоящим API требуется backend из [PR #17](https://github.com/Molzka/invoice-keeper/pull/17): на момент подключения интерфейса этот PR ещё не объединён.
+Исторический контекст подключения: реализация следовала [контракту backend на коммите `253ca9f`](https://github.com/Molzka/invoice-keeper/blob/253ca9f/backend/docs/frontend-password-change.md). На этом этапе для настоящего API требовался backend из [PR #17](https://github.com/Molzka/invoice-keeper/pull/17): на момент подключения интерфейса этот PR ещё не был объединён. Актуальный контракт находится в [памятке API](../api/frontend-password-change.md).
 
 Клиент отправляет один `POST /auth/change-password` с `credentials: 'include'`, JSON и актуальным `X-CSRF-Token`. Относительный маршрут добавляется к настроенному API base URL, по умолчанию `/api/v1`. В теле ровно два поля:
 
@@ -65,6 +65,8 @@
 
 ## Проверка
 
+Ниже сохранены результаты этапа разработки; они не заявляют повторную проверку текущей версии.
+
 В `frontend/` выполните `npm run lint`, `npm test` и `npm run build`. Cookie-сессии и сохранение пароля проверяйте с настоящим API; порядок запуска интеграционных проверок описан в [README](../../README.md).
 
 - Обычный пользователь меняет пароль и продолжает работу; его остальные сессии отзываются.
@@ -82,7 +84,7 @@
 
 ## Исходники
 
-- [Форма смены пароля](../src/components/ChangePasswordDrawer.tsx)
-- [Проверка полей](../src/lib/password-fields.ts)
-- [Клиент API](../src/api/client.ts) и [общий формат ошибки](../src/api/errors.ts)
-- [Демонстрационный транспорт](../src/mocks/transport.ts)
+- [Форма смены пароля](../../frontend/src/components/ChangePasswordDrawer.tsx)
+- [Проверка полей](../../frontend/src/lib/password-fields.ts)
+- [Клиент API](../../frontend/src/api/client.ts) и [общий формат ошибки](../../frontend/src/api/errors.ts)
+- [Демонстрационный транспорт](../../frontend/src/mocks/transport.ts)

@@ -98,17 +98,22 @@ def smoke_and_environment():
         require(result.returncode == 2, f"Invalid smoke limit {value} was accepted")
     require(sessions() == before, "Invalid CLI limit logged into the API")
     with tempfile.TemporaryDirectory(prefix="bot-env-fixture-") as temporary:
-        target = Path(temporary)
+        temporary_root = Path(temporary)
+        target = temporary_root / "telegram"
+        target.mkdir()
         for name in ("bot.py", "api.py", "smoke.py", "reminders.py", "formatting.py", "features.py", "texts.json"):
             shutil.copyfile(Path("/app") / name, target / name)
         # Dummy file only; the real repository .env is neither mounted nor opened.
-        (target / ".env").write_text(
+        (temporary_root / ".env").write_text(
             "CHAT_ID=123\nAPI_USERNAME=dummy_file_value\nBOT_TOKEN=dummy_file_value\n"
+            "BOT_PROBE_ENV_SENTINEL=from-root-fixture\n"
         )
         child_env = dict(os.environ, PYTHONPATH=str(target))
+        child_env.pop("BOT_PROBE_ENV_SENTINEL", None)
         code = (
             "import os; expected={k:os.environ[k] for k in ('CHAT_ID','API_USERNAME','BOT_TOKEN')}; "
-            "import bot, smoke; assert all(os.environ[k]==v for k,v in expected.items()), 'env precedence'"
+            "import bot, smoke; assert all(os.environ[k]==v for k,v in expected.items()), 'env precedence'; "
+            "assert os.getenv('BOT_PROBE_ENV_SENTINEL')=='from-root-fixture', 'root env location'"
         )
         result = subprocess.run(
             [sys.executable, "-c", code],

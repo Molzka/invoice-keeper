@@ -80,8 +80,7 @@ services:
   bot:
     logging: *default-logging
     build:
-      context: .
-      dockerfile: docker/bot/Dockerfile
+      context: ./telegram
     restart: unless-stopped
     init: true
     stop_grace_period: 30s

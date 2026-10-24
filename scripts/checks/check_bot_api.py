@@ -1,6 +1,6 @@
 """Check real bot handlers against FastAPI/PostgreSQL, with no external Telegram calls.
 
-python scripts/check_bot_api.py [--image sha256:...] [--bot-image sha256:...]
+python scripts/checks/check_bot_api.py [--image sha256:...] [--bot-image sha256:...]
 The default builds both images. Requires Docker Compose; host Python is standard library only.
 """
 
@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 def check(image, bot_image, timezone):
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     project = "invoice-keeper-bot-check-" + secrets.token_hex(6)
     env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_")}
     env.update(
@@ -104,7 +104,7 @@ def check(image, bot_image, timezone):
                 )
             mount = {
                 "type": "bind",
-                "source": str(root / "scripts" / "fixtures"),
+                "source": str(root / "scripts" / "checks" / "fixtures"),
                 "target": "/harness",
                 "read_only": True,
             }

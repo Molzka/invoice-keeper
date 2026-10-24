@@ -4,13 +4,9 @@
 !api.py
 !smoke.py
 !reminders.py
-!docker/
-docker/**
-!docker/bot/
-docker/bot/**
-!docker/bot/Dockerfile
-!docker/bot/pyproject.toml
-!docker/bot/uv.lock
+!Dockerfile
+!pyproject.toml
+!uv.lock
 !texts.json
 !formatting.py
 !features.py

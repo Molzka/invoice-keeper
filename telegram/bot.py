@@ -42,7 +42,7 @@ from formatting import format_amount, format_date
 
 T = json.loads((Path(__file__).parent / "texts.json").read_text(encoding="utf-8"))
 
-load_dotenv(Path(__file__).parent / ".env", override=False)
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("bot")

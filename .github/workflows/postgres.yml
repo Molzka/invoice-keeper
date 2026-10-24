@@ -119,7 +119,7 @@ jobs:
               'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$1" -w -X -At -v ON_ERROR_STOP=1' sh "$1" <<< "$2"
           }
           backup() {
-            python3 scripts/db_backup.py --env-file .env.example "$@"
+            python3 scripts/ops/db_backup.py --env-file .env.example "$@"
           }
 
           sql "$POSTGRES_DB" "CREATE TABLE backup_check (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, title text NOT NULL, amount numeric(14,2), due_date date, created_at timestamptz);
