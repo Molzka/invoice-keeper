@@ -1,6 +1,8 @@
 # Only the bot and its locked dependencies belong in this build context.
 **
 !bot.py
+!api.py
+!smoke.py
 !reminders.py
 !docker/
 docker/**

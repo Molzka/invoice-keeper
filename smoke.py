@@ -13,9 +13,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env", override=True)
+load_dotenv(Path(__file__).parent / ".env", override=False)
 
-from api import ApiDataError, ApiNotConfigured, ApiUnavailable, fetch_payments  # noqa: E402
+from api import ApiDataError, ApiNotConfigured, ApiUnavailable, PaymentsClient  # noqa: E402
 from reminders import build_text, send_reminder  # noqa: E402
 
 CASES = [
@@ -30,10 +30,13 @@ CASES = [
 async def load_backend_cases(kind: str = "upcoming", limit: int = 3) -> list[tuple]:
     """Берёт платежи у бэкенда и приводит к аргументам send_reminder:
     (title, amount, currency, due_date, payment_url)."""
-    items = await fetch_payments(kind)
+    if not 1 <= limit <= 100:
+        raise ValueError("limit должен быть от 1 до 100")
+    async with PaymentsClient() as client:
+        page = await client.fetch_payments(kind, limit=limit, offset=0)
     return [
         (p["title"], p["amount"], p["currency"], p["due_date"], p.get("payment_url"))
-        for p in items[:limit]
+        for p in page["items"]
     ]
 
 
@@ -42,7 +45,7 @@ async def main(args) -> int:
         try:
             cases = await load_backend_cases(args.kind, args.limit)
         except ApiNotConfigured as exc:
-            print(f"Бэкенд не настроен: {exc}. Задайте API_BASE_URL в .env")
+            print(f"Бэкенд не настроен: {exc}. Проверьте API_BASE_URL, API_ORIGIN, API_USERNAME и API_PASSWORD")
             return 1
         except ApiUnavailable as exc:
             print(f"Бэкенд недоступен: {exc}")
@@ -70,11 +73,21 @@ async def main(args) -> int:
     return 1 if failed else 0
 
 
+def positive_limit(value):
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("limit должен быть целым от 1 до 100") from None
+    if not 1 <= number <= 100:
+        raise argparse.ArgumentTypeError("limit должен быть от 1 до 100")
+    return number
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="Проверка отправки напоминаний")
     parser.add_argument("--backend", action="store_true", help="брать платежи с бэкенда")
     parser.add_argument("--kind", choices=["upcoming", "overdue"], default="upcoming")
-    parser.add_argument("--limit", type=int, default=3, help="сколько платежей отправить (с --backend)")
+    parser.add_argument("--limit", type=positive_limit, default=3, help="сколько платежей отправить (с --backend)")
     parser.add_argument("--dry-run", action="store_true", help="только показать тексты")
     sys.exit(asyncio.run(main(parser.parse_args())))

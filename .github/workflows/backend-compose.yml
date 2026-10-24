@@ -61,10 +61,10 @@ jobs:
           npm run lint
           npx playwright install --with-deps chromium
 
-      - name: Build locked backend and frontend images
+      - name: Build locked backend, frontend and bot images
         run: |
           docker compose --env-file .env.example config --quiet
-          docker compose --env-file .env.example build backend frontend
+          docker compose --env-file .env.example build backend frontend bot
 
       - name: Start PostgreSQL and Nginx on free ports
         run: |
@@ -128,6 +128,15 @@ jobs:
           container=$(docker compose --env-file .env.example ps -q backend)
           image=$(docker inspect --format '{{.Image}}' "$container")
           python3 scripts/check_reminder_worker.py --image "$image"
+
+      - name: Check Telegram commands with the real API
+        run: |
+          docker compose --env-file .env.example create --no-build --no-deps bot
+          backend=$(docker compose --env-file .env.example ps -q backend)
+          bot=$(docker compose --env-file .env.example ps -aq bot)
+          image=$(docker inspect --format '{{.Image}}' "$backend")
+          bot_image=$(docker inspect --format '{{.Image}}' "$bot")
+          python3 scripts/check_bot_api.py --image "$image" --bot-image "$bot_image"
 
       - name: Save browser report and failure details
         if: ${{ !cancelled() }}
