@@ -1,14 +1,14 @@
-/* Shared frame: action buttons and copy length cannot resize or shift the artwork. */
+/* Full-width routes frame the header instead of occupying a separate column. */
 .page-head.page-heading,
 .page-head.page-heading:not(:has(.page-heading-action)) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 104px;
   grid-template-rows: auto auto;
   align-items: start;
   align-content: start;
-  gap: 22px 36px;
-  min-height: 210px;
-  padding: 8px 0 32px;
+  gap: 20px 28px;
+  min-height: 250px;
+  padding: 8px 0 64px;
 }
 .page-head.page-heading .page-intro {
   grid-column: 1;
@@ -20,20 +20,18 @@
   z-index: 1;
 }
 .page-head.page-heading .page-heading-art {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  justify-self: end;
-  align-self: start;
-  width: 360px;
-  height: 162px;
-  margin: 4px 0 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   pointer-events: none;
+  z-index: 0;
 }
 .page-head.page-heading .page-heading-action {
   grid-column: 1;
   grid-row: 2;
   justify-self: start;
-  align-self: start;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -60,11 +58,19 @@
 .page-heading .workspace-art--activity { --art-accent: var(--pink); --art-trace: var(--cyan); }
 .page-heading .workspace-art--history,
 .page-heading .workspace-art--receipts { --art-accent: var(--orange); }
-.workspace-art-pattern { display: block; width: 100%; height: 100%; overflow: visible; }
-.brand-pattern-lines { opacity: .09; }
+.workspace-art-pattern {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* The lower routes fill the left edge; the upper-left copy stays unobstructed. */
+  mask-image: linear-gradient(90deg, transparent 0%, transparent 42%, #000 74%), linear-gradient(0deg, #000 0%, #000 18%, transparent 32%);
+  mask-composite: add;
+}
+.brand-pattern-lines { opacity: .1; }
 .brand-pattern-accent {
   stroke: var(--art-accent);
-  opacity: .68;
+  opacity: .7;
   stroke-dasharray: 1;
   transition: opacity 220ms;
   animation: brand-route-reveal 1050ms 100ms ease-out both;
@@ -77,23 +83,24 @@
 .workspace-art--receipts .brand-pattern-accent { animation-name: brand-route-reveal-reverse; }
 .workspace-art--recurring .brand-pattern-accent { animation-duration: 1250ms; }
 .workspace-art--budget .brand-pattern-accent { animation-duration: 900ms; }
-.brand-section-symbol {
+.page-heading .brand-section-symbol {
   position: absolute;
-  top: 32px;
-  right: 16px;
+  top: 36px;
+  right: 8px;
   display: grid;
   place-items: center;
-  width: 92px;
-  height: 92px;
-  border: 1px solid color-mix(in srgb, var(--art-accent) 32%, var(--line));
-  border-radius: 25px;
-  background: var(--bg);
-  color: var(--ink);
+  width: 80px;
+  height: 80px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: var(--cyan);
+  color: #000;
   animation: brand-symbol-reveal 400ms 100ms ease-out backwards;
   transition: border-color 220ms, background-color 220ms;
 }
-.brand-section-icon { display: block; width: 40px; height: 40px; color: inherit; }
-/* Decorative geometry remains still while the accent becomes a little clearer. */
+.page-heading .brand-section-icon { display: block; width: 42px; height: 42px; color: inherit; }
+html[data-theme='dark'] .page-heading .brand-section-symbol { background: #000; color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 24%, #000); }
+html[data-theme='dark'] .page-heading .brand-section-icon { color: var(--cyan); }
 @media (hover: hover) and (pointer: fine) {
   .page-heading:hover .brand-section-symbol { border-color: var(--art-accent); }
   .page-heading:hover .brand-pattern-accent { opacity: .85; }
@@ -103,34 +110,21 @@
 @keyframes brand-route-reveal { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes brand-route-reveal-reverse { from { stroke-dashoffset: -1; } to { stroke-dashoffset: 0; } }
 @keyframes brand-symbol-reveal { from { opacity: 0; } to { opacity: 1; } }
-@media (max-width: 1100px) {
-  .page-head.page-heading,
-  .page-head.page-heading:not(:has(.page-heading-action)) { grid-template-columns: minmax(0, 1fr) 276px; column-gap: 24px; }
-  .page-head.page-heading .page-heading-art { width: 276px; height: 162px; }
-}
 @media (max-width: 760px) {
   .page-head.page-heading,
   .page-head.page-heading:not(:has(.page-heading-action)) {
-    grid-template-columns: minmax(0, 1fr) 76px;
-    column-gap: 14px;
-    row-gap: 18px;
-    min-height: 0;
-    padding: 0 0 26px;
+    grid-template-columns: minmax(0, 1fr) 68px;
+    gap: 18px 16px;
+    min-height: 220px;
+    padding: 0 0 52px;
   }
-  .page-head.page-heading .page-heading-art { width: 76px; height: 76px; margin-top: 0; }
   .page-head.page-heading .page-heading-action { grid-column: 1 / -1; }
-  .workspace-art-pattern { opacity: .5; }
-  .brand-section-symbol { top: 8px; right: 0; width: 68px; height: 68px; border-radius: 19px; }
-  .brand-section-icon { width: 30px; height: 30px; }
-}
-@media (max-width: 360px) {
-  .page-head.page-heading,
-  .page-head.page-heading:not(:has(.page-heading-action)) { grid-template-columns: minmax(0, 1fr) 68px; column-gap: 10px; }
-  .page-head.page-heading .page-heading-art { width: 68px; height: 76px; }
+  .page-heading .brand-section-symbol { top: 12px; right: 0; width: 64px; height: 64px; border-radius: 15px; }
+  .page-heading .brand-section-icon { width: 34px; height: 34px; }
+  .workspace-art-pattern { opacity: .72; }
 }
 @media (prefers-reduced-motion: reduce) {
   .workspace-art *, .page-heading:hover .brand-section-symbol { animation: none; transition: none; transform: none; }
   .brand-pattern-accent { stroke-dashoffset: 0; }
 }
-
-.page-head.page-heading .page-title { overflow-wrap:anywhere; }
+.page-head.page-heading .page-title { overflow-wrap: anywhere; }
