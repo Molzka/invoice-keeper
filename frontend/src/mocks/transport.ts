@@ -1,3 +1,6 @@
+import { AUDIT_ACTIONS } from '../types/activity'
+import type { AuditAction } from '../types/activity'
+import { createAuditFixtures, createAuditStore } from './activity'
 import type { Currency, ErrorDetail, Page, PaymentOccurrence, RecurringPayment, User } from '../types/api'
 import { ADMIN_ID, createFixtures } from './fixtures'
 import { businessNowIso, calendarMonthBounds, calendarMonthDate, DEMO_TODAY } from '../config/demo'
@@ -8,6 +11,7 @@ const demoMonth = calendarMonthBounds(DEMO_TODAY)
 const SESSION_KEY = 'invoice-keeper.demo-session.v1'
 const demoScenario = () => typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('scenario') || ''
 const db = createFixtures(demoScenario() === 'stress')
+const audit = createAuditStore(createAuditFixtures(db.users, db.recurring, db.occurrences))
 const passwords = new Map([['admin', 'Admin123!'], ['ivan', 'example-password-only'], ['anna', 'example-password-only']])
 let currentUsername: string | null = readSession()
 let csrfToken = crypto.randomUUID()
@@ -127,7 +131,7 @@ function exactAmount(cents: bigint): string { const text = cents.toString().padS
 
 export async function mockFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const url = new URL(input, typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
-  const path = url.pathname.match(/\/(auth|payment-occurrences|recurring-payments|users|payments)(?:\/.*)?$/)?.[0] || url.pathname
+  const path = url.pathname.match(/\/(auth|payment-occurrences|recurring-payments|users|payments|audit-events)(?:\/.*)?$/)?.[0] || url.pathname
   const method = (init.method || 'GET').toUpperCase()
   const scenario = demoScenario()
   const isAuth = path.startsWith('/auth/')
@@ -165,11 +169,26 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       if (newPassword === currentPassword) throw new MockFault(422, 'NEW_PASSWORD_UNCHANGED', 'Новый пароль должен отличаться от текущего', [{ field: 'new_password', code: 'NEW_PASSWORD_UNCHANGED', message: 'Новый пароль должен отличаться от текущего' }])
       // Demo secrets are deliberately memory-only: a reload restores the example credentials.
       passwords.set(user.username, newPassword)
+      audit.append({ actor: user, action: 'password.changed', entity: { type: 'account', id: user.id, title: user.username } })
       csrfToken = crypto.randomUUID()
       if (scenario === 'password-network' && !passwordScenarioUsed) { passwordScenarioUsed = true; throw new TypeError('Demo password response lost') }
       return json({ user, csrf_token: csrfToken })
     }
     if (scenario === 'forbidden') fault(403, 'FORBIDDEN', 'У вас нет доступа к этому разделу')
+    if (path === '/audit-events' && method === 'GET') {
+      requireAdmin(user)
+      queryAllowed(url.searchParams, ['date_from', 'date_to', 'actor', 'action', 'query', 'limit', 'offset'])
+      const { from = '', to = '' } = range(url.searchParams)
+      const action = url.searchParams.get('action') || ''
+      if (action && !(AUDIT_ACTIONS as readonly string[]).includes(action)) invalid('query.action', 'Неизвестное действие')
+      const actor = url.searchParams.get('actor') || '', query = url.searchParams.get('query') || ''
+      if (actor.length > 64) invalid('query.actor', 'Не более 64 символов')
+      if (query.length > 200) invalid('query.query', 'Не более 200 символов')
+      const paging = pagination(url.searchParams)
+      if (scenario === 'audit-error') fault(503, 'AUDIT_TEMPORARILY_UNAVAILABLE', 'Журнал временно недоступен. Повторите загрузку позже.')
+      if (scenario === 'audit-empty') return json({ items: [], total: 0, ...paging })
+      return json(audit.list({ date_from: from, date_to: to, actor, action: action as AuditAction | '', query, ...paging }))
+    }
     if (path === '/payments/summary' && method === 'GET') {
       queryAllowed(url.searchParams, ['date_from', 'date_to'])
       const { from = demoMonth.date_from, to = demoMonth.date_to } = range(url.searchParams, true)
@@ -204,7 +223,15 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
         if (body.status !== 'paid' && body.status !== 'unpaid') invalid('status', 'Выберите paid или unpaid')
         if (body.status === 'unpaid') { if (body.paid_on !== null) invalid('paid_on', 'При отмене оплаты дата должна быть null') }
         else { const paidOn = date(body.paid_on, 'paid_on'); if (paidOn > DEMO_TODAY) invalid('paid_on', 'Фактическая дата не может быть позже сегодняшнего дня по МСК') }
+        const oldStatus = item.status, oldPaidOn = item.paid_on
         item.status = body.status as 'paid' | 'unpaid'; item.paid_on = body.paid_on as string | null
+        if (oldStatus !== item.status || oldPaidOn !== item.paid_on) audit.append({ actor: user,
+          action: item.status === 'unpaid' ? 'payment.unpaid' : oldStatus === 'unpaid' ? 'payment.paid' : 'payment.date_changed',
+          entity: { type: 'payment', id: item.recurring_payment_id, title: item.title }, changes: [
+            { field: 'due_date', label: 'Период со сроком', before: null, after: item.due_date },
+            { field: 'status', label: 'Статус', before: oldStatus === 'paid' ? 'Оплачено' : 'Не оплачено', after: item.status === 'paid' ? 'Оплачено' : 'Не оплачено' },
+            { field: 'paid_on', label: 'Дата оплаты', before: oldPaidOn, after: item.paid_on },
+          ] })
         return json(occurrenceView(item))
       }
     }
@@ -223,6 +250,10 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
         if (body.periodicity !== 'monthly') invalid('periodicity', 'Поддерживается ежемесячное повторение')
         const item: RecurringPayment = { id: crypto.randomUUID(), title: (body.title as string).trim(), amount, currency: body.currency as Currency, first_due_date: firstDue, next_due_date: firstDue, periodicity: 'monthly', anchor_day: Number(firstDue.slice(-2)), is_active: true, created_at: businessNowIso('mock') }
         addOccurrences(item); db.recurring.push(item)
+        audit.append({ actor: user, action: 'payment.created', entity: { type: 'payment', id: item.id, title: item.title }, changes: [
+          { field: 'amount', label: 'Сумма', before: null, after: `${item.amount} ${item.currency}` },
+          { field: 'first_due_date', label: 'Первый срок', before: null, after: item.first_due_date },
+        ] })
         return json(item, 201)
       }
     }
@@ -230,6 +261,8 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       requireAdmin(user); queryAllowed(url.searchParams, [])
       const id = path.split('/').at(-1)!; uuid(id)
       const item = db.recurring.find(row => row.id === id) || fault(404, 'RECURRING_PAYMENT_NOT_FOUND', 'Регулярный платёж не найден')
+      if (item.is_active) audit.append({ actor: user, action: 'payment.stopped', entity: { type: 'payment', id: item.id, title: item.title },
+        changes: [{ field: 'is_active', label: 'Регулярный платёж', before: 'Действует', after: 'Прекращён' }] })
       item.is_active = false; item.next_due_date = null
       return new Response(null, { status: 204 })
     }
@@ -245,7 +278,10 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
         const name = username(body.username), secret = password(body.password)
         if (db.users.some(item => item.username === name)) fault(409, 'USERNAME_TAKEN', 'Этот логин уже занят')
         const item: User = { id: crypto.randomUUID(), username: name, role: 'user', created_at: businessNowIso('mock') }
-        db.users.push(item); passwords.set(name, secret); return json(item, 201)
+        db.users.push(item); passwords.set(name, secret)
+        audit.append({ actor: user, action: 'user.created', entity: { type: 'user', id: item.id, title: item.username },
+          changes: [{ field: 'username', label: 'Логин', before: null, after: item.username }] })
+        return json(item, 201)
       }
       const id = path.split('/').at(-1)!; uuid(id)
       if (id === ADMIN_ID) fault(403, 'ADMIN_ACCOUNT_PROTECTED', 'Учётной записью администратора управляют через настройки сервера')
@@ -256,10 +292,19 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
         const name = 'username' in body ? username(body.username) : item.username
         if (db.users.some(row => row.id !== id && row.username === name)) fault(409, 'USERNAME_TAKEN', 'Этот логин уже занят')
         const secret = 'password' in body ? password(body.password) : passwords.get(item.username)!
+        const oldName = item.username, oldSecret = passwords.get(item.username)
         passwords.delete(item.username); passwords.set(name, secret); item.username = name
+        if (oldName !== name || oldSecret !== secret) audit.append({ actor: user, action: 'user.updated',
+          entity: { type: 'user', id: item.id, title: item.username },
+          changes: [{ field: 'username', label: 'Логин', before: oldName, after: name }] })
         return json(item)
       }
-      if (method === 'DELETE') { db.users.splice(db.users.indexOf(item), 1); passwords.delete(item.username); return new Response(null, { status: 204 }) }
+      if (method === 'DELETE') {
+        db.users.splice(db.users.indexOf(item), 1); passwords.delete(item.username)
+        audit.append({ actor: user, action: 'user.deleted', entity: { type: 'user', id: item.id, title: item.username },
+          changes: [{ field: 'username', label: 'Логин', before: item.username, after: null }] })
+        return new Response(null, { status: 204 })
+      }
     }
     return fault(404, 'NOT_FOUND', 'Маршрут не найден')
   } catch (error) {

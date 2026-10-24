@@ -10,6 +10,8 @@ const tsSource = path => stripTypeScriptTypes(readFileSync(new URL(path, import.
 const demoUrl = encodeModule(tsSource('../config/demo.ts'))
 const replaceModule = (source, path, replacement) => source.replaceAll("'" + path + "'", JSON.stringify(replacement)).replaceAll('"' + path + '"', JSON.stringify(replacement))
 const fixturesUrl = encodeModule(replaceModule(tsSource('./fixtures.ts'), '../config/demo', demoUrl))
+const activityTypesUrl = encodeModule(tsSource('../types/activity.ts'))
+const activityUrl = encodeModule(replaceModule(replaceModule(tsSource('./activity.ts'), '../config/demo', demoUrl), '../types/activity', activityTypesUrl))
 let fixtureId = 0
 async function fixture(context, username = 'admin', scenario = '') {
   context.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1792742400000 })
@@ -23,6 +25,8 @@ async function fixture(context, username = 'admin', scenario = '') {
   globalThis.window = { location: { origin: 'http://localhost', search: scenario ? '?scenario=' + scenario : '' } }
   let source = replaceModule(tsSource('./transport.ts'), './fixtures', fixturesUrl)
   source = replaceModule(source, '../config/demo', demoUrl)
+  source = replaceModule(source, '../types/activity', activityTypesUrl)
+  source = replaceModule(source, './activity', activityUrl)
   const { mockFetch } = await import(encodeModule(source) + '#fixture-' + ++fixtureId)
   async function request(path, init = {}) {
     const pending = mockFetch('/api/v1' + path, init)
