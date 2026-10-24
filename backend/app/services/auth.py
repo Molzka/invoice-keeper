@@ -161,6 +161,10 @@ async def change_password(
     expires_at = session.expires_at
     token = create_session_token()
     user.password_hash = password_hash
+    user.security_version += 1
+    from app.models.mfa import MfaChallenge
+
+    await db.execute(delete(MfaChallenge).where(MfaChallenge.user_id == user_id))
     await db.execute(delete(UserSession).where(UserSession.user_id == user_id))
     db.add(
         UserSession(
@@ -189,7 +193,7 @@ async def login(
     password: str,
     ip_address: str,
     previous_token: str | None,
-) -> tuple[User, str]:
+) -> tuple[User, str, dict | None]:
     await consume_login_attempt(db, settings, username, ip_address)
     user = await db.scalar(select(User).where(User.username == username))
     password_hash = user.password_hash if user is not None else None
@@ -218,6 +222,13 @@ async def login(
         await db.execute(
             delete(UserSession).where(UserSession.token_hash == hash_session_token(previous_token))
         )
+    from app.services.mfa import begin_login
+
+    pending = await begin_login(db, settings, user)
+    if pending is not None:
+        token, challenge, methods = pending
+        await db.commit()
+        return user, token, {"methods": methods, "expires_at": challenge.expires_at}
     token = create_session_token()
     now = datetime.now(UTC)
     db.add(
@@ -229,4 +240,4 @@ async def login(
         )
     )
     await db.commit()
-    return user, token
+    return user, token, None

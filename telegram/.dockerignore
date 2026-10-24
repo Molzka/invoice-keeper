@@ -2,6 +2,7 @@
 **
 !bot.py
 !api.py
+!mfa.py
 !smoke.py
 !reminders.py
 !Dockerfile

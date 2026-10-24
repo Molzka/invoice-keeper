@@ -6,6 +6,7 @@
 
 - [Docker, миграции, обновление и логи](operations/deployment.md).
 - [Настройки приложения](operations/configuration.md): доступ сотрудников, уточнение о регистрации, права, пароли, часовой пояс и OpenAPI.
+- [Заявки сотрудников и защита входа](operations/account-security.md): одобрение, добровольная MFA, личный Telegram, резервные коды и настройка ключей.
 - [Telegram](operations/telegram.md): команды, локальный запуск, подключение API и проверка без отправки.
 - [Доставка напоминаний](operations/reminder-integration.md): очередь, состояния, повторы и восстановление.
 - [Резервная копия и восстановление](operations/backups.md).

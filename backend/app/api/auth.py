@@ -14,6 +14,7 @@ from app.api.dependencies import (
 from app.core.security import csrf_token_for_session
 from app.models import UserSession
 from app.schemas.auth import AuthResponse, ChangePasswordRequest, LoginRequest
+from app.schemas.mfa import MfaRequired
 from app.schemas.users import UserRead
 from app.services.auth import change_password as change_own_password
 from app.services.auth import login as create_login_session
@@ -23,20 +24,46 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post(
     "/login",
-    response_model=AuthResponse,
+    response_model=AuthResponse | MfaRequired,
     dependencies=[Depends(require_json_request), Depends(require_allowed_origin)],
 )
 async def login(
     payload: LoginRequest, request: Request, response: Response, db: DbSession
-) -> AuthResponse:
+) -> AuthResponse | MfaRequired:
     settings = request.app.state.settings
-    user, token = await create_login_session(
+    user, token, pending = await create_login_session(
         db,
         settings,
         payload.username,
         payload.password,
         request.client.host if request.client is not None else "unknown",
         request.cookies.get(settings.session_cookie_name),
+    )
+    if pending is not None:
+        response.delete_cookie(
+            settings.session_cookie_name,
+            path="/",
+            secure=settings.session_cookie_secure,
+            httponly=True,
+            samesite="lax",
+        )
+        response.set_cookie(
+            settings.mfa_cookie_name,
+            token,
+            max_age=settings.mfa_challenge_ttl_seconds,
+            path="/",
+            secure=settings.session_cookie_secure,
+            httponly=True,
+            samesite="lax",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return MfaRequired(csrf_token=csrf_token_for_session(token), **pending)
+    response.delete_cookie(
+        settings.mfa_cookie_name,
+        path="/",
+        secure=settings.session_cookie_secure,
+        httponly=True,
+        samesite="lax",
     )
     response.set_cookie(
         key=settings.session_cookie_name,
