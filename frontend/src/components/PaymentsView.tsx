@@ -71,12 +71,18 @@ function PaymentFilterToolbar({ filters, history, today, onApply, onReset }: { f
     if (!history && draft.date_to > monthRange(today.slice(0,7)).date_to) { setFilterError('Сводка доступна до конца текущего месяца. Будущие периоды можно посмотреть в истории.'); return }
     setFilterError(''); onApply(draft)
   }
+  function reset() {
+    // Draft fields can differ even when the applied URL is already at its defaults.
+    setDraft(defaultPaymentFilters(history ? 'history' : 'payments', today))
+    setFilterError('')
+    onReset()
+  }
   return <><form className="toolbar" onSubmit={apply}>
     <div className="field"><label htmlFor="date-from">Срок оплаты с</label><DatePicker id="date-from" today={today} aria-label="Срок оплаты с" value={draft.date_from} onChange={date => setDraft(value => ({ ...value, date_from: date }))} required={!history}/></div>
     <div className="field"><label htmlFor="date-to">Срок оплаты по</label><DatePicker id="date-to" today={today} aria-label="Срок оплаты по" value={draft.date_to} onChange={date => setDraft(value => ({ ...value, date_to: date }))} required={!history}/></div>
     <div className="field"><label htmlFor="currency-filter">Валюта</label><SelectField id="currency-filter" value={draft.currency} onChange={currency => setDraft(value => ({ ...value, currency: currency as PaymentFilters['currency'] }))} options={[{ value: "", label: "Все валюты", description: "RUB, USD и EUR" }, ...currencies.map(currency => ({ value: currency, label: currency, description: currencyNames[currency] }))]}/></div>
     <button className="btn btn-secondary" type="submit">Применить</button>
-    <button className="btn btn-secondary" type="button" onClick={onReset}>Сбросить</button>
+    <button className="btn btn-secondary" type="button" onClick={reset}>Сбросить</button>
   </form>{filterError && <p className="query-error" role="alert">{filterError}</p>}</>
 }
 
