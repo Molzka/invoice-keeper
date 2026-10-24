@@ -1,15 +1,22 @@
-"""One-time payments and preserved cancellation history. Revision 0008, after 0007."""
+"""One-time payments and preserved cancellation history. Revision 0010, after 0009."""
 
 import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0008"
-down_revision = "0007"
+revision = "0010"
+down_revision = "0009"
 branch_labels = None
 depends_on = None
 
-OLD_ACTIONS = "'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted'"
+# Preserve every action introduced by the already released security migrations.
+OLD_ACTIONS = (
+    "'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', "
+    "'payment.date_changed', 'user.created', 'user.updated', 'user.deleted', "
+    "'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted', "
+    "'registration.approved', 'registration.rejected', 'account.mfa_enabled', "
+    "'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'"
+)
 NEW_ACTIONS = (
     OLD_ACTIONS
     + ", 'payment.amount_changed', 'payment.terms_changed', 'payment.deleted', 'payment.period_deleted'"

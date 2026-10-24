@@ -1,4 +1,6 @@
 import os
+import re
+import runpy
 import subprocess
 import sys
 from datetime import date
@@ -171,3 +173,51 @@ async def test_amount_snapshot_upgrade_backfills_existing_paid_and_unpaid_histor
         await connection.execute("DELETE FROM recurring_payments WHERE id=$1", payment_id)
         await connection.close()
         migrate("head")
+
+
+def test_payment_migrations_extend_released_security_chain_without_duplicate_heads():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    configuration = Config(str(BACKEND_DIR / "alembic.ini"))
+    migrations = ScriptDirectory.from_config(configuration)
+    assert len(migrations.get_heads()) == 1
+    assert migrations.get_revision("0007").module.__file__.endswith("0007_mfa.py")
+    assert migrations.get_revision("0008").module.__file__.endswith("0008_registration_requests.py")
+    assert migrations.get_revision("0009").down_revision == "0008"
+    assert migrations.get_revision("0010").down_revision == "0009"
+    assert {revision.revision for revision in migrations.walk_revisions()} >= {
+        "0007",
+        "0008",
+        "0009",
+        "0010",
+    }
+
+
+def test_lifecycle_audit_migration_preserves_registration_and_security_actions():
+    from typing import get_args
+
+    from app.models import AuditEvent
+    from app.schemas.audit import AuditAction
+
+    versions = BACKEND_DIR / "alembic" / "versions"
+    security = runpy.run_path(str(versions / "0008_registration_requests.py"))
+    lifecycle = runpy.run_path(str(versions / "0010_payment_lifecycle.py"))
+
+    def actions(value):
+        return set(re.findall(r"'([^']+)'", value))
+
+    previous = actions(security["OLD_ACTIONS"]) | actions(security["NEW_ACTIONS"])
+    added = {
+        "payment.amount_changed",
+        "payment.terms_changed",
+        "payment.deleted",
+        "payment.period_deleted",
+    }
+    assert actions(lifecycle["OLD_ACTIONS"]) == previous
+    assert actions(lifecycle["NEW_ACTIONS"]) == previous | added
+    assert set(get_args(AuditAction)) == previous | added
+    constraint = next(
+        item for item in AuditEvent.__table__.constraints if item.name == "ck_audit_events_action"
+    )
+    assert actions(str(constraint.sqltext)) == previous | added

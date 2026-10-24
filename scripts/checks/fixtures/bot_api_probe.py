@@ -174,6 +174,7 @@ def smoke_and_environment():
         for name in (
             "bot.py",
             "api.py",
+            "mfa.py",
             "smoke.py",
             "reminders.py",
             "formatting.py",

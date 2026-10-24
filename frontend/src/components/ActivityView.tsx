@@ -30,6 +30,13 @@ const actionVisuals = {
   'user.updated': { icon: SquarePen, tone: 'violet' },
   'user.deleted': { icon: UserMinus, tone: 'muted' },
   'password.changed': { icon: KeyRound, tone: 'violet' },
+  'registration.approved': { icon: ShieldCheck, tone: 'cyan' },
+  'registration.rejected': { icon: ShieldCheck, tone: 'cyan' },
+  'account.mfa_enabled': { icon: ShieldCheck, tone: 'cyan' },
+  'account.mfa_disabled': { icon: ShieldCheck, tone: 'cyan' },
+  'account.mfa_changed': { icon: ShieldCheck, tone: 'cyan' },
+  'account.recovery_regenerated': { icon: ShieldCheck, tone: 'cyan' },
+
 } as const
 const dayFormat = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 function changeValue(field: string, value: string | null) {
@@ -84,8 +91,8 @@ function ActivityDetails({ event, onClose, onHistory, timezone }: { event: Audit
   const changes = event.changes.filter(change => !/password|пароль|token|токен|secret|cookie|session|csrf/i.test(change.field + ' ' + change.label))
   return <Drawer title="Подробности события" subtitle="События доступны только для просмотра." onClose={onClose}>
     <div className="activity-detail-title"><span className="activity-event-icon" data-tone={visual.tone}><Icon size={21} aria-hidden="true"/></span><div><p>{auditActionLabels[event.action]}</p><h3>{event.entity.title}</h3></div></div>
-    <dl className="activity-detail-meta"><div><dt>Пользователь</dt><dd><UserRound size={15} aria-hidden="true"/>{event.actor.username}</dd></div><div><dt>Когда</dt><dd>{dateLabel(activityDay(event.occurred_at, timezone))}, {timestampTime(event.occurred_at, timezone)} {timezone}</dd></div><div><dt>Объект</dt><dd>{event.entity.type === 'payment' ? 'Регулярный платёж' : event.entity.type === 'user' ? 'Пользователь' : 'Учётная запись'}</dd></div></dl>
-    {changes.length > 0 ? <section className="activity-diff" aria-label="Изменённые поля"><h4>Что изменилось</h4><div className="activity-diff-columns" aria-hidden="true"><span>До</span><ArrowRight size={14}/><span>После</span></div>{changes.map((change, index) => <div className="activity-change" key={change.field + ':' + index}><strong>{change.label}</strong><div><span className="activity-before"><span className="sr-only">До: </span>{changeValue(change.field, change.before)}</span><ArrowRight size={15} aria-hidden="true"/><span className="activity-after"><span className="sr-only">После: </span>{changeValue(change.field, change.after)}</span></div></div>)}</section> : <div className="activity-private-note"><ShieldCheck size={19} aria-hidden="true"/><p>{event.action === 'password.changed' ? 'В журнале сохраняется только факт смены пароля. Значения паролей и данные сессии не отображаются.' : 'Для этого события дополнительные изменения полей не переданы.'}</p></div>}
+    <dl className="activity-detail-meta"><div><dt>Пользователь</dt><dd><UserRound size={15} aria-hidden="true"/>{event.actor.username}</dd></div><div><dt>Когда</dt><dd>{dateLabel(activityDay(event.occurred_at, timezone))}, {timestampTime(event.occurred_at, timezone)} {timezone}</dd></div><div><dt>Объект</dt><dd>{event.entity.type === 'payment' ? 'Регулярный платёж' : event.entity.type === 'user' ? 'Пользователь' : event.entity.type === 'registration' ? 'Заявка на доступ' : 'Учётная запись'}</dd></div></dl>
+    {changes.length > 0 ? <section className="activity-diff" aria-label="Изменённые поля"><h4>Что изменилось</h4><div className="activity-diff-columns" aria-hidden="true"><span>До</span><ArrowRight size={14}/><span>После</span></div>{changes.map((change, index) => <div className="activity-change" key={change.field + ':' + index}><strong>{change.label}</strong><div><span className="activity-before"><span className="sr-only">До: </span>{changeValue(change.field, change.before)}</span><ArrowRight size={15} aria-hidden="true"/><span className="activity-after"><span className="sr-only">После: </span>{changeValue(change.field, change.after)}</span></div></div>)}</section> : <div className="activity-private-note"><ShieldCheck size={19} aria-hidden="true"/><p>{(event.action === 'password.changed' || event.action.startsWith('account.')) ? 'В журнале сохраняется только факт изменения защиты. Пароли, секреты, коды и данные сессии не отображаются.' : 'Для этого события дополнительные изменения полей не переданы.'}</p></div>}
     {event.action === 'payment.stopped' && <p className="activity-retention-note">Прекращение останавливает будущие периоды. История уже созданных платежей сохраняется.</p>}
     <div className="activity-detail-actions">{event.entity.type === 'payment' && <button type="button" className="btn btn-primary" onClick={() => onHistory(event.entity.id, event.entity.title)}>История платежа<ArrowUpRight size={16} aria-hidden="true"/></button>}<button type="button" className="btn btn-secondary" data-drawer-close="">Закрыть</button></div>
   </Drawer>

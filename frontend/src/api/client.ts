@@ -4,6 +4,7 @@ import type {
   AmountCurrencyUpdateRequest, RecurringAmountUpdateResponse, AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
   RecurringPayment, RecurringPaymentFilters, SummaryParams, UpdateOccurrenceRequest, UpdateUserRequest, User,
+  LoginResponse, MfaMethod, MfaFactor, SecurityState, SecurityMutation, TotpSetup, TelegramSetup, TelegramSetupStatus, ReauthRequest, RegistrationRequest, RegistrationStatus, RegistrationPayload,
 } from '../types/api'
 import { mockFetch } from '../mocks/transport'
 
@@ -12,10 +13,11 @@ export { ApiError, isMissingPaymentRoute } from './errors'
 export type { ApiRequestContext } from './errors'
 
 export const API_MODE = import.meta.env.VITE_API_MODE === 'real' ? 'real' : 'mock'
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
+export const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 const REQUEST_TIMEOUT_MS = 12000
 let csrfToken: string | null = null
 let sessionUser: AuthResponse['user'] | null = null
+let pendingCsrf: string | null = null
 function installSession(data: AuthResponse) {
   try {
     if (typeof data?.timezone !== 'string' || !data.timezone.trim()) throw new RangeError()
@@ -25,7 +27,7 @@ function installSession(data: AuthResponse) {
     clearSession(message)
     throw new ApiError(200, 'INVALID_RESPONSE', message)
   }
-  csrfToken = data.csrf_token; sessionUser = data.user
+  csrfToken = data.csrf_token; sessionUser = data.user; pendingCsrf = null
 }
 function clearSession(message?: string) {
   csrfToken = null; sessionUser = null
@@ -46,10 +48,12 @@ function retryAfterSeconds(response: Response): number | undefined {
 async function request<T>(path: string, method = 'GET', body?: unknown, options: { file?: File; blob?: boolean } = {}): Promise<T> {
   const requestContext = { method: method.toUpperCase(), path: path.split(/[?#]/, 1)[0] }
   const expectedUser = sessionUser
+  const pendingAuth = path.startsWith('/auth/mfa/')
   const headers = new Headers({ Accept: 'application/json' })
   if (body !== undefined) headers.set('Content-Type', 'application/json')
   if (options.file) { headers.set('Content-Type', options.file.type); headers.set('X-Filename', encodeURIComponent(options.file.name)) }
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && path !== '/auth/login' && csrfToken) headers.set('X-CSRF-Token', csrfToken)
+  const token = pendingAuth ? pendingCsrf : csrfToken
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && path !== '/auth/login' && token) headers.set('X-CSRF-Token', token)
   const abort = new AbortController()
   const timeout = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS)
   try {
@@ -60,7 +64,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown, options:
     if (response.ok && options.blob) return await response.blob() as T
     let payload: unknown
     try { payload = await response.json() } catch (error) {
-      if (response.status === 401 && sessionUser === expectedUser) clearSession()
+      if (response.status === 401 && !pendingAuth && sessionUser === expectedUser) clearSession()
       // A disconnected or timed-out response body still has an unknown mutation outcome.
       if (abort.signal.aborted || error instanceof TypeError) throw error
       throw new ApiError(response.status, 'INVALID_RESPONSE', 'Сервер вернул ответ в неизвестном формате', [], requestContext, retryAfterSeconds(response))
@@ -68,7 +72,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown, options:
     if (!response.ok) {
       const serverError = (payload as Partial<ErrorResponse>)?.error
       const error = new ApiError(response.status, serverError?.code || 'HTTP_ERROR', serverError?.message || 'Не удалось выполнить запрос', Array.isArray(serverError?.details) ? serverError.details : [], requestContext, retryAfterSeconds(response))
-      if (response.status === 401 && sessionUser === expectedUser && !(path === '/auth/login' && error.code === 'INVALID_CREDENTIALS')) {
+      if (response.status === 401 && !pendingAuth && sessionUser === expectedUser && !(path === '/auth/login' && error.code === 'INVALID_CREDENTIALS')) {
         clearSession()
       }
       if (response.status === 403 && error.code === 'CSRF_FAILED' && expectedUser && sessionUser === expectedUser && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
@@ -122,7 +126,25 @@ export const api = {
   deleteOccurrence: (id: string) => request<void>('/payment-occurrences/' + encodeURIComponent(id), 'DELETE'),
   archiveRecurringPayment: (id: string) => request<void>('/recurring-payments/' + encodeURIComponent(id) + '/archive', 'POST'),
   listAuditEvents: (filters: AuditFilters): Promise<AuditPage> => request<AuditPage>('/audit-events' + query(filters)),
-  async login(payload: LoginRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/login', 'POST', payload); installSession(data); return data },
+  async login(payload: LoginRequest): Promise<LoginResponse> { const data = await request<LoginResponse>('/auth/login', 'POST', payload); if ('mfa_required' in data) { pendingCsrf = data.csrf_token; csrfToken = null; sessionUser = null } else installSession(data); return data },
+  async verifyMfa(method: MfaMethod, code: string): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/mfa/verify', 'POST', { method, code }); installSession(data); return data },
+  sendLoginTelegram: () => request<{ sent: boolean; retry_after: number }>('/auth/mfa/telegram/send', 'POST', {}),
+  async cancelMfa() { const token = pendingCsrf; try { await request<void>('/auth/mfa/cancel', 'POST', {}) } finally { if (pendingCsrf === token) pendingCsrf = null } },
+  register: (payload: RegistrationPayload) => request<{ status: 'pending'; message: string }>('/registration/requests', 'POST', payload),
+  registrationRequests: (params: PaginationParams & { status: RegistrationStatus }) => request<Page<RegistrationRequest>>('/registration/requests' + query(params)),
+  approveRegistration: (id: string) => request<RegistrationRequest>('/registration/requests/' + encodeURIComponent(id) + '/approve', 'POST', {}),
+  rejectRegistration: (id: string, note?: string) => request<RegistrationRequest>('/registration/requests/' + encodeURIComponent(id) + '/reject', 'POST', { note }),
+  security: () => request<SecurityState>('/auth/security'),
+  reauth: (payload: ReauthRequest) => request<{ expires_at: string }>('/auth/security/reauth', 'POST', payload),
+  sendSecurityTelegram: (password: string) => request<{ sent: boolean; retry_after: number }>('/auth/security/telegram/send-code', 'POST', { password }),
+  setupTotp: () => request<TotpSetup>('/auth/security/totp/setup', 'POST', {}),
+  confirmTotp: (setup_id: string, code: string) => request<SecurityMutation>('/auth/security/totp/confirm', 'POST', { setup_id, code }),
+  setupTelegram: () => request<TelegramSetup>('/auth/security/telegram/setup', 'POST', {}),
+  telegramSetupStatus: (id: string) => request<TelegramSetupStatus>('/auth/security/telegram/setup/' + encodeURIComponent(id)),
+  confirmTelegram: (setup_id: string, code: string) => request<SecurityMutation>('/auth/security/telegram/confirm', 'POST', { setup_id, code }),
+  removeFactor: (method: MfaFactor) => request<SecurityMutation>('/auth/security/factors/' + method + '/remove', 'POST', {}),
+  disableMfa: () => request<SecurityMutation>('/auth/security/disable', 'POST', {}),
+  regenerateRecovery: () => request<SecurityMutation>('/auth/security/recovery/regenerate', 'POST', {}),
   async changePassword(payload: ChangePasswordRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/change-password', 'POST', { current_password: payload.current_password, new_password: payload.new_password }); installSession(data); return data },
   async me(): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/me'); installSession(data); return data },
   async logout(): Promise<void> { await request<void>('/auth/logout', 'POST'); csrfToken = null; sessionUser = null },

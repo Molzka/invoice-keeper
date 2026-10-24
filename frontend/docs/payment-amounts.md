@@ -20,7 +20,7 @@ The drawer prevents duplicate submission and never retries an uncertain mutation
 
 ## Storage and migration
 
-Migration 0007 follows the colleague's audit and receipt revisions. It backfills amount and currency into existing occurrences, adds constraints and an individual-terms marker, and adds the recurring effective date. Downgrading removes individual period prices, so preserve a database backup before a planned rollback.
+Migration 0009 follows the colleague's audit, receipt, MFA and registration revisions. It backfills amount and currency into existing occurrences, adds constraints and an individual-terms marker, and adds the recurring effective date. Downgrading removes individual period prices, so preserve a database backup before a planned rollback.
 
 ## Checks
 

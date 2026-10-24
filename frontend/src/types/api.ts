@@ -6,6 +6,21 @@ export interface User { id: string; username: string; role: Role; created_at: st
 export interface LoginRequest { username: string; password: string }
 export interface ChangePasswordRequest { current_password: string; new_password: string }
 export interface AuthResponse { user: User; csrf_token: string; timezone: string }
+export type MfaMethod = 'totp' | 'telegram' | 'recovery'
+export type MfaFactor = Exclude<MfaMethod, 'recovery'>
+export interface MfaChallenge { mfa_required: true; methods: MfaMethod[]; csrf_token: string; expires_at: string }
+export type LoginResponse = AuthResponse | MfaChallenge
+export interface TelegramAccount { id: string; username: string | null; display_name: string }
+export interface SecurityState { can_manage: boolean; mfa_enabled: boolean; methods: MfaFactor[]; available_methods: MfaFactor[]; telegram: TelegramAccount | null; recovery_codes_remaining: number }
+export interface SecurityMutation { security: SecurityState; recovery_codes?: string[] }
+export interface TotpSetup { setup_id: string; secret: string; otpauth_uri: string; expires_at: string }
+export interface TelegramSetup { setup_id: string; link: string; expires_at: string }
+export interface TelegramSetupStatus { status: 'waiting' | 'claimed'; account: TelegramAccount | null; expires_at: string }
+export interface ReauthRequest { password: string; method?: MfaMethod; code?: string }
+export type RegistrationStatus = 'pending' | 'approved' | 'rejected'
+export interface RegistrationRequest { id: string; username: string; message: string; status: RegistrationStatus; created_at: string; reviewed_at: string | null; reviewed_by: string | null; decision_note: string | null }
+export type RegistrationRequestList = Page<RegistrationRequest>
+export interface RegistrationPayload { username: string; password: string; password_confirm: string; message: string; altcha: string }
 export interface PaginationParams { limit?: number; offset?: number }
 export interface Page<T> { items: T[]; total: number; limit: number; offset: number }
 export interface RecurringPayment {

@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { CopyIcon as PhosphorCopy } from '@phosphor-icons/react/dist/csr/Copy'
 import type { ForwardRefExoticComponent, RefAttributes, SVGProps } from 'react'
 import type { Icon } from '@phosphor-icons/react'
 import { ArrowDownIcon as PhosphorArrowDown } from '@phosphor-icons/react/dist/csr/ArrowDown'
@@ -143,3 +144,5 @@ export const CircleCheck = filledIcon(PhosphorCheckCircle, 'circle-check')
 export const Sun = filledIcon(PhosphorSun, 'sun')
 export const Moon = filledIcon(PhosphorMoon, 'moon')
 export const Monitor = filledIcon(PhosphorDesktop, 'monitor')
+
+export const Copy = filledIcon(PhosphorCopy, 'copy')

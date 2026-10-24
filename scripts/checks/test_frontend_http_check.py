@@ -1,15 +1,14 @@
 """Regression checks for the frontend container HTTP contract (stdlib only)."""
 
 import base64
-from contextlib import redirect_stdout
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import threading
 import unittest
+from contextlib import redirect_stdout
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import check_frontend
-
 
 INDEX = b'''<!doctype html><html><head>
 <link rel="icon" type="image/png" href="/brand/aeza.png">

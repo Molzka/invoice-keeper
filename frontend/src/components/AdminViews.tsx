@@ -10,6 +10,7 @@ import { Drawer, ErrorNotice, Pagination } from './UI';
 import { PageHeader } from './PageHeader';
 import { DatePicker } from './DatePicker';
 import { SelectField } from './SelectField';
+import { RegistrationRequests } from './RegistrationRequests';
 
 export type AdminViewProps = {
   onChanged: () => void;
@@ -212,6 +213,7 @@ function RecurringForm({ today, onClose, onCreated, onCheck }: { today: string; 
 }
 
 export function UsersView({ onChanged, notify, isAdmin, timezone }: AdminViewProps) {
+  const [tab, setTab] = useState<'members' | 'requests'>('members');
   const [offset, setOffset] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [page, setPage] = useState<Page<User> | null>(null);
@@ -224,7 +226,7 @@ export function UsersView({ onChanged, notify, isAdmin, timezone }: AdminViewPro
   const deleteGuard = useRef(false);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || tab !== 'members') return;
     let alive = true;
     setLoading(true);
     setLoadError(null);
@@ -238,7 +240,7 @@ export function UsersView({ onChanged, notify, isAdmin, timezone }: AdminViewPro
     }).catch(error => { if (alive) setLoadError(error); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [isAdmin, offset, refresh]);
+  }, [isAdmin, tab, offset, refresh]);
 
   function reload() { setRefresh(value => value + 1); }
   function changed() { reload(); onChanged(); }
@@ -259,16 +261,19 @@ export function UsersView({ onChanged, notify, isAdmin, timezone }: AdminViewPro
 
   if (!isAdmin) return <Forbidden />;
   return <section aria-labelledby="users-heading">
-    <PageHeader kind="users" id="users-heading" title="Пользователи" eyebrow="Команда и доступ" description="Дайте команде доступ к общему списку платежей.">
-      <button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button>
+    <PageHeader kind="users" id="users-heading" title="Пользователи" eyebrow="Команда и доступ" description="Управляйте участниками и заявками сотрудников.">
+      {tab === 'members' && <button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button>}
     </PageHeader>
-    <div className="panel">
+    <div className="status-tabs" role="group" aria-label="Раздел пользователей">
+      {([['members', 'Участники'], ['requests', 'Заявки']] as const).map(([value, label]) => <button key={value} type="button" className={`status-tab ${tab === value ? 'active' : ''}`} aria-pressed={tab === value} onClick={() => setTab(value)}>{label}</button>)}
+    </div>
+    {tab === 'requests' ? <RegistrationRequests timezone={timezone} notify={notify} onChanged={changed} /> : <div className="panel">
       <div className="toolbar"><h2 className="panel-title">Участники команды</h2><span className="pill">Обычные пользователи</span></div>
       {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем пользователей…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">+</span><h2>Пригласите первого участника</h2><p className="muted">Пользователи смогут смотреть платежи и отмечать оплату каждого периода.</p><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div> : <>
         <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Пользователь</th><th scope="col">Доступ</th><th scope="col">Дата создания</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(user => <tr key={user.id}><td><div className="user-cell"><span className="avatar" aria-hidden="true">{user.username.slice(0, 2).toUpperCase()}</span><strong className="payment-title">{user.username}</strong></div></td><td data-label="Доступ"><span className="status status-neutral">Пользователь</span><span className="muted table-caption">Просмотр и отметка оплаты</span></td><td className="date-cell" data-label="Дата создания">{createdDate(user.created_at, timezone)}</td><td><div className="inline-actions"><button className="btn btn-secondary btn-small" aria-label={`Изменить пользователя ${user.username}`} onClick={() => setEditing(user)}>Изменить</button><button className="icon-button danger-text" title="Удалить пользователя" aria-label={`Удалить пользователя ${user.username}`} onClick={() => { setDeleteError(null); setDeleting(user); }}><Trash2 size={18}/></button></div></td></tr>)}</tbody></table></div>
         <Pagination total={page.total} limit={page.limit} offset={page.offset} onPage={setOffset} />
       </>}
-    </div>
+    </div>}
     <p className="section-note">Учётная запись администратора задаётся в конфигурации сервера и защищена от изменения в этом разделе.</p>
     {editing != null && <UserForm key={editing === 'new' ? 'new' : editing.id} user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { notify(editing === 'new' ? 'Пользователь добавлен.' : 'Изменения пользователя сохранены.'); setEditing(null); changed(); }} onCheck={() => { setEditing(null); setOffset(0); reload(); }} />}
     {deleting && <Drawer canClose={!busyDelete} title="Удалить пользователя?" subtitle={deleting.username} onClose={() => { if (!busyDelete) setDeleting(null); }}><div className="notice"><strong>Доступ будет отозван сразу.</strong><p>Все сессии пользователя завершатся. Его удаление не затронет платежи, отметки об оплате или историю команды.</p></div>{deleteError != null && <ErrorNotice error={deleteError} />}<div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busyDelete} onClick={() => setDeleting(null)}>Отмена</button><button className="btn btn-danger" disabled={busyDelete} onClick={confirmDelete}>{busyDelete ? 'Удаляем…' : 'Удалить пользователя'}</button></div></Drawer>}

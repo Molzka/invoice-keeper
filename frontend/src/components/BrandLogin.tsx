@@ -1,15 +1,17 @@
 import { useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { ArrowRight, Eye, EyeOff, ShieldCheck } from './BrandIcons'
 import { api, API_MODE, ApiError } from '../api/client'
 import { DEMO_DATE_LABEL } from '../config/demo'
-import type { AuthResponse } from '../types/api'
+import type { AuthResponse, MfaChallenge } from '../types/api'
 import { ErrorNotice } from './UI'
 import { BrandMark } from './Brand'
 import { ThemeControl } from './ThemeControl'
 
 interface BrandLoginProps {
   onLogin: (session: AuthResponse) => void
+  onMfaChallenge?: (challenge: MfaChallenge) => void
+  accessContent?: ReactNode
   restoreError: unknown
   onRestore: () => void
 }
@@ -27,7 +29,7 @@ function LoginPattern() {
   </div>
 }
 
-export function BrandLogin({ onLogin, restoreError, onRestore }: BrandLoginProps) {
+export function BrandLogin({ onLogin, onMfaChallenge, accessContent, restoreError, onRestore }: BrandLoginProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -58,7 +60,10 @@ export function BrandLogin({ onLogin, restoreError, onRestore }: BrandLoginProps
     try {
       const data = await api.login({ username, password })
       setPassword('')
-      onLogin(data)
+      if ('mfa_required' in data) {
+        if (onMfaChallenge) onMfaChallenge(data)
+        else setError(new Error('Для входа требуется подтверждение кода. Обновите страницу.'))
+      } else onLogin(data)
     } catch (reason) {
       setError(reason)
       if (reason instanceof ApiError) setFields(Object.fromEntries(reason.details.map(item => [item.field, item.message])))
@@ -86,6 +91,7 @@ export function BrandLogin({ onLogin, restoreError, onRestore }: BrandLoginProps
     <main className="aeza-login-main">
       <div className="aeza-login-theme"><ThemeControl/></div>
       <div className="aeza-login-form-card">
+        {accessContent ? <div className="aeza-login-access-content">{accessContent}</div> : <>
         <div className="aeza-login-form-heading">
           <p className="aeza-login-eyebrow">Добро пожаловать</p>
           <h1>Вход в систему</h1>
@@ -109,12 +115,14 @@ export function BrandLogin({ onLogin, restoreError, onRestore }: BrandLoginProps
           </div>
           <button className="aeza-login-submit" type="submit" disabled={busy}>{busy ? <><span className="spinner" aria-hidden="true"/>Входим…</> : <>Войти<ArrowRight size={19} aria-hidden="true"/></>}</button>
         </form>
+        <a className="access-back" href="#request-access" aria-disabled={busy} onClick={event => { if (busy) { event.preventDefault(); return } setPassword(''); setError(null) }}>Нет доступа? Отправить заявку</a>
         {API_MODE === 'mock' && <aside className="aeza-login-demo" aria-label="Демонстрация интерфейса">
           <div className="aeza-login-demo-title"><strong>Попробовать интерфейс</strong><span>Демо</span></div>
           <p>Выберите роль, затем нажмите «Войти».</p>
           <div className="aeza-login-demo-roles"><button type="button" disabled={busy} onClick={() => chooseDemo('admin')}>Администратор</button><button type="button" disabled={busy} onClick={() => chooseDemo('user')}>Пользователь</button></div>
           <p className="aeza-login-demo-date">Данные на {DEMO_DATE_LABEL}.</p>
         </aside>}
+        </>}
         <p className="aeza-login-security"><ShieldCheck size={16} aria-hidden="true"/>Доступ только для участников команды</p>
       </div>
     </main>

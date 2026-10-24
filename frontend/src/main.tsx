@@ -23,4 +23,5 @@ import './styles/brand-tokens.css';
 import './styles/payment-layout.css';
 import './styles/theme.css';
 import './styles/brand-identity.css';
+import './styles/access-security.css';
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

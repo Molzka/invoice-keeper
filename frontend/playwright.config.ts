@@ -17,7 +17,7 @@ export default defineConfig({
   forbidOnly: true,
   retries: 0,
   timeout: 60_000,
-  globalTimeout: 180_000,
+  globalTimeout: 300_000,
   expect: { timeout: 10_000 },
   reporter: [['line'], ['html', { open: 'never' }]],
   use: {

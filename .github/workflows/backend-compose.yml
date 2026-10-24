@@ -44,10 +44,13 @@ jobs:
         run: |
           database_password="$(openssl rand -hex 24)@:/#%"
           admin_password=$(openssl rand -hex 24)
+          mfa_key=$(python3 -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())')
           echo "::add-mask::$database_password"
           echo "::add-mask::$admin_password"
+          echo "::add-mask::$mfa_key"
           echo "POSTGRES_PASSWORD=$database_password" >> "$GITHUB_ENV"
           echo "ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
+          echo "MFA_ENCRYPTION_KEY=$mfa_key" >> "$GITHUB_ENV"
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -148,6 +151,14 @@ jobs:
           image=$(docker inspect --format '{{.Image}}' "$backend")
           bot_image=$(docker inspect --format '{{.Image}}' "$bot")
           python3 scripts/checks/check_bot_api.py --image "$image" --bot-image "$bot_image"
+
+      - name: Check moderated registration and personal MFA
+        run: |
+          backend=$(docker compose --env-file .env.example ps -q backend)
+          bot=$(docker compose --env-file .env.example ps -aq bot)
+          image=$(docker inspect --format '{{.Image}}' "$backend")
+          bot_image=$(docker inspect --format '{{.Image}}' "$bot")
+          python3 scripts/checks/check_access_security.py --image "$image" --bot-image "$bot_image"
 
       - name: Save browser report and failure details
         if: ${{ !cancelled() }}

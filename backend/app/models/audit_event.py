@@ -16,10 +16,14 @@ class AuditEvent(Base):
         CheckConstraint(
             "action IN ('payment.amount_changed', 'payment.terms_changed', 'payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', "
             "'payment.unpaid', 'payment.date_changed', 'user.created', 'user.updated', "
-            "'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted')",
+            "'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted', "
+            "'registration.approved', 'registration.rejected', 'account.mfa_enabled', "
+            "'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated')",
             name="action",
         ),
-        CheckConstraint("entity_type IN ('payment', 'user', 'account')", name="entity_type"),
+        CheckConstraint(
+            "entity_type IN ('payment', 'user', 'account', 'registration')", name="entity_type"
+        ),
         CheckConstraint("jsonb_typeof(changes) = 'array'", name="changes_array"),
         Index("ix_audit_events_occurred_at_id", "occurred_at", "id"),
         Index("ix_audit_events_action_occurred_at", "action", "occurred_at"),

@@ -169,6 +169,7 @@ button svg { flex-shrink: 0; }
 .drawer-backdrop { position: fixed; inset: 0; display: flex; align-items: stretch; justify-content: flex-end; z-index: 100; background: color-mix(in srgb, color-mix(in srgb, var(--navy) 48%, var(--tone-depth)) 30.2%, transparent); backdrop-filter: blur(3px); animation: fade-in .18s ease-out; }
 .drawer { display: flex; flex-direction: column; width: min(100%, 480px); max-height: 100dvh; height: 100%; background: var(--surface); box-shadow: -12px 0 64px color-mix(in srgb, color-mix(in srgb, var(--ink) 92%, white) 11%, transparent); animation: slide-in .23s ease-out; }
 .drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 28px 28px 22px; border-bottom: 1px solid var(--line); }
+.drawer-head > div { min-width: 0; overflow-wrap: anywhere; }
 .drawer-head h2 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; letter-spacing: -.9px; overflow-wrap: anywhere; }
 .drawer-head p { color: var(--muted); margin: 9px 0 0; font-size: 12px; line-height: 1.6; }
 .drawer-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 26px 28px; }
