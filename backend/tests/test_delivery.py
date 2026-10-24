@@ -1,6 +1,10 @@
 import asyncio
+import os
+import subprocess
+import sys
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -8,7 +12,12 @@ from sqlalchemy import event, func, select, update
 
 from app.delivery.contracts import PermanentRejection, RetryableRejection
 from app.delivery.locking import lock_payments
-from app.delivery.queue import enqueue_payment_reminder, reminder_at, resolve_unknown
+from app.delivery.queue import (
+    enqueue_payment_reminder,
+    reminder_at,
+    requeue_failed,
+    resolve_unknown,
+)
 from app.delivery.schema import deliveries
 from app.delivery.telegram import build_reminder_text
 from app.delivery.worker import DeliveryWorker
@@ -348,6 +357,126 @@ async def test_permanent_or_exhausted_safe_retries_are_failed(delivery_db, outco
     await engine.run_once(NOW)
     await engine.run_once(NOW + timedelta(minutes=5))
     assert (await row_for(delivery_db, occurrence_id))["status"] == "failed"
+
+
+@pytest.mark.parametrize("error", [PermanentRejection(), RetryableRejection(120)])
+async def test_failed_requires_explicit_requeue_and_gets_a_fresh_retry_budget(delivery_db, error):
+    _, occurrence_id = await add_payment(delivery_db)
+    sender = Sender(error, RetryableRejection(120), 888)
+    await worker(delivery_db, sender, max_attempts=1).run_once(NOW)
+    failed = dict(await row_for(delivery_db, occurrence_id))
+    assert failed["status"] == "failed"
+    later = NOW + timedelta(minutes=10)
+    await worker(delivery_db, sender).run_once(later)
+    assert dict(await row_for(delivery_db, occurrence_id)) == failed
+    assert len(sender.calls) == 1
+
+    async with delivery_db.session_factory() as db, db.begin():
+        await requeue_failed(db, failed["id"], now=later)
+    requeued = await row_for(delivery_db, occurrence_id)
+    assert requeued["id"] == failed["id"]
+    assert requeued["scheduled_at"] == failed["scheduled_at"]
+    assert requeued["status"] == "pending" and requeued["attempt_count"] == 0
+    assert requeued["attempt_id"] is None and requeued["last_error_code"] is None
+    engine = worker(delivery_db, sender, max_attempts=2)
+    await engine.run_once(later)
+    assert (await row_for(delivery_db, occurrence_id))["status"] == "retry"
+    assert (await engine.run_once(later + timedelta(minutes=2)))["sent"] == 1
+    assert (await row_for(delivery_db, occurrence_id))["attempt_count"] == 2
+    assert (await engine.run_once(later + timedelta(days=1)))["sent"] == 0
+    assert len(sender.calls) == 3
+
+
+async def test_requeue_failed_does_not_commit_or_bypass_retry_after(delivery_db):
+    _, occurrence_id = await add_payment(delivery_db)
+    await worker(delivery_db, Sender(RetryableRejection(600)), max_attempts=1).run_once(NOW)
+    failed = dict(await row_for(delivery_db, occurrence_id))
+    async with delivery_db.session_factory() as db:
+        await requeue_failed(db, failed["id"], now=NOW + timedelta(seconds=1))
+        assert await db.scalar(select(deliveries.c.status)) == "pending"
+        assert await db.scalar(select(deliveries.c.available_at)) == failed["available_at"]
+        assert dict(await row_for(delivery_db, occurrence_id)) == failed
+        await db.rollback()
+    assert dict(await row_for(delivery_db, occurrence_id)) == failed
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["pending", "in_flight", "retry", "sent", "unknown", "cancelled", "missing", "failed_ack"],
+)
+async def test_requeue_failed_rejects_other_states_and_confirmed_delivery(delivery_db, status):
+    payment_id, occurrence_id = await add_payment(delivery_db)
+    delivery_id = await queue(delivery_db, payment_id, occurrence_id)
+    if status != "missing":
+        async with delivery_db.session_factory() as db, db.begin():
+            await db.execute(
+                update(deliveries)
+                .where(deliveries.c.id == delivery_id)
+                .values(
+                    status="failed" if status == "failed_ack" else status,
+                    attempt_id=uuid4() if status == "in_flight" else None,
+                    lease_until=NOW + timedelta(minutes=2) if status == "in_flight" else None,
+                    sent_at=NOW if status in {"sent", "failed_ack"} else None,
+                    telegram_message_id=777 if status in {"sent", "failed_ack"} else None,
+                )
+            )
+    original = dict(await row_for(delivery_db, occurrence_id))
+    async with delivery_db.session_factory() as db, db.begin():
+        with pytest.raises(ValueError, match="Only a failed delivery"):
+            await requeue_failed(db, uuid4() if status == "missing" else delivery_id, now=NOW)
+    assert dict(await row_for(delivery_db, occurrence_id)) == original
+
+
+@pytest.mark.parametrize("change", ["paid", "inactive"])
+async def test_requeued_failed_delivery_rechecks_payment_before_sending(delivery_db, change):
+    payment_id, occurrence_id = await add_payment(delivery_db)
+    sender = Sender(PermanentRejection())
+    await worker(delivery_db, sender).run_once(NOW)
+    failed = await row_for(delivery_db, occurrence_id)
+    async with delivery_db.session_factory() as db, db.begin():
+        await lock_payments(db)
+        await TestPaymentSource().lock_rule(db, payment_id)
+        if change == "paid":
+            await db.execute(
+                update(periods).where(periods.c.id == occurrence_id).values(is_paid=True)
+            )
+        else:
+            await db.execute(update(rules).where(rules.c.id == payment_id).values(is_active=False))
+        await requeue_failed(db, failed["id"], now=NOW)
+    assert (await worker(delivery_db, sender).run_once(NOW))["sent"] == 0
+    assert len(sender.calls) == 1
+    assert (await row_for(delivery_db, occurrence_id))["status"] == (
+        "pending" if change == "paid" else "cancelled"
+    )
+
+
+@pytest.mark.parametrize("error", [PermanentRejection(), TimeoutError()])
+async def test_requeue_failed_cli_recovers_failed_but_preserves_unknown(
+    delivery_db, migrated_database_url, error
+):
+    _, occurrence_id = await add_payment(delivery_db)
+    sender = Sender(error)
+    await worker(delivery_db, sender).run_once(NOW)
+    original = dict(await row_for(delivery_db, occurrence_id))
+    environment = os.environ.copy()
+    environment.update(DATABASE_URL=migrated_database_url, APP_ENV="test")
+    result = await asyncio.to_thread(
+        subprocess.run,
+        [sys.executable, "-m", "app.delivery.cli", "requeue-failed", str(original["id"])],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if original["status"] == "failed":
+        assert result.returncode == 0, result.stderr
+        assert "requeued" in result.stdout
+        assert (await row_for(delivery_db, occurrence_id))["status"] == "pending"
+    else:
+        assert result.returncode == 1
+        assert dict(await row_for(delivery_db, occurrence_id)) == original
 
 
 async def test_two_workers_do_not_send_the_same_period_twice(delivery_db):

@@ -12,7 +12,7 @@ from sqlalchemy import select, text
 
 from app.core.config import settings
 from app.db.session import Database
-from app.delivery.queue import resolve_unknown
+from app.delivery.queue import requeue_failed, resolve_unknown
 from app.delivery.schema import deliveries
 from app.delivery.telegram import TelegramSender
 from app.delivery.worker import DeliveryWorker
@@ -35,6 +35,10 @@ async def run(args) -> None:
                     telegram_message_id=args.sent,
                 )
             print("Delivery decision saved.")
+        elif args.command == "requeue-failed":
+            async with database.session_factory() as db, db.begin():
+                await requeue_failed(db, args.delivery_id)
+            print("Failed delivery requeued; the worker will recheck payment eligibility.")
         elif args.command == "list":
             async with database.session_factory() as db:
                 rows = (
@@ -100,6 +104,10 @@ def main() -> None:
     outcome.add_argument(
         "--not-sent", action="store_true", help="Only after confirming Telegram did not send"
     )
+    requeue = commands.add_parser(
+        "requeue-failed", help="Requeue one failed delivery after fixing the cause; never unknown"
+    )
+    requeue.add_argument("delivery_id", type=UUID)
     inspect = commands.add_parser("list")
     inspect.add_argument(
         "--status",

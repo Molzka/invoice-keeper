@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +68,42 @@ async def enqueue_payment_reminder(
     if existing.payment_id != payment_id:
         raise ValueError("Occurrence already belongs to a different payment")
     return existing.id
+
+
+async def requeue_failed(
+    db: AsyncSession,
+    delivery_id: UUID,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Operator retry after fixing the cause; only unconfirmed failed jobs.
+
+    Reset the retry budget, retaining the same job and any remaining backoff.
+    Never commit or send: the worker must recheck the payment before delivery.
+    """
+    now = utc_time(now)
+    await lock_payments(db)
+    updated = await db.scalar(
+        update(deliveries)
+        .where(
+            deliveries.c.id == delivery_id,
+            deliveries.c.status == "failed",
+            deliveries.c.sent_at.is_(None),
+            deliveries.c.telegram_message_id.is_(None),
+        )
+        .values(
+            status="pending",
+            available_at=func.greatest(deliveries.c.available_at, now),
+            attempt_count=0,
+            attempt_id=None,
+            lease_until=None,
+            last_error_code=None,
+            updated_at=now,
+        )
+        .returning(deliveries.c.id)
+    )
+    if updated is None:
+        raise ValueError("Only a failed delivery without confirmation can be requeued")
 
 
 async def resolve_unknown(
