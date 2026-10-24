@@ -15,7 +15,7 @@ from sqlalchemy.exc import ArgumentError
 
 from app.core.config import Settings
 from app.main import create_app
-from app.models import LoginRateLimit, User, UserSession
+from app.models import LoginRateLimit, PaymentOccurrence, RecurringPayment, User, UserSession
 
 PASSWORD = "test-password-strong-123"
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -80,7 +80,7 @@ async def app(migrated_database_url):
     async with application.router.lifespan_context(application):
         async with application.state.database.session_factory() as session:
             # Only the explicitly selected *_test database is modified.
-            for model in (UserSession, LoginRateLimit, User):
+            for model in (PaymentOccurrence, RecurringPayment, UserSession, LoginRateLimit, User):
                 await session.execute(delete(model))
             await session.commit()
         yield application
