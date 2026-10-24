@@ -6,34 +6,41 @@
       "check": "unit_tests",
       "status": "passed",
       "exit_code": 0,
-      "duration_seconds": 2.03,
+      "duration_seconds": 1.94,
       "timeout_seconds": 45,
       "tests": 67,
-      "passed": 67,
-      "failed": 0
+      "passed": 67
     },
     {
       "check": "typescript",
       "status": "passed",
       "exit_code": 0,
-      "duration_seconds": 3.8,
+      "duration_seconds": 4.25,
       "timeout_seconds": 45
     },
     {
       "check": "eslint",
       "status": "passed",
       "exit_code": 0,
-      "duration_seconds": 3.27,
+      "duration_seconds": 2.41,
       "timeout_seconds": 45
     },
     {
       "check": "real_build",
       "status": "passed",
       "exit_code": 0,
-      "duration_seconds": 0.53,
+      "duration_seconds": 0.39,
       "timeout_seconds": 45,
       "warning": "Main JavaScript chunk exceeds the default 500 kB warning threshold."
     }
   ],
-  "note": "TypeScript and real-mode build repeated after one-time deletion confirmation copy correction."
+  "note": "TypeScript, lint and 67 unit tests passed after receipt control fix; real-mode build repeated after all source changes.",
+  "receipt_control_fix": {
+    "checks": [
+      "unit_tests",
+      "typescript",
+      "eslint"
+    ],
+    "description": "Link and file inputs use distinct React keys; switching to link clears any prior file selection."
+  }
 }
