@@ -1,4 +1,27 @@
-import type { OccurrenceFilters, Page, PaymentOccurrence } from '../types/api'
+import type { Currency, CurrencyTotals, OccurrenceFilters, Page, PaymentOccurrence } from '../types/api'
+
+/** Sum the fully loaded day's snapshots in minor units, never floating-point money. */
+export function calendarTotals(items: PaymentOccurrence[]): Record<Currency, CurrencyTotals> {
+  const totals = {
+    RUB: { planned: 0n, paid: 0n, unpaid: 0n, overdue: 0n },
+    USD: { planned: 0n, paid: 0n, unpaid: 0n, overdue: 0n },
+    EUR: { planned: 0n, paid: 0n, unpaid: 0n, overdue: 0n },
+  }
+  for (const item of items) {
+    if (item.is_cancelled) continue
+    const amount = BigInt(item.amount.replace('.', ''))
+    const total = totals[item.currency]
+    total.planned += amount
+    total[item.status] += amount
+    if (item.status === 'unpaid' && item.is_overdue) total.overdue += amount
+  }
+  const decimal = (value: bigint) => `${value / 100n}.${String(value % 100n).padStart(2, '0')}`
+  const formatted = (value: typeof totals.RUB): CurrencyTotals => ({
+    planned: decimal(value.planned), paid: decimal(value.paid),
+    unpaid: decimal(value.unpaid), overdue: decimal(value.overdue),
+  })
+  return { RUB: formatted(totals.RUB), USD: formatted(totals.USD), EUR: formatted(totals.EUR) }
+}
 
 export type CalendarStatus = 'all' | 'unpaid' | 'overdue' | 'paid'
 export interface CalendarRoute { month: string; day: string; currency: '' | 'RUB' | 'USD' | 'EUR'; status: CalendarStatus }

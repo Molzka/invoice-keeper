@@ -1,8 +1,11 @@
 import type { Page } from './api'
 
-export const AUDIT_ACTIONS = ['payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'payment.receipt_updated', 'payment.receipt_deleted', 'payment.amount_changed', 'payment.terms_changed', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'registration.approved', 'registration.rejected', 'account.mfa_enabled', 'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'] as const
+export const AUDIT_ACTIONS = ['account.login', 'account.login_failed', 'account.logout', 'payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'payment.receipt_updated', 'payment.receipt_deleted', 'payment.amount_changed', 'payment.terms_changed', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'registration.approved', 'registration.rejected', 'account.mfa_enabled', 'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'] as const
 export type AuditAction = typeof AUDIT_ACTIONS[number]
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  'account.login': 'Вход в систему',
+  'account.login_failed': 'Неудачная попытка входа',
+  'account.logout': 'Выход из системы',
   'payment.deleted': 'Удалён платёж', 'payment.period_deleted': 'Удалён период платежа',
   'payment.created': 'Создан платёж', 'payment.stopped': 'Платёж прекращён',
   'payment.paid': 'Отмечена оплата', 'payment.unpaid': 'Отменена оплата',
@@ -24,10 +27,10 @@ export interface AuditChange { field: string; label: string; before: string | nu
 export interface AuditEvent {
   id: string
   occurred_at: string
-  actor: { id: string; username: string }
+  actor: { id: string | null; username: string }
   action: AuditAction
   /** Payment entities always use the recurring payment ID, including period mutations. */
-  entity: { type: 'payment' | 'user' | 'account' | 'registration'; id: string; title: string }
+  entity: { type: 'payment' | 'user' | 'account' | 'registration'; id: string | null; title: string }
   changes: AuditChange[]
 }
 export interface AuditFilters {

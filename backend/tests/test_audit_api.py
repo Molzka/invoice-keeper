@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.models import AuditEvent
 from app.services.audit import record_audit_event
@@ -15,6 +15,8 @@ PATH = "/api/v1/audit-events"
 
 async def seed_events(app, specifications):
     async with app.state.database.session_factory() as db:
+        # Filter/order cases use a fixed dataset, excluding authentication used to prepare it.
+        await db.execute(delete(AuditEvent))
         events = [
             AuditEvent(
                 id=values.get("id", uuid4()),
@@ -47,7 +49,8 @@ async def test_audit_requires_admin_and_has_no_mutation_routes(client, create_us
     auth = await login(client)
     response = await client.get(PATH)
     assert response.status_code == 200
-    assert response.json() == {"items": [], "total": 0, "limit": 50, "offset": 0}
+    assert response.json()["total"] == 2
+    assert all(row["action"] == "account.login" for row in response.json()["items"])
     assert response.headers["cache-control"] == "no-store"
     assert (
         await client.post(PATH, json={}, headers={"X-CSRF-Token": auth["csrf_token"]})

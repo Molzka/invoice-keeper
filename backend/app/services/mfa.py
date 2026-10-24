@@ -28,7 +28,7 @@ from app.core.security import (
 from app.models import User, UserSession
 from app.models.mfa import MfaChallenge, MfaRecoveryCode, UserMfa
 from app.schemas.mfa import SecurityStatus, TelegramAccount
-from app.services.audit import record_audit_event
+from app.services.audit import record_audit_event, record_auth_event
 from app.services.errors import api_error
 
 
@@ -254,6 +254,7 @@ async def complete_login(db, settings, token, method, code, ip):
     row = await locked_challenge(db, settings, user, "login", identifier=identifier)
     state = await db.get(UserMfa, user.id)
     if not await verify_proof(db, settings, user, state, method, code, telegram_challenge=row):
+        record_auth_event(db, "account.login_failed", user, user.username)
         await reject_code(db, settings, row)
     row.consumed_at = datetime.now(UTC)
     row.token_hash = None
@@ -265,6 +266,7 @@ async def complete_login(db, settings, token, method, code, ip):
             expires_at=datetime.now(UTC) + timedelta(seconds=settings.session_ttl_seconds),
         )
     )
+    record_auth_event(db, "account.login", user, user.username)
     await db.commit()
     return user, new_token
 

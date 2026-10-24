@@ -101,10 +101,11 @@ async def main() -> int:
         env["APP_ENV"] = "test"
         commands = [
             ["alembic", "upgrade", "head"],
-            ["pytest", "-q", "-ra"],
             ["alembic", "check"],
+            # Exercise reversibility before tests create history that cannot be downgraded losslessly.
             ["alembic", "downgrade", "base"],
             ["alembic", "upgrade", "head"],
+            ["pytest", "-q", "-ra"],
             ["alembic", "check"],
         ]
         for command in commands:

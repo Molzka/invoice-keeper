@@ -5,9 +5,25 @@ import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
 import { URL } from 'node:url'
 const source = stripTypeScriptTypes(readFileSync(new URL('./payment-calendar.ts', import.meta.url), 'utf8'), { mode: 'transform' })
-const { calendarCells, calendarMonthDays, calendarMonthRange, validCalendarDay, moveCalendarMonth, readCalendarRoute, calendarHash, calendarOccurrenceFilters, loadCalendarOccurrences } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'))
+const { calendarTotals, calendarCells, calendarMonthDays, calendarMonthRange, validCalendarDay, moveCalendarMonth, readCalendarRoute, calendarHash, calendarOccurrenceFilters, loadCalendarOccurrences } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'))
 const today = '2026-10-23'
 function occurrence(id, date = '2026-10-23') { return { id: String(id), title: 'Платёж ' + String(id), due_date: date } }
+
+test('daily totals keep cents exact, separate currencies and exclude cancelled obligations', () => {
+  const rows = [
+    { amount: '0.10', currency: 'RUB', status: 'paid', is_overdue: false },
+    { amount: '0.20', currency: 'RUB', status: 'unpaid', is_overdue: true },
+    ...Array.from({ length: 101 }, () => ({ amount: '999999999999.99', currency: 'USD', status: 'unpaid', is_overdue: false })),
+    { amount: '12.50', currency: 'EUR', status: 'paid', paid_late: true, is_overdue: false },
+    { amount: '900.00', currency: 'EUR', status: 'unpaid', is_overdue: true, is_cancelled: true },
+  ]
+  assert.deepEqual(calendarTotals(rows), {
+    RUB: { planned: '0.30', paid: '0.10', unpaid: '0.20', overdue: '0.20' },
+    USD: { planned: '100999999999998.99', paid: '0.00', unpaid: '100999999999998.99', overdue: '0.00' },
+    EUR: { planned: '12.50', paid: '12.50', unpaid: '0.00', overdue: '0.00' },
+  })
+  assert.deepEqual(calendarTotals([]).RUB, { planned: '0.00', paid: '0.00', unpaid: '0.00', overdue: '0.00' })
+})
 
 test('calendar uses Monday-first Gregorian weeks and actual month lengths', () => {
   const october = calendarCells('2026-10')

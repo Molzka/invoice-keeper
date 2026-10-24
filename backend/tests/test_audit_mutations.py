@@ -33,7 +33,16 @@ def ordered_audit_clock(monkeypatch):
 async def events(app):
     async with app.state.database.session_factory() as db:
         return list(
-            await db.scalars(select(AuditEvent).order_by(AuditEvent.occurred_at, AuditEvent.id))
+            await db.scalars(
+                select(AuditEvent)
+                # Login setup is covered separately by test_auth_audit.
+                .where(
+                    AuditEvent.action.not_in(
+                        ("account.login", "account.login_failed", "account.logout")
+                    )
+                )
+                .order_by(AuditEvent.occurred_at, AuditEvent.id)
+            )
         )
 
 

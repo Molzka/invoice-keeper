@@ -16,6 +16,7 @@ from app.models import UserSession
 from app.schemas.auth import AuthResponse, ChangePasswordRequest, LoginRequest
 from app.schemas.mfa import MfaRequired
 from app.schemas.users import UserRead
+from app.services.audit import record_auth_event
 from app.services.auth import change_password as change_own_password
 from app.services.auth import login as create_login_session
 
@@ -150,7 +151,11 @@ async def change_password(
 
 @router.post("/logout", status_code=204, dependencies=[Depends(require_csrf)])
 async def logout(request: Request, auth: CurrentSession, db: DbSession) -> Response:
-    await db.execute(delete(UserSession).where(UserSession.id == auth.session.id))
+    removed = await db.scalar(
+        delete(UserSession).where(UserSession.id == auth.session.id).returning(UserSession.id)
+    )
+    if removed is not None:
+        record_auth_event(db, "account.logout", auth.user, auth.user.username)
     await db.commit()
     settings = request.app.state.settings
     response = Response(status_code=204, headers={"Cache-Control": "no-store"})
