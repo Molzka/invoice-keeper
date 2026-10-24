@@ -8,8 +8,10 @@ COPY tsconfig*.json vite.config.ts eslint.config.js index.html ./
 COPY src ./src
 COPY public ./public
 
-# This image runs the standalone demo until the backend is integrated.
-ENV VITE_API_MODE=mock VITE_API_BASE_URL=/api/v1
+# Keep the demo available until the payments API is implemented.
+ARG VITE_API_MODE=mock
+ENV VITE_API_MODE=$VITE_API_MODE VITE_API_BASE_URL=/api/v1
+RUN test "$VITE_API_MODE" = mock || test "$VITE_API_MODE" = real
 RUN npm run typecheck && npm run lint && npm run build
 
 FROM nginx:1.30.6-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
