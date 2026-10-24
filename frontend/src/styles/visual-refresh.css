@@ -101,3 +101,10 @@
 .brand-logo:is(:hover, :focus-visible, [data-open='true']) .brand-name { font-size: 16px; }
 @media (max-width: 760px) { .brand-logo:is(:hover, :focus-visible, [data-open='true']) .brand-name { font-size: 15px; } }
 @media (max-width: 360px) { .brand-logo:is(:hover, :focus-visible, [data-open='true']) .brand-name { font-size: 13px; } }
+
+/* Payment actions share one width and a consistent alignment. */
+.payment-form .payment-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 10px; }
+.payment-actions > .btn { width: 100%; min-width: 0; min-height: 48px; white-space: normal; }
+.payment-actions > .btn:only-child { grid-column: 1 / -1; }
+.payment-history-button { width: 100%; min-height: 48px; margin-top: 16px; }
+@media (max-width: 420px) { .payment-form .payment-actions { grid-template-columns: minmax(0, 1fr); } }
