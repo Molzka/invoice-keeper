@@ -1,7 +1,7 @@
 import { api } from './client'
 import type { AuditFilters, AuditPage } from '../types/activity'
 
-/** Replace this adapter when the backend audit contract is agreed; never synthesize real history. */
+/** Real mode always reads the persistent server journal. */
 export const activitySource = {
   list: (filters: AuditFilters): Promise<AuditPage> => api.listAuditEvents(filters),
 }

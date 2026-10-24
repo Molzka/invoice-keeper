@@ -20,6 +20,7 @@ from app.models import (
     AuditEvent,
     LoginRateLimit,
     PaymentOccurrence,
+    PaymentReceipt,
     RecurringPayment,
     User,
     UserSession,
@@ -93,6 +94,7 @@ async def app(migrated_database_url):
             await session.execute(delete(deliveries))
             for model in (
                 AuditEvent,
+                PaymentReceipt,
                 PaymentOccurrence,
                 RecurringPayment,
                 UserSession,

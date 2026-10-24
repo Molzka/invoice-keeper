@@ -10,8 +10,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
+from app.api.budget import router as budget_router
 from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
 from app.api.payments import router as payments_router
+from app.api.receipts import router as receipts_router
 from app.api.users import router as users_router
 from app.core.config import Settings, settings
 from app.core.exceptions import (
@@ -53,6 +55,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
     async def private_responses(request, call_next):
         if request.url.path.startswith("/api/v1/") and request.method in {
             "POST",
+            "PUT",
             "PATCH",
             "DELETE",
         }:
@@ -63,7 +66,15 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 response.headers["Cache-Control"] = "no-store"
                 return response
         response = await call_next(request)
-        if request.url.path.startswith(("/api/v1/auth", "/api/v1/users", "/api/v1/audit-events")):
+        if request.url.path.startswith(
+            (
+                "/api/v1/auth",
+                "/api/v1/users",
+                "/api/v1/audit-events",
+                "/api/v1/payments/budget",
+                "/api/v1/payment-occurrences",
+            )
+        ):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -71,8 +82,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=config.allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "X-CSRF-Token"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "X-CSRF-Token", "X-Filename"],
         expose_headers=["Retry-After"],
     )
     api_router = APIRouter(
@@ -96,6 +107,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
 
     api_router.include_router(auth_router)
     api_router.include_router(audit_router)
+    api_router.include_router(budget_router)
+    api_router.include_router(receipts_router)
     api_router.include_router(users_router)
     api_router.include_router(payments_router)
     app.include_router(api_router)

@@ -92,10 +92,7 @@ async function recoverCsrfSession(expectedUser: AuthResponse['user'], context: {
 }
 
 export const api = {
-  listAuditEvents: (filters: AuditFilters): Promise<AuditPage> => {
-    if (API_MODE !== 'mock') return Promise.reject(new ApiError(501, 'AUDIT_NOT_AVAILABLE', 'Журнал действий ещё не подключён к серверу'))
-    return request<AuditPage>('/audit-events' + query(filters))
-  },
+  listAuditEvents: (filters: AuditFilters): Promise<AuditPage> => request<AuditPage>('/audit-events' + query(filters)),
   async login(payload: LoginRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/login', 'POST', payload); installSession(data); return data },
   async changePassword(payload: ChangePasswordRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/change-password', 'POST', { current_password: payload.current_password, new_password: payload.new_password }); installSession(data); return data },
   async me(): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/me'); installSession(data); return data },

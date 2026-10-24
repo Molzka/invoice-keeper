@@ -14,6 +14,8 @@ AuditAction = Literal[
     "user.updated",
     "user.deleted",
     "password.changed",
+    "payment.receipt_updated",
+    "payment.receipt_deleted",
 ]
 AuditEntityType = Literal["payment", "user", "account"]
 AUDIT_ACTION_LABELS: dict[str, str] = {
@@ -26,6 +28,8 @@ AUDIT_ACTION_LABELS: dict[str, str] = {
     "user.updated": "Изменён пользователь",
     "user.deleted": "Удалён пользователь",
     "password.changed": "Изменён пароль",
+    "payment.receipt_updated": "Добавлено подтверждение оплаты",
+    "payment.receipt_deleted": "Удалено подтверждение оплаты",
 }
 SAFE_CHANGE_FIELDS = frozenset(
     {
@@ -38,6 +42,7 @@ SAFE_CHANGE_FIELDS = frozenset(
         "due_date",
         "is_active",
         "username",
+        "receipt",
     }
 )
 

@@ -10,6 +10,8 @@ export const auditActionLabels: Record<AuditAction, string> = {
   'user.updated': 'Изменение пользователя',
   'user.deleted': 'Удаление пользователя',
   'password.changed': 'Смена своего пароля',
+  'payment.receipt_updated': 'Изменение подтверждения оплаты',
+  'payment.receipt_deleted': 'Удаление подтверждения оплаты',
 }
 const actions = Object.keys(auditActionLabels)
 const maxOffset = 1_000_000

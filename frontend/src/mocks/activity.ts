@@ -4,7 +4,7 @@ import type { AuditChange, AuditEvent, AuditFilters, AuditPage } from '../types/
 import { businessNowIso, businessToday, DEMO_TODAY, shiftCalendarDays } from '../config/demo'
 
 // This whitelist is intentionally unrelated to arbitrary mutation bodies: secrets never enter the log.
-const safeFields = new Set(['title', 'amount', 'currency', 'first_due_date', 'status', 'paid_on', 'due_date', 'is_active', 'username'])
+const safeFields = new Set(['title', 'amount', 'currency', 'first_due_date', 'status', 'paid_on', 'due_date', 'is_active', 'username', 'receipt'])
 const copy = <T>(value: T): T => structuredClone(value)
 export type NewAuditEvent = Pick<AuditEvent, 'actor' | 'action' | 'entity'> & { changes?: AuditChange[]; occurred_at?: string }
 

@@ -75,7 +75,7 @@ async def test_audit_upgrade_and_downgrade_preserve_existing_business_data(migra
             table: await connection.fetchrow(f"SELECT * FROM {table} WHERE id=$1", record_id)
             for table, record_id in tables.items()
         }
-        migrate("head")
+        migrate("0005")
         assert await connection.fetchval("SELECT version_num FROM alembic_version") == "0005"
         assert await connection.fetchval("SELECT COUNT(*) FROM audit_events") == 0
         for table, record_id in tables.items():

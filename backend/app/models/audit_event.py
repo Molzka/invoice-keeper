@@ -16,7 +16,7 @@ class AuditEvent(Base):
         CheckConstraint(
             "action IN ('payment.created', 'payment.stopped', 'payment.paid', "
             "'payment.unpaid', 'payment.date_changed', 'user.created', 'user.updated', "
-            "'user.deleted', 'password.changed')",
+            "'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted')",
             name="action",
         ),
         CheckConstraint("entity_type IN ('payment', 'user', 'account')", name="entity_type"),
