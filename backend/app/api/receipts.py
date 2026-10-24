@@ -70,7 +70,7 @@ async def put_receipt(
         body = await _read_body(request, 64 * 1024)
         try:
             payload = json.loads(body)
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (ValueError, RecursionError):
             raise api_error(400, "INVALID_JSON", "Некорректный JSON") from None
         try:
             link = ReceiptLinkUpdate.model_validate(payload)

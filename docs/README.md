@@ -22,6 +22,7 @@
 
 ## Разработка
 
+- [Соответствие исходному ТЗ: правила, исправления и границы проверки](development/spec-compliance.md).
 - [Карта репозитория: где менять и отлаживать](development/repository-structure.md).
 - [Команда, зависимости, Git и миграции](development/team-workflow.md).
 - [Локальный backend](development/backend.md).

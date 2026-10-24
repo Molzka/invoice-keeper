@@ -102,7 +102,7 @@ function username(value: unknown): string {
   if (typeof value !== 'string' || !/^[a-z0-9_.-]{3,64}$/.test(value)) invalid('username', 'От 3 до 64 символов: a–z, цифры, точка, дефис или подчёркивание')
   return value
 }
-function password(value: unknown): string { if (typeof value !== 'string' || value.length < 8 || value.length > 128) invalid('password', 'Пароль должен содержать от 8 до 128 символов'); return value }
+function password(value: unknown): string { if (typeof value !== 'string' || Array.from(value).length < 8 || Array.from(value).length > 128) invalid('password', 'Пароль должен содержать от 8 до 128 символов'); return value }
 function passwordChangeValue(value: unknown, field: string, minimum: number): string {
   if (typeof value !== 'string' || Array.from(value).length < minimum || Array.from(value).length > 128) invalid(field, `Пароль должен содержать от ${minimum} до 128 символов`)
   return value
@@ -245,7 +245,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       if (method === 'POST') {
         requireAdmin(user); queryAllowed(url.searchParams, [])
         const body = bodyObject(init, ['title', 'amount', 'currency', 'first_due_date', 'periodicity'], ['title', 'amount', 'currency', 'first_due_date', 'periodicity'])
-        if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.trim().length > 200) invalid('title', 'Название должно содержать от 1 до 200 символов')
+        if (typeof body.title !== 'string' || body.title.trim().length < 1 || Array.from(body.title.trim()).length > 200) invalid('title', 'Название должно содержать от 1 до 200 символов')
         const amount = money(body.amount), firstDue = date(body.first_due_date, 'first_due_date')
         if (typeof body.currency !== 'string' || !['RUB', 'USD', 'EUR'].includes(body.currency)) invalid('currency', 'Выберите RUB, USD или EUR')
         if (body.periodicity !== 'monthly') invalid('periodicity', 'Поддерживается ежемесячное повторение')

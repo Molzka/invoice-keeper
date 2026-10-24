@@ -95,12 +95,18 @@ export function PaymentDrawer({ initial, today, timezone, onClose, onSaved, onHi
   const [fieldError, setFieldError] = useState('')
   const guard = useRef(false)
   const openedOn = useRef(today)
+  const paidOnEdited = useRef(false)
   useEffect(() => {
     let alive = true
-    // A calendar rollover updates the limit and hint without replacing a date the user is editing.
-    api.getOccurrence(initial.id).then(value => { if (alive) { setItem(value); setPaidOn(value.paid_on || openedOn.current) } }).catch(reason => { if (alive) setError(reason) }).finally(() => { if (alive) setLoading(false) })
+    // Refresh server-derived overdue status at midnight without replacing an edited date.
+    api.getOccurrence(initial.id).then(value => {
+      if (alive) {
+        setItem(value)
+        if (!paidOnEdited.current) setPaidOn(value.paid_on || openedOn.current)
+      }
+    }).catch(reason => { if (alive) setError(reason) }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [initial.id])
+  }, [initial.id, today, timezone])
   async function save(paid: boolean) {
     if (guard.current) return
     const actualPaidOn = paidOn
@@ -115,7 +121,7 @@ export function PaymentDrawer({ initial, today, timezone, onClose, onSaved, onHi
       if (reason instanceof ApiError) setFieldError(reason.details.find(detail => detail.field === 'paid_on')?.message || '')
     } finally { guard.current = false; setBusy(false) }
   }
-  return <Drawer canClose={!busy} title={item.status === 'paid' ? 'Изменить оплату' : 'Отметить оплату'} subtitle="Изменение относится только к этому периоду." onClose={() => { if (!guard.current) onClose() }}><div className="payment-detail"><h3 className="payment-title">{item.title}</h3><dl><div><dt>Сумма</dt><dd>{money(item.amount, item.currency)}</dd></div><div><dt>Срок оплаты</dt><dd>{dateLabel(item.due_date)}</dd></div><div><dt>Статус</dt><dd><PaymentStatus item={item}/></dd></div>{item.days_late > 0 && <div><dt>Дней опоздания</dt><dd>{item.days_late}</dd></div>}</dl>{!item.recurring_payment_is_active && <div className="notice"><Info size={18}/><p>Регулярный платёж прекращён. Этот период сохранён в истории, его оплату можно исправить.</p></div>}</div>{error ? <ErrorNotice error={error}/> : null}<form className="payment-form" noValidate onSubmit={(event: FormEvent) => { event.preventDefault(); void save(true) }}><div className="field"><label htmlFor="paid-on">Фактическая дата оплаты</label><DatePicker name="paid_on" id="paid-on" today={today} aria-label="Фактическая дата оплаты" required max={today} value={paidOn} onChange={setPaidOn} disabled={busy || loading} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? "paid-on-hint paid-on-error" : "paid-on-hint"}/><small id="paid-on-hint">Досрочная оплата разрешена. Сегодня ({timezone}): {dateLabel(today)}.</small>{fieldError && <span id="paid-on-error" className="field-error" role="alert">{fieldError}</span>}</div><div className="notice"><Info size={18}/><p>Вы подтверждаете уже выполненную оплату. Дата срока остаётся прежней; просрочку пересчитает сервер.</p></div><div className="form-actions payment-actions"><button className="btn btn-primary" type="submit" disabled={busy || loading}>{busy ? <span className="spinner"/> : <Check size={17}/>} {item.status === 'paid' ? 'Сохранить дату' : 'Подтвердить оплату'}</button>{item.status === 'paid' && <button className="btn btn-danger" type="button" disabled={busy || loading} onClick={() => void save(false)}>Отменить отметку оплаты</button>}</div></form><button type="button" className="btn btn-secondary payment-history-button" disabled={busy} onClick={onHistory}><History size={16}/> Вся история платежа</button></Drawer>
+  return <Drawer canClose={!busy} title={item.status === 'paid' ? 'Изменить оплату' : 'Отметить оплату'} subtitle="Изменение относится только к этому периоду." onClose={() => { if (!guard.current) onClose() }}><div className="payment-detail"><h3 className="payment-title">{item.title}</h3><dl><div><dt>Сумма</dt><dd>{money(item.amount, item.currency)}</dd></div><div><dt>Срок оплаты</dt><dd>{dateLabel(item.due_date)}</dd></div><div><dt>Статус</dt><dd><PaymentStatus item={item}/></dd></div>{item.days_late > 0 && <div><dt>Дней опоздания</dt><dd>{item.days_late}</dd></div>}</dl>{!item.recurring_payment_is_active && <div className="notice"><Info size={18}/><p>Регулярный платёж прекращён. Этот период сохранён в истории, его оплату можно исправить.</p></div>}</div>{error ? <ErrorNotice error={error}/> : null}<form className="payment-form" noValidate onSubmit={(event: FormEvent) => { event.preventDefault(); void save(true) }}><div className="field"><label htmlFor="paid-on">Фактическая дата оплаты</label><DatePicker name="paid_on" id="paid-on" today={today} aria-label="Фактическая дата оплаты" required max={today} value={paidOn} onChange={value => { paidOnEdited.current = true; setPaidOn(value) }} disabled={busy || loading} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? "paid-on-hint paid-on-error" : "paid-on-hint"}/><small id="paid-on-hint">Досрочная оплата разрешена. Сегодня ({timezone}): {dateLabel(today)}.</small>{fieldError && <span id="paid-on-error" className="field-error" role="alert">{fieldError}</span>}</div><div className="notice"><Info size={18}/><p>Вы подтверждаете уже выполненную оплату. Дата срока остаётся прежней; просрочку пересчитает сервер.</p></div><div className="form-actions payment-actions"><button className="btn btn-primary" type="submit" disabled={busy || loading}>{busy ? <span className="spinner"/> : <Check size={17}/>} {item.status === 'paid' ? 'Сохранить дату' : 'Подтвердить оплату'}</button>{item.status === 'paid' && <button className="btn btn-danger" type="button" disabled={busy || loading} onClick={() => void save(false)}>Отменить отметку оплаты</button>}</div></form><button type="button" className="btn btn-secondary payment-history-button" disabled={busy} onClick={onHistory}><History size={16}/> Вся история платежа</button></Drawer>
 }
 
 

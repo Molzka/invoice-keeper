@@ -105,6 +105,9 @@ jobs:
           python3 scripts/checks/check_backend.py "$FRONTEND_URL"
           python3 scripts/checks/check_frontend.py "$FRONTEND_URL" --api-ready
 
+      - name: Check payment rules and financial API through Nginx
+        run: python3 scripts/checks/check_payment_rules.py "$FRONTEND_URL"
+
       - name: Check proxy recovery after replacing API container
         run: |
           docker compose --env-file .env.example rm --stop --force backend

@@ -55,7 +55,10 @@ Amount = Annotated[
     StringConstraints(pattern=r"^[0-9]+\.[0-9]{2}$"),
     BeforeValidator(validate_amount),
 ]
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Title = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=200, pattern=r"^[^\x00]*$"),
+]
 
 
 class RecurringPaymentCreate(BaseModel):

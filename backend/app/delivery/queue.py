@@ -13,9 +13,13 @@ from app.delivery.schema import deliveries
 
 
 def reminder_at(due_date: date, timezone_name: str = DEFAULT_TIMEZONE) -> datetime:
-    return datetime.combine(
-        due_date - timedelta(days=3), time.min, ZoneInfo(timezone_name)
-    ).astimezone(UTC)
+    zone = ZoneInfo(timezone_name)
+    try:
+        return datetime.combine(due_date - timedelta(days=3), time.min, zone).astimezone(UTC)
+    except OverflowError:
+        # The API accepts year 0001; its earliest reminders predate Python's
+        # datetime range. They are already due, including after UTC conversion.
+        return datetime.min.replace(tzinfo=UTC)
 
 
 def utc_time(value: datetime | None = None) -> datetime:
