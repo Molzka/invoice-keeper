@@ -9,4 +9,6 @@ import './styles/motion.css';
 import './styles/workspace-art.css';
 import './styles/dashboard-detail.css';
 import './styles/button-polish.css';
+import './styles/recurring-preview.css';
+import './styles/summary-links.css';
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

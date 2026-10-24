@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, API_MODE, ApiError } from '../api/client';
 import { businessToday } from '../config/demo';
+import { isCalendarDate, normalizeRecurringAmount, previewMonthlyDueDates } from '../lib/recurring-inputs';
 import type { RecurringPayment, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
 import { PageHeader } from './PageHeader';
@@ -36,15 +37,6 @@ function createdDate(value: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     timeZone: 'Europe/Moscow', day: '2-digit', month: 'short', year: 'numeric',
   }).format(new Date(value));
-}
-
-function isCalendarDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day <= days[month - 1];
 }
 
 function fieldsFromError(error: unknown): FieldErrors {
@@ -165,21 +157,23 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
   const [uncertain, setUncertain] = useState(false);
   const [busy, setBusy] = useState(false);
   const guard = useRef(false);
+  const dueDates = previewMonthlyDueDates(firstDueDate);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (guard.current || uncertain) return;
     const nextErrors: FieldErrors = {};
     if (!title.trim() || title.trim().length > 200) nextErrors.title = 'Введите название от 1 до 200 символов.';
-    if (!/^\d{1,12}\.\d{2}$/.test(amount) || /^0+\.00$/.test(amount)) nextErrors.amount = 'Введите сумму от 0.01 до 999999999999.99 с двумя знаками после точки.';
+    const normalizedAmount = normalizeRecurringAmount(amount);
+    if (normalizedAmount === null) nextErrors.amount = 'Введите сумму от 0,01 до 999999999999,99. Например: 45000, 45000,50 или 45000.50; не более двух знаков после разделителя.';
     if (!isCalendarDate(firstDueDate)) nextErrors.first_due_date = 'Выберите действительную дату первого срока.';
     setErrors(nextErrors);
     setError(null);
-    if (Object.keys(nextErrors).length) return;
+    if (Object.keys(nextErrors).length || normalizedAmount === null) return;
     guard.current = true;
     setBusy(true);
     try {
-      await api.createRecurringPayment({ title: title.trim(), amount, currency, first_due_date: firstDueDate, periodicity: 'monthly' });
+      await api.createRecurringPayment({ title: title.trim(), amount: normalizedAmount, currency, first_due_date: firstDueDate, periodicity: 'monthly' });
       onCreated();
     } catch (caught) {
       setErrors(fieldsFromError(caught));
@@ -191,9 +185,17 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
   return <Drawer canClose={!busy} title="Новый регулярный платёж" subtitle="Добавьте обязательство один раз — дальше каждый месяц." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
     <form onSubmit={submit} noValidate className="form-grid">
       <label className="field" htmlFor="recurring-title"><span>Название платежа</span><input id="recurring-title" name="title" value={title} onChange={event => setTitle(event.target.value)} maxLength={200} placeholder="Например, аренда офиса" disabled={busy || uncertain} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? 'recurring-title-error' : undefined} required /><FieldMessage id="recurring-title-error" message={errors.title} /></label>
-      <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000.00" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Два знака после точки</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><SelectField id="recurring-currency" value={currency} onChange={value => setCurrency(value as Currency)} options={[{value: "RUB", label: "RUB · рубль"}, {value: "USD", label: "USD · доллар"}, {value: "EUR", label: "EUR · евро"}]} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}/><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
+      <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000 или 45000,50" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Например: 45000, 45000,50 или 45000.50</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><SelectField id="recurring-currency" value={currency} onChange={value => setCurrency(value as Currency)} options={[{value: "RUB", label: "RUB · рубль"}, {value: "USD", label: "USD · доллар"}, {value: "EUR", label: "EUR · евро"}]} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}/><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
       <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><DatePicker id="recurring-date" today={businessToday(API_MODE)} aria-label="Первый срок оплаты" value={firstDueDate} onChange={setFirstDueDate} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
       <div className="field"><span>Периодичность</span><div className="static-field">↻ Каждый месяц</div><span className="field-hint">Если в месяце нет выбранного числа, сроком станет его последний день.</span><FieldMessage id="recurring-periodicity-error" message={errors.periodicity} /></div>
+      <section className="recurring-preview" aria-labelledby="recurring-preview-title">
+        <div className="recurring-preview-heading"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="4" stroke="currentColor" strokeWidth="1.6" /><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg><h3 id="recurring-preview-title">Предварительные сроки</h3><span>3 месяца</span></div>
+        <div className="recurring-preview-dates" aria-live="polite" aria-atomic="true">
+          {dueDates.length ? <ol>{dueDates.map((date, index) => <li key={index}><span className="recurring-preview-step">{String(index + 1).padStart(2, '0')}</span><time dateTime={date}>{calendarDate(date)}</time></li>)}</ol> : <p className="recurring-preview-empty">Выберите первый срок — покажем три ближайшие даты.</p>}
+          {dueDates.length > 0 && dueDates.length < 3 && <p className="recurring-preview-empty">Дальнейшие даты выходят за поддерживаемый диапазон до 9999 года.</p>}
+        </div>
+        <p className="recurring-preview-note">Это предварительный расчёт. Окончательные сроки рассчитывает сервер.</p>
+      </section>
       <div className="notice"><strong>Напоминания в Telegram</strong><p>Неоплаченные периоды будут напоминать о себе за 3 дня до срока. Для уже близкого или прошедшего срока напоминание готовится сразу.</p></div>
       {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}
       <div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busy} onClick={() => uncertain ? onCheck() : onClose()}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Создаём…' : 'Добавить платёж'}</button></div>

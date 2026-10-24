@@ -1,0 +1,80 @@
+/* Totals are real links: they can be followed, copied or opened in another tab. */
+.summary-caption:has(+ .summary-navigation-hint) { margin-bottom: 6px; }
+.summary-navigation-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 15px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.summary-navigation-hint > svg { color: #238291; flex-shrink: 0; }
+.summary-amount-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  min-height: 24px;
+  margin: -3px -4px;
+  padding: 3px 4px;
+  border-radius: 7px;
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 4px;
+  transition: color 160ms, background-color 160ms;
+}
+.summary-amount-link > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.summary-amount-link > svg {
+  flex-shrink: 0;
+  color: var(--currency-accent, #18889a);
+  opacity: .5;
+  transition: transform 220ms var(--ease-out), opacity 160ms;
+}
+.currency-amount, .currency-breakdown { min-width: 0; }
+.currency-amount .summary-amount-link { justify-content: flex-start; }
+/* Wrap a long amount below its label before the narrow card clips either one. */
+.currency-breakdown > div { min-width: 0; flex-wrap: wrap; row-gap: 3px; }
+.currency-breakdown dt {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.currency-breakdown dd { min-width: 0; max-width: 100%; flex: 1 1 auto; }
+.summary-amount-link[aria-current='true'] {
+  background: var(--currency-soft, #eef8fa);
+  text-decoration: underline;
+  text-decoration-color: var(--currency-line, #cde7eb);
+}
+.summary-amount-link:focus-visible {
+  outline: 3px solid #16879a;
+  outline-offset: 3px;
+  background: var(--currency-soft, #eef8fa);
+  text-decoration: underline;
+}
+#payment-results { scroll-margin-top: 24px; }
+@media (hover: hover) and (pointer: fine) {
+  .summary-amount-link:hover {
+    background: var(--currency-soft, #eef8fa);
+    text-decoration: underline;
+    text-decoration-color: var(--currency-line, #cde7eb);
+  }
+  .summary-amount-link:hover > svg { opacity: 1; transform: translate(1px, -1px); }
+}
+@media (pointer: coarse) {
+  .summary-amount-link { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .summary-amount-link, .summary-amount-link > svg { transition: none; }
+  .summary-amount-link:hover > svg { transform: none; }
+}

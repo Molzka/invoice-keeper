@@ -1,0 +1,94 @@
+/* The browser estimate is a guide; stored payment dates still come from the API. */
+.recurring-preview {
+  margin: 0 0 20px;
+  padding: 15px;
+  border: 1px solid #dce8eb;
+  border-radius: 17px;
+  background: linear-gradient(125deg, #f0f8f9, #fbfcfd 72%);
+  color: var(--ink);
+}
+.recurring-preview-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 13px;
+}
+.recurring-preview-heading > svg { flex-shrink: 0; color: #158394; }
+.drawer-body .recurring-preview-heading > h3 {
+  margin: 0;
+  color: #273e46;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.recurring-preview-heading > span {
+  margin-left: auto;
+  color: #62717b;
+  font-size: 10px;
+}
+.recurring-preview-dates > ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.recurring-preview-dates li {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e0e8eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 4px #1f506504;
+}
+.recurring-preview-dates li:first-child {
+  border-color: #bbdee3;
+  background: #f6fcfc;
+}
+.recurring-preview-step {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 7px;
+  background: #eef3f5;
+  color: #62717b;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.recurring-preview-dates li:first-child .recurring-preview-step {
+  background: #dff1f3;
+  color: #176c78;
+}
+.recurring-preview-dates time {
+  color: #25383f;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.recurring-preview .recurring-preview-note,
+.recurring-preview .recurring-preview-empty {
+  margin: 11px 0 0;
+  color: #5c6b74;
+  font-size: 10px;
+  line-height: 1.65;
+}
+.recurring-preview .recurring-preview-empty { margin: 0; }
+.recurring-preview-dates > .recurring-preview-empty + .recurring-preview-empty,
+.recurring-preview-dates > ol + .recurring-preview-empty { margin-top: 10px; }
+@media (max-width: 380px) {
+  .recurring-preview { padding: 12px; }
+  .recurring-preview-heading { gap: 6px; }
+  .recurring-preview-heading > span { width: 100%; margin-left: 24px; }
+  .recurring-preview-dates > ol { gap: 6px; }
+  .recurring-preview-dates li { padding: 8px 5px; }
+}

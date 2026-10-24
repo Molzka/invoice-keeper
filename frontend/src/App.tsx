@@ -5,14 +5,16 @@ import { api, API_MODE, ApiError } from './api/client'
 import type { User } from './types/api'
 import { businessToday, DEMO_DATE_LABEL } from './config/demo'
 import { monthLabel } from './lib/format'
+import { defaultPaymentFilters, paymentHash, viewHash } from './lib/payment-route'
+import type { PaymentRoute, WorkspaceView } from './lib/payment-route'
+import { useWorkspaceRoute, writeWorkspaceHash } from './lib/useWorkspaceRoute'
 import { PageHeader } from './components/PageHeader'
 import { SectionArt } from './components/SectionArt'
 import { PaymentsView } from './components/PaymentsView'
 import { RecurringView, UsersView } from './components/AdminViews'
 import { ErrorNotice } from './components/UI'
 
-type View = 'payments' | 'recurring' | 'history' | 'users'
-function currentView(): View { const value = window.location.hash.slice(1); return ['payments','recurring','history','users'].includes(value) ? value as View : 'payments' }
+type View = WorkspaceView
 function Brand({ onHome }: { onHome?: () => void }) {
   const [open, setOpen] = useState(false)
   return <button type="button" className="brand-logo" data-open={open} aria-label="Invoice Keeper — главная" onClick={() => { if (window.matchMedia('(hover: none)').matches && !open) setOpen(true); else onHome?.() }} onBlur={() => setOpen(false)}><span className="brand-letter" aria-hidden="true">é</span><span className="brand-name" aria-hidden="true"><span className="brand-word brand-word-invoice">Invoice</span><span className="brand-word brand-word-keeper">Keeper<span className="brand-name-dot">.</span></span></span><span className="brand-receipt" aria-hidden="true"><ReceiptText size={15}/></span></button>
@@ -41,7 +43,6 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [restoring, setRestoring] = useState(true)
   const [restoreError, setRestoreError] = useState<unknown>(null)
-  const [view, setView] = useState<View>(currentView)
   const [revision, setRevision] = useState(0)
   const [toast, setToast] = useState('')
   const [logoutBusy, setLogoutBusy] = useState(false)
@@ -51,6 +52,14 @@ export default function App() {
   const logoutGuard = useRef(false)
   userRef.current = user
   const today = businessToday(API_MODE)
+  const route = useWorkspaceRoute(today)
+  const view = route.view
+  const selectedRule = view === 'history' && route.ruleId
+    ? { id: route.ruleId, title: historyRule?.id === route.ruleId ? historyRule.title : 'История выбранного платежа' }
+    : null
+  const changePaymentRoute = useCallback((next: PaymentRoute, replace = false) => {
+    writeWorkspaceHash(paymentHash(next.view === 'history' ? 'history' : 'payments', next.filters, { limit: next.limit, offset: next.offset, ruleId: next.ruleId }), replace)
+  }, [])
   const changed = useCallback(() => setRevision(value => value + 1), [])
   const notify = useCallback((message: string) => setToast(message), [])
   const createHandled = useCallback(() => setCreateRequested(0), [])
@@ -63,14 +72,15 @@ export default function App() {
   useEffect(() => {
     void restore()
     const unauthorized = () => { if (userRef.current) setToast('Сессия завершилась. Войдите снова.'); setUser(null); setRestoring(false) }
-    const hashChanged = () => setView(currentView())
     window.addEventListener('invoice:unauthorized', unauthorized)
-    window.addEventListener('hashchange', hashChanged)
-    return () => { window.removeEventListener('invoice:unauthorized', unauthorized); window.removeEventListener('hashchange', hashChanged) }
+    return () => { window.removeEventListener('invoice:unauthorized', unauthorized) }
   }, [restore])
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timer) }, [toast])
-  function navigate(next: View) { window.location.hash = next; setView(next) }
-  function showHistory(id: string, title: string) { setHistoryRule({id,title}); navigate('history') }
+  function navigate(next: View) { writeWorkspaceHash(viewHash(next)) }
+  function showHistory(id: string, title: string) {
+    setHistoryRule({ id, title })
+    writeWorkspaceHash(paymentHash('history', defaultPaymentFilters('history', today), { limit: route.limit, offset: 0, ruleId: id }))
+  }
   async function logout() {
     if (logoutGuard.current) return
     logoutGuard.current = true; setLogoutBusy(true)
@@ -83,5 +93,5 @@ export default function App() {
   const admin = user.role === 'admin'
   const titles: Record<View,string> = { payments:'Платежи', recurring:'Регулярные платежи', history:'История оплат', users:'Пользователи' }
   const subtitles: Record<View,string> = { payments:'Ближайшие сроки и обязательства команды — в одном месте.', recurring:'Настройте повторение один раз. История каждого периода сохранится.', history:'Каждый месяц — отдельный срок, статус и фактическая дата оплаты.', users:'Управляйте доступом обычных пользователей к общей панели.' }
-  return <div className="app-shell"><a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>Перейти к содержимому</a><header className="topbar"><div className="brand-slot"><Brand onHome={() => navigate('payments')}/></div><nav className="main-nav" aria-label="Основная навигация">{([{id:'payments',text:'Платежи',icon:LayoutList},{id:'recurring',text:'Регулярные',icon:Repeat2},{id:'history',text:'История',icon:ReceiptText},...(admin ? [{id:'users',text:'Пользователи',icon:Users}] : [])]).map(item => <a key={item.id} className={`nav-link ${view === item.id ? 'active' : ''}`} href={`#${item.id}`} aria-current={view === item.id ? 'page' : undefined}><item.icon size={16} aria-hidden="true"/>{item.text}</a>)}</nav><div className="user-menu"><div className="user-avatar" aria-hidden="true"><UserRound size={18}/></div><div><strong>{user.username}</strong><small>{admin ? 'Администратор' : 'Пользователь'}</small></div><button className="icon-button" type="button" disabled={logoutBusy} onClick={() => void logout()} aria-label="Выйти из системы">{logoutBusy ? <span className="spinner"/> : <LogOut size={17}/>}</button></div></header><main id="main-content" className="app-main" tabIndex={-1}>{(view === 'payments' || view === 'history') && <PageHeader key={view} kind={view} title={titles[view]} description={subtitles[view]} eyebrow={<>{view === 'payments' ? monthLabel(today.slice(0,7)) : 'Рабочее пространство'}{API_MODE === 'mock' && <span className="demo-badge">Демо</span>}</>}>{view === 'payments' && admin && <button className="btn btn-primary" type="button" onClick={() => { setCreateRequested(value => value + 1); navigate('recurring') }}><Plus size={18}/> Добавить платёж</button>}</PageHeader>}{(view === 'payments' || view === 'history') && <PaymentsView key={`${view}:${view === 'history' ? historyRule?.id || 'all' : ''}`} mode={view} revision={revision} today={today} selectedRule={view === 'history' ? historyRule : null} onClearRule={() => setHistoryRule(null)} onHistory={showHistory} onChanged={changed} notify={notify}/>}{view === 'recurring' && <RecurringView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify} createRequested={createRequested} onCreateRequestHandled={createHandled}/>}{view === 'users' && <UsersView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify}/>}</main>{toast && <div className="toast" role="status"><Check size={17}/>{toast}<button className="toast-close" type="button" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</div>
+  return <div className="app-shell"><a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>Перейти к содержимому</a><header className="topbar"><div className="brand-slot"><Brand onHome={() => navigate('payments')}/></div><nav className="main-nav" aria-label="Основная навигация">{([{id:'payments',text:'Платежи',icon:LayoutList},{id:'recurring',text:'Регулярные',icon:Repeat2},{id:'history',text:'История',icon:ReceiptText},...(admin ? [{id:'users',text:'Пользователи',icon:Users}] : [])]).map(item => <a key={item.id} className={`nav-link ${view === item.id ? 'active' : ''}`} href={item.id === view ? window.location.hash || viewHash(view) : `#${item.id}`} aria-current={view === item.id ? 'page' : undefined}><item.icon size={16} aria-hidden="true"/>{item.text}</a>)}</nav><div className="user-menu"><div className="user-avatar" aria-hidden="true"><UserRound size={18}/></div><div><strong>{user.username}</strong><small>{admin ? 'Администратор' : 'Пользователь'}</small></div><button className="icon-button" type="button" disabled={logoutBusy} onClick={() => void logout()} aria-label="Выйти из системы">{logoutBusy ? <span className="spinner"/> : <LogOut size={17}/>}</button></div></header><main id="main-content" className="app-main" tabIndex={-1}>{(view === 'payments' || view === 'history') && <PageHeader key={view} kind={view} title={titles[view]} description={subtitles[view]} eyebrow={<>{view === 'payments' ? (route.filters.date_from.slice(0,7) === route.filters.date_to.slice(0,7) ? monthLabel(route.filters.date_from.slice(0,7)) : 'Выбранный период') : 'Рабочее пространство'}{API_MODE === 'mock' && <span className="demo-badge">Демо</span>}</>}>{view === 'payments' && admin && <button className="btn btn-primary" type="button" onClick={() => { setCreateRequested(value => value + 1); navigate('recurring') }}><Plus size={18}/> Добавить платёж</button>}</PageHeader>}{(view === 'payments' || view === 'history') && <PaymentsView key={`${view}:${route.ruleId || 'all'}`} mode={view} route={route} onRouteChange={changePaymentRoute} revision={revision} today={today} selectedRule={selectedRule} onHistory={showHistory} onChanged={changed} notify={notify}/>}{view === 'recurring' && <RecurringView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify} createRequested={createRequested} onCreateRequestHandled={createHandled}/>}{view === 'users' && <UsersView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify}/>}</main>{toast && <div className="toast" role="status"><Check size={17}/>{toast}<button className="toast-close" type="button" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</div>
 }
