@@ -46,7 +46,7 @@ export function PaymentCalendar({ today, timezone, revision, onChanged, notify, 
     pendingDetails.current = ''
     focusDayDetails()
   }, [day])
-  const filterKey = `${month}:${currency}:${status}:${revision}:${retry}:${today}`
+  const filterKey = `${month}:${currency}:${status}:${revision}:${retry}:${today}:${timezone}`
   // A key identifies the fully loaded month; old rows never appear under new filters.
   const [loadedKey, setLoadedKey] = useState('')
   useEffect(() => {
@@ -55,7 +55,7 @@ export function PaymentCalendar({ today, timezone, revision, onChanged, notify, 
       .then(value => { if (alive) { setRows(value); setError(null); setLoadedKey(filterKey) } })
       .catch(reason => { if (alive) { setRows(null); setError(reason); setLoadedKey(filterKey) } })
     return () => { alive = false }
-  }, [month, currency, status, revision, retry, filterKey])
+  }, [month, currency, status, revision, retry, today, timezone, filterKey])
   const ready = loadedKey === filterKey
   const visibleRows = ready ? rows : null
   const days = useMemo(() => {
@@ -96,6 +96,6 @@ export function PaymentCalendar({ today, timezone, revision, onChanged, notify, 
         {!visibleRows?.length && <p className="calendar-month-empty-note" role="status">{future ? 'Сервер пока не вернул периодов на этот месяц. Это не прогноз будущих расходов.' : 'За выбранный месяц и с этими фильтрами платежей не найдено.'}</p>}
       </>}
     </section>
-    {selected && <PaymentDrawer initial={selected} today={today} timezone={timezone} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>}
+    {selected && <PaymentDrawer key={selected.id} initial={selected} today={today} timezone={timezone} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>}
   </section>
 }

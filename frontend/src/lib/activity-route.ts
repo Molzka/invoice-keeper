@@ -76,7 +76,7 @@ export function activityHash(filters: AuditFilters): string {
 }
 
 /** Technical timestamps are instants. Use the same business timezone as the server filters. */
-export function activityDay(timestamp: string, timezone = 'Europe/Moscow'): string {
+export function activityDay(timestamp: string, timezone: string): string {
   const parsed = new Date(timestamp)
   if (Number.isNaN(parsed.valueOf())) return ''
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(parsed)

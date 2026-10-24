@@ -108,7 +108,7 @@ export function ActivityView({ isAdmin, revision, today, timezone, onHistory }: 
       setPage(value)
     }).catch(reason => { if (alive) setError(reason) })
     return () => { alive = false }
-  }, [filters, isAdmin, revision, retry])
+  }, [filters, isAdmin, revision, retry, timezone])
   if (!isAdmin) return <ErrorNotice error={new ApiError(403, 'FORBIDDEN', 'Журнал действий доступен администратору.')}/>
   const groups = new Map<string, AuditEvent[]>()
   page?.items.forEach(event => { const day = activityDay(event.occurred_at, timezone); groups.set(day, [...(groups.get(day) || []), event]) })
