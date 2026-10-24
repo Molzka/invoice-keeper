@@ -5,7 +5,7 @@
 ## Запуск и эксплуатация
 
 - [Docker, миграции, обновление и логи](operations/deployment.md).
-- [Настройки приложения](operations/configuration.md): права, пароли, часовой пояс и OpenAPI.
+- [Настройки приложения](operations/configuration.md): доступ сотрудников, уточнение о регистрации, права, пароли, часовой пояс и OpenAPI.
 - [Telegram](operations/telegram.md): команды, локальный запуск, подключение API и проверка без отправки.
 - [Доставка напоминаний](operations/reminder-integration.md): очередь, состояния, повторы и восстановление.
 - [Резервная копия и восстановление](operations/backups.md).
