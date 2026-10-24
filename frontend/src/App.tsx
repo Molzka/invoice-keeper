@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Check, Eye, EyeOff, LayoutList, LogOut, Plus, ReceiptText, Repeat2, ShieldCheck, UserRound, Users, X } from 'lucide-react'
+import { Check, Eye, EyeOff, KeyRound, LayoutList, LogOut, Plus, ReceiptText, Repeat2, ShieldCheck, UserRound, Users, X } from 'lucide-react'
 import { api, API_MODE, ApiError } from './api/client'
 import type { User } from './types/api'
 import { businessToday, DEMO_DATE_LABEL } from './config/demo'
@@ -13,6 +13,7 @@ import { SectionArt } from './components/SectionArt'
 import { PaymentsView } from './components/PaymentsView'
 import { RecurringView, UsersView } from './components/AdminViews'
 import { ErrorNotice } from './components/UI'
+import { ChangePasswordDrawer } from './components/ChangePasswordDrawer'
 
 type View = WorkspaceView
 function Brand({ onHome }: { onHome?: () => void }) {
@@ -46,6 +47,10 @@ export default function App() {
   const [revision, setRevision] = useState(0)
   const [toast, setToast] = useState('')
   const [logoutBusy, setLogoutBusy] = useState(false)
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [passwordLimit, setPasswordLimit] = useState({ userId: '', retryAt: 0 })
+  const passwordOpenRef = useRef(false)
+  passwordOpenRef.current = passwordOpen
   const [historyRule, setHistoryRule] = useState<{id:string;title:string} | null>(null)
   const [createRequested, setCreateRequested] = useState(0)
   const userRef = useRef<User | null>(null)
@@ -71,7 +76,7 @@ export default function App() {
   }, [])
   useEffect(() => {
     void restore()
-    const unauthorized = () => { if (userRef.current) setToast('Сессия завершилась. Войдите снова.'); setUser(null); setRestoring(false) }
+    const unauthorized = () => { if (userRef.current) setToast(passwordOpenRef.current ? 'Сессия завершилась. Войдите снова. Если вы меняли пароль, попробуйте новый.' : 'Сессия завершилась. Войдите снова.'); setPasswordOpen(false); setUser(null); setRestoring(false) }
     window.addEventListener('invoice:unauthorized', unauthorized)
     return () => { window.removeEventListener('invoice:unauthorized', unauthorized) }
   }, [restore])
@@ -84,14 +89,14 @@ export default function App() {
   async function logout() {
     if (logoutGuard.current) return
     logoutGuard.current = true; setLogoutBusy(true)
-    try { await api.logout(); setUser(null); setRestoreError(null); setToast('') }
+    try { await api.logout(); setPasswordOpen(false); setUser(null); setRestoreError(null); setToast('') }
     catch (error) { if (!(error instanceof ApiError && error.status === 401)) notify('Выход не подтверждён сервером. Проверьте соединение и повторите.'); else setUser(null) }
     finally { logoutGuard.current = false; setLogoutBusy(false) }
   }
   if (restoring) return <div className="empty-state" style={{ minHeight: '100vh' }} role="status"><Brand/><span className="spinner"/><p>Восстанавливаем вашу сессию…</p></div>
-  if (!user) return <><Login onLogin={value => { setUser(value); setRestoreError(null); changed() }} restoreError={restoreError} onRestore={() => void restore()}/>{toast && <div className="toast" role="status">{toast}<button className="toast-close" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</>
+  if (!user) return <><Login onLogin={value => { setPasswordOpen(false); setUser(value); setRestoreError(null); changed() }} restoreError={restoreError} onRestore={() => void restore()}/>{toast && <div className="toast" role="status">{toast}<button className="toast-close" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</>
   const admin = user.role === 'admin'
   const titles: Record<View,string> = { payments:'Платежи', recurring:'Регулярные платежи', history:'История оплат', users:'Пользователи' }
   const subtitles: Record<View,string> = { payments:'Ближайшие сроки и обязательства команды — в одном месте.', recurring:'Настройте повторение один раз. История каждого периода сохранится.', history:'Каждый месяц — отдельный срок, статус и фактическая дата оплаты.', users:'Управляйте доступом обычных пользователей к общей панели.' }
-  return <div className="app-shell"><a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>Перейти к содержимому</a><header className="topbar"><div className="brand-slot"><Brand onHome={() => navigate('payments')}/></div><nav className="main-nav" aria-label="Основная навигация">{([{id:'payments',text:'Платежи',icon:LayoutList},{id:'recurring',text:'Регулярные',icon:Repeat2},{id:'history',text:'История',icon:ReceiptText},...(admin ? [{id:'users',text:'Пользователи',icon:Users}] : [])]).map(item => <a key={item.id} className={`nav-link ${view === item.id ? 'active' : ''}`} href={item.id === view ? window.location.hash || viewHash(view) : `#${item.id}`} aria-current={view === item.id ? 'page' : undefined}><item.icon size={16} aria-hidden="true"/>{item.text}</a>)}</nav><div className="user-menu"><div className="user-avatar" aria-hidden="true"><UserRound size={18}/></div><div><strong>{user.username}</strong><small>{admin ? 'Администратор' : 'Пользователь'}</small></div><button className="icon-button" type="button" disabled={logoutBusy} onClick={() => void logout()} aria-label="Выйти из системы">{logoutBusy ? <span className="spinner"/> : <LogOut size={17}/>}</button></div></header><main id="main-content" className="app-main" tabIndex={-1}>{(view === 'payments' || view === 'history') && <PageHeader key={view} kind={view} title={titles[view]} description={subtitles[view]} eyebrow={<>{view === 'payments' ? (route.filters.date_from.slice(0,7) === route.filters.date_to.slice(0,7) ? monthLabel(route.filters.date_from.slice(0,7)) : 'Выбранный период') : 'Рабочее пространство'}{API_MODE === 'mock' && <span className="demo-badge">Демо</span>}</>}>{view === 'payments' && admin && <button className="btn btn-primary" type="button" onClick={() => { setCreateRequested(value => value + 1); navigate('recurring') }}><Plus size={18}/> Добавить платёж</button>}</PageHeader>}{(view === 'payments' || view === 'history') && <PaymentsView key={`${view}:${route.ruleId || 'all'}`} mode={view} route={route} onRouteChange={changePaymentRoute} revision={revision} today={today} selectedRule={selectedRule} onHistory={showHistory} onChanged={changed} notify={notify}/>}{view === 'recurring' && <RecurringView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify} createRequested={createRequested} onCreateRequestHandled={createHandled}/>}{view === 'users' && <UsersView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify}/>}</main>{toast && <div className="toast" role="status"><Check size={17}/>{toast}<button className="toast-close" type="button" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</div>
+  return <div className="app-shell"><a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>Перейти к содержимому</a><header className="topbar"><div className="brand-slot"><Brand onHome={() => navigate('payments')}/></div><nav className="main-nav" aria-label="Основная навигация">{([{id:'payments',text:'Платежи',icon:LayoutList},{id:'recurring',text:'Регулярные',icon:Repeat2},{id:'history',text:'История',icon:ReceiptText},...(admin ? [{id:'users',text:'Пользователи',icon:Users}] : [])]).map(item => <a key={item.id} className={`nav-link ${view === item.id ? 'active' : ''}`} href={item.id === view ? window.location.hash || viewHash(view) : `#${item.id}`} aria-current={view === item.id ? 'page' : undefined}><item.icon size={16} aria-hidden="true"/>{item.text}</a>)}</nav><div className="user-menu"><button className="account-button" type="button" aria-label="Сменить пароль" title="Сменить пароль" disabled={logoutBusy} onClick={() => setPasswordOpen(true)}><span className="user-avatar" aria-hidden="true"><UserRound size={18}/><span className="account-key"><KeyRound size={11}/></span></span><span className="account-copy"><strong>{user.username}</strong><small>{admin ? 'Администратор' : 'Пользователь'}</small></span></button><button className="icon-button" type="button" disabled={logoutBusy} onClick={() => void logout()} aria-label="Выйти из системы">{logoutBusy ? <span className="spinner"/> : <LogOut size={17}/>}</button></div></header><main id="main-content" className="app-main" tabIndex={-1}>{(view === 'payments' || view === 'history') && <PageHeader key={view} kind={view} title={titles[view]} description={subtitles[view]} eyebrow={<>{view === 'payments' ? (route.filters.date_from.slice(0,7) === route.filters.date_to.slice(0,7) ? monthLabel(route.filters.date_from.slice(0,7)) : 'Выбранный период') : 'Рабочее пространство'}{API_MODE === 'mock' && <span className="demo-badge">Демо</span>}</>}>{view === 'payments' && admin && <button className="btn btn-primary" type="button" onClick={() => { setCreateRequested(value => value + 1); navigate('recurring') }}><Plus size={18}/> Добавить платёж</button>}</PageHeader>}{(view === 'payments' || view === 'history') && <PaymentsView key={`${view}:${route.ruleId || 'all'}`} mode={view} route={route} onRouteChange={changePaymentRoute} revision={revision} today={today} selectedRule={selectedRule} onHistory={showHistory} onChanged={changed} notify={notify}/>}{view === 'recurring' && <RecurringView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify} createRequested={createRequested} onCreateRequestHandled={createHandled}/>}{view === 'users' && <UsersView isAdmin={admin} onChanged={changed} onHistory={showHistory} notify={notify}/>}</main>{passwordOpen && <ChangePasswordDrawer user={user} retryAt={passwordLimit.userId === user.id ? passwordLimit.retryAt : 0} onRateLimit={retryAt => setPasswordLimit({ userId: user.id, retryAt })} onUserUpdated={value => { if (userRef.current?.id === value.id) setUser(value) }} onClose={() => setPasswordOpen(false)} onSaved={() => { setPasswordOpen(false); notify('Пароль изменён. Остальные сессии завершены.') }} onSignIn={message => { setPasswordOpen(false); setUser(null); setRestoreError(null); setToast(message) }}/>}{toast && <div className="toast" role="status"><Check size={17}/>{toast}<button className="toast-close" type="button" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</div>
 }
