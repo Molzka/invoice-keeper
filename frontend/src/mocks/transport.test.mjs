@@ -13,7 +13,7 @@ const fixturesUrl = encodeModule(replaceModule(tsSource('./fixtures.ts'), '../co
 const activityTypesUrl = encodeModule(tsSource('../types/activity.ts'))
 const activityUrl = encodeModule(replaceModule(replaceModule(tsSource('./activity.ts'), '../config/demo', demoUrl), '../types/activity', activityTypesUrl))
 let fixtureId = 0
-async function fixture(context, username = 'admin', scenario = '') {
+async function fixture(context, username = 'ivan', scenario = '') {
   context.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1792742400000 })
   const storage = new Map([['invoice-keeper.demo-session.v1', username]])
   const sessionWrites = []
@@ -39,17 +39,22 @@ async function fixture(context, username = 'admin', scenario = '') {
 }
 
 for (const [username, oldPassword] of [['admin', 'Admin123!'], ['ivan', 'example-password-only']]) {
-  test('mock changes own password for ' + username + ', rotates CSRF and accepts only the exact new secret afterward', async context => {
+  test(username === 'admin' ? 'mock protects the administrator password' : 'mock changes own password for user, rotates CSRF and accepts only the exact new secret afterward', async context => {
     const { get, post, sessionWrites } = await fixture(context, username)
     const before = await (await get('/auth/me')).json()
     const newPassword = '  new secret  '
     const changed = await post('/auth/change-password', { current_password: oldPassword, new_password: newPassword }, before.csrf_token)
+    if (username === 'admin') {
+      assert.equal(changed.status, 403)
+      assert.equal((await changed.json()).error.code, 'ADMIN_ACCOUNT_PROTECTED')
+      return
+    }
     assert.equal(changed.status, 200)
     const after = await changed.json()
     assert.equal(after.user.id, before.user.id)
     assert.equal(after.user.role, before.user.role)
     assert.notEqual(after.csrf_token, before.csrf_token)
-    assert.deepEqual(Object.keys(after).sort(), ['csrf_token', 'user'])
+    assert.deepEqual(Object.keys(after).sort(), ['csrf_token', 'timezone', 'user'])
     const stale = await post('/auth/logout', undefined, before.csrf_token)
     assert.equal(stale.status, 403)
     assert.equal((await stale.json()).error.code, 'CSRF_FAILED')
@@ -65,7 +70,7 @@ for (const [username, oldPassword] of [['admin', 'Admin123!'], ['ivan', 'example
 test('mock rejects query/extra fields, enforces password bounds and keeps error fields distinct', async context => {
   const { get, post } = await fixture(context)
   const { csrf_token: token } = await (await get('/auth/me')).json()
-  const valid = { current_password: 'Admin123!', new_password: 'new-password' }
+  const valid = { current_password: 'example-password-only', new_password: 'new-password' }
   for (const [path, body, field] of [
     ['/auth/change-password?confirmation=x', valid, 'query.confirmation'],
     ['/auth/change-password', { ...valid, confirmation: 'new-password' }, 'confirmation'],
@@ -98,8 +103,8 @@ test('mock limiter counts wrong-current and successful changes per user, indepen
   const { get, post } = await fixture(context)
   for (let attempt = 0; attempt < 6; attempt++) assert.equal((await post('/auth/login', { username: 'admin', password: 'incorrect' })).status, 401)
   const { csrf_token: token } = await (await get('/auth/me')).json()
-  for (let attempt = 0; attempt < 6; attempt++) assert.equal((await post('/auth/change-password', { current_password: 'Admin123!', new_password: 'new-password' }, 'stale-token')).status, 403)
-  const changed = await post('/auth/change-password', { current_password: 'Admin123!', new_password: 'new-password' }, token)
+  for (let attempt = 0; attempt < 6; attempt++) assert.equal((await post('/auth/change-password', { current_password: 'example-password-only', new_password: 'new-password' }, 'stale-token')).status, 403)
+  const changed = await post('/auth/change-password', { current_password: 'example-password-only', new_password: 'new-password' }, token)
   assert.equal(changed.status, 200)
   const { csrf_token: rotated } = await changed.json()
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -128,25 +133,25 @@ test('mock response-loss and stale-CSRF scenarios recover with me while preservi
 })
 
 test('mock stale-CSRF scenario rejects the first change without changing the secret', async context => {
-  const { get, post } = await fixture(context, 'admin', 'password-csrf')
+  const { get, post } = await fixture(context, 'ivan', 'password-csrf')
   const before = await (await get('/auth/me')).json()
-  const rejected = await post('/auth/change-password', { current_password: 'Admin123!', new_password: 'new-password' }, before.csrf_token)
+  const rejected = await post('/auth/change-password', { current_password: 'example-password-only', new_password: 'new-password' }, before.csrf_token)
   assert.equal(rejected.status, 403)
   assert.equal((await rejected.json()).error.code, 'CSRF_FAILED')
   const recovered = await (await get('/auth/me')).json()
   assert.notEqual(recovered.csrf_token, before.csrf_token)
-  assert.equal((await post('/auth/change-password', { current_password: 'Admin123!', new_password: 'new-password' }, recovered.csrf_token)).status, 200)
+  assert.equal((await post('/auth/change-password', { current_password: 'example-password-only', new_password: 'new-password' }, recovered.csrf_token)).status, 200)
 })
 
 
 test('mock account-switch scenario rejects the old form and me returns the other account without changing either password', async context => {
-  const { get, post } = await fixture(context, 'admin', 'password-account-changed')
+  const { get, post } = await fixture(context, 'ivan', 'password-account-changed')
   const before = await (await get('/auth/me')).json()
-  const rejected = await post('/auth/change-password', { current_password: 'Admin123!', new_password: 'must-not-be-saved' }, before.csrf_token)
+  const rejected = await post('/auth/change-password', { current_password: 'example-password-only', new_password: 'must-not-be-saved' }, before.csrf_token)
   assert.equal(rejected.status, 403)
   assert.equal((await rejected.json()).error.code, 'CSRF_FAILED')
   const recovered = await (await get('/auth/me')).json()
-  assert.equal(recovered.user.username, 'ivan')
+  assert.equal(recovered.user.username, 'admin')
   assert.notEqual(recovered.user.id, before.user.id)
   assert.notEqual(recovered.csrf_token, before.csrf_token)
   assert.equal((await post('/auth/logout', undefined, recovered.csrf_token)).status, 204)

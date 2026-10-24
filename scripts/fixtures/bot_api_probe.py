@@ -12,6 +12,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.request import urlopen
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from aiogram import Bot, Dispatcher
@@ -20,6 +21,7 @@ from aiogram.client.session.base import BaseSession
 from aiogram.types import Message, Update
 
 import bot as application
+import api as api_module
 
 
 def require(condition, message):
@@ -181,6 +183,18 @@ async def main():
                     return await response.json()
 
             expected = await control("/fixtures")
+            # Keep real HTTP, auth and database filters, but exercise a local
+            # midnight at which Tokyo and Moscow have different calendar dates.
+            boundary = datetime.fromisoformat(expected["today"] + "T00:01:00").replace(
+                tzinfo=ZoneInfo(expected["timezone"])
+            )
+
+            class BusinessMidnight(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    return boundary.astimezone(tz)
+
+            api_module.datetime = BusinessMidnight
             first = check_page(await dispatch(command="/payments"), expected["upcoming"][:5])
             session_ids = await control("/sessions")
             require(len(session_ids) == 1, "First command did not create exactly one API session")
@@ -215,7 +229,8 @@ async def main():
                 "API session was not reused across commands/pages",
             )
             print(
-                "PASS: /payments covers all 52 records in server pages of five; /overdue, paid/stopped and MSK boundaries"
+                "PASS: /payments covers all 52 records in server pages of five; /overdue, "
+                f"paid/stopped and {expected['timezone']} midnight boundary"
             )
             await control("/expire", "POST")
             check_page(await dispatch(command="/payments"), expected["upcoming"][:5])

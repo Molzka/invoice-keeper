@@ -117,6 +117,7 @@ async def test_user_audit_retains_snapshots_and_never_records_credentials(
     app, client, create_user, login
 ):
     admin = await create_user()
+    ordinary = await create_user("self_service", role="user")
     auth = await login(client)
     headers = {"X-CSRF-Token": auth["csrf_token"]}
     created = await client.post(
@@ -129,10 +130,11 @@ async def test_user_audit_retains_snapshots_and_never_records_credentials(
         response = await client.patch(path, json=values, headers=headers)
         assert response.status_code == 200, response.text
     assert (await client.delete(path, headers=headers)).status_code == 204
+    ordinary_auth = await login(client, "self_service")
     response = await client.post(
         "/api/v1/auth/change-password",
         json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
-        headers=headers,
+        headers={"X-CSRF-Token": ordinary_auth["csrf_token"]},
     )
     assert response.status_code == 200, response.text
     recorded = await events(app)
@@ -146,7 +148,12 @@ async def test_user_audit_retains_snapshots_and_never_records_credentials(
     assert recorded[0].entity_title == "original"
     assert [item.entity_title for item in recorded[1:4]] == ["renamed"] * 3
     assert all(str(item.entity_id) == user_id for item in recorded[:4])
-    assert all(item.actor_id == admin.id and item.actor_username == "admin" for item in recorded)
+    assert all(
+        item.actor_id == admin.id and item.actor_username == "admin" for item in recorded[:4]
+    )
+    assert recorded[4].actor_id == ordinary.id
+    assert recorded[4].actor_username == recorded[4].entity_title == "self_service"
+    assert recorded[4].entity_id == ordinary.id
     assert recorded[2].changes == recorded[4].changes == []
     assert recorded[4].entity_type == "account"
     details = json.dumps([item.changes for item in recorded])
@@ -229,16 +236,38 @@ async def test_rejected_requests_and_username_conflicts_do_not_create_events(
         ("POST", "/api/v1/users", {"username": "ordinary", "password": PASSWORD}, 409),
         ("PATCH", f"/api/v1/users/{ordinary.id}", {"username": "admin"}, 409),
         ("PATCH", f"/api/v1/users/{ordinary.id}", {"username": "ordinary"}, 200),
-        (
-            "POST",
-            "/api/v1/auth/change-password",
-            {"current_password": "incorrect", "new_password": NEW_PASSWORD},
-            422,
-        ),
     ):
         response = await client.request(method, path, json=payload, headers=headers)
         assert response.status_code == status, response.text
+    ordinary_auth = await login(client, "ordinary")
+    response = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "incorrect", "new_password": NEW_PASSWORD},
+        headers={"X-CSRF-Token": ordinary_auth["csrf_token"]},
+    )
+    assert response.status_code == 422, response.text
     assert await events(app) == []
+
+
+async def test_protected_admin_password_rejection_does_not_create_audit_event(
+    app, client, create_user, login
+):
+    admin = await create_user()
+    auth = await login(client)
+    token = client.cookies[app.state.settings.session_cookie_name]
+    response = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+        headers={"X-CSRF-Token": auth["csrf_token"]},
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["error"]["code"] == "ADMIN_ACCOUNT_PROTECTED"
+    assert "set-cookie" not in response.headers
+    assert client.cookies[app.state.settings.session_cookie_name] == token
+    assert (await client.get("/api/v1/auth/me")).json() == auth
+    assert await events(app) == []
+    async with app.state.database.session_factory() as db:
+        assert await verify_password(PASSWORD, (await db.get(User, admin.id)).password_hash)
 
 
 @pytest.mark.parametrize("operation", ["create", "stop", "pay"])
@@ -284,7 +313,7 @@ async def test_audit_insert_failure_rolls_back_user_password_and_sessions(
         base_url="http://testserver",
         headers={"Origin": "http://testserver"},
     ) as other:
-        await login(other, "ordinary")
+        ordinary_auth = await login(other, "ordinary")
         with (
             failing_audit_insert(app),
             pytest.raises(RuntimeError, match="Simulated audit storage failure"),
@@ -305,10 +334,10 @@ async def test_audit_insert_failure_rolls_back_user_password_and_sessions(
             elif operation == "delete":
                 await client.delete(f"/api/v1/users/{ordinary.id}", headers=headers)
             else:
-                await client.post(
+                await other.post(
                     "/api/v1/auth/change-password",
                     json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
-                    headers=headers,
+                    headers={"X-CSRF-Token": ordinary_auth["csrf_token"]},
                 )
         assert (await client.get("/api/v1/auth/me")).json() == auth
         assert (await other.get("/api/v1/auth/me")).status_code == 200

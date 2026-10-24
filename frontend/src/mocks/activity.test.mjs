@@ -130,11 +130,22 @@ test('user changes preserve deleted identity and never put password values or to
   assert.equal(deletion.action, 'user.deleted')
   assert.equal(deletion.entity.title, 'audit_renamed')
   assert.equal(deletion.entity.id, created.id)
-  const changed = await request('/auth/change-password', 'POST', { current_password: 'Admin123!', new_password: secret + '3' }, token)
-  token = (await changed.json()).csrf_token
+  const beforeProtected = (await list()).total
+  const protectedChange = await request('/auth/change-password', 'POST', { current_password: 'Admin123!', new_password: secret + '3' }, token)
+  assert.equal(protectedChange.status, 403)
+  assert.equal((await list()).total, beforeProtected)
+  const userLogin = await request('/auth/login', 'POST', { username: 'ivan', password: 'example-password-only' })
+  token = (await userLogin.json()).csrf_token
+  const changed = await request('/auth/change-password', 'POST', { current_password: 'example-password-only', new_password: secret + '3' }, token)
+  assert.equal(changed.status, 200)
+  const changedToken = (await changed.json()).csrf_token
+  const adminLogin = await request('/auth/login', 'POST', { username: 'admin', password: 'Admin123!' })
+  assert.equal(adminLogin.status, 200)
+  token = (await adminLogin.json()).csrf_token
   const result = await list()
   assert.equal(result.items[0].action, 'password.changed')
+  assert.equal(result.items[0].actor.username, 'ivan')
   assert.deepEqual(result.items[0].changes, [])
   const text = JSON.stringify(result)
-  for (const value of [secret, 'Admin123!', token, 'current_password', 'new_password', 'csrf_token']) assert.equal(text.includes(value), false)
+  for (const value of [secret, 'Admin123!', 'example-password-only', token, changedToken, 'current_password', 'new_password', 'csrf_token']) assert.equal(text.includes(value), false)
 })

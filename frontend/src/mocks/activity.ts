@@ -1,14 +1,14 @@
 import type { PaymentOccurrence, RecurringPayment, User } from '../types/api'
 import { AUDIT_ACTION_LABELS } from '../types/activity'
 import type { AuditChange, AuditEvent, AuditFilters, AuditPage } from '../types/activity'
-import { businessNowIso, businessToday, DEMO_TODAY, shiftCalendarDays } from '../config/demo'
+import { APP_TIMEZONE, businessNowIso, businessToday, DEMO_TODAY, shiftCalendarDays } from '../config/demo'
 
 // This whitelist is intentionally unrelated to arbitrary mutation bodies: secrets never enter the log.
 const safeFields = new Set(['title', 'amount', 'currency', 'first_due_date', 'status', 'paid_on', 'due_date', 'is_active', 'username', 'receipt'])
 const copy = <T>(value: T): T => structuredClone(value)
 export type NewAuditEvent = Pick<AuditEvent, 'actor' | 'action' | 'entity'> & { changes?: AuditChange[]; occurred_at?: string }
 
-export function auditMoscowDate(timestamp: string): string { return businessToday('real', new Date(timestamp)) }
+export function auditMoscowDate(timestamp: string): string { return businessToday('real', new Date(timestamp), APP_TIMEZONE) }
 
 export function filterAuditEvents(events: AuditEvent[], filters: AuditFilters): AuditPage {
   const actor = filters.actor.trim().toLocaleLowerCase('ru')

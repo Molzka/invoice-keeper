@@ -92,11 +92,11 @@ test('network and timeout creating POSTs have context and are attempted once', a
 })
 
 test('CSRF, bodyless logout and protected 401 handling are preserved', async () => {
-  let response = json({ user: { id: 'user-id' }, csrf_token: 'login-token' })
+  let response = json({ user: { id: 'user-id' }, csrf_token: 'login-token', timezone: 'Europe/Moscow' })
   const { api, calls, events } = await clientFixture(() => response)
   await api.login({ username: 'ivan', password: 'example-password-only' })
   assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), null)
-  response = json({ user: { id: 'user-id' }, csrf_token: 'me-token' })
+  response = json({ user: { id: 'user-id' }, csrf_token: 'me-token', timezone: 'Europe/Moscow' })
   await api.me()
   response = json({})
   await api.updateOccurrence('period-id', { status: 'paid', paid_on: '2026-10-23' })
@@ -124,10 +124,10 @@ test('CSRF, bodyless logout and protected 401 handling are preserved', async () 
 
 test('password change sends exact untrimmed JSON, keeps cookie auth and installs rotated CSRF before resolving', async () => {
   const user = { id: 'user-id', username: 'ivan', role: 'user' }
-  let response = json({ user, csrf_token: 'before-change' })
+  let response = json({ user, csrf_token: 'before-change', timezone: 'Europe/Moscow' })
   const { api, calls, events } = await clientFixture(() => response)
   await api.me()
-  response = json({ user, csrf_token: 'rotated-token' })
+  response = json({ user, csrf_token: 'rotated-token', timezone: 'Europe/Moscow' })
   const payload = { current_password: ' old password ', new_password: ' new password ' }
   const result = await api.changePassword({ ...payload, confirmation: 'must-stay-client-side' })
   assert.equal(result.csrf_token, 'rotated-token')
@@ -146,7 +146,7 @@ test('password change sends exact untrimmed JSON, keeps cookie auth and installs
 })
 
 test('password field errors retain details and failed changes do not replace the active CSRF token', async () => {
-  let response = json({ user: { id: 'user-id' }, csrf_token: 'existing-token' })
+  let response = json({ user: { id: 'user-id' }, csrf_token: 'existing-token', timezone: 'Europe/Moscow' })
   const { api, calls, events } = await clientFixture(() => response)
   await api.me()
   for (const [code, field] of [['CURRENT_PASSWORD_INVALID', 'current_password'], ['NEW_PASSWORD_UNCHANGED', 'new_password']]) {

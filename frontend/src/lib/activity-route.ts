@@ -75,12 +75,11 @@ export function activityHash(filters: AuditFilters): string {
   return '#activity?' + params.toString()
 }
 
-const moscowDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' })
-/** Technical timestamps are instants, unlike calendar date filters. Group them by Moscow day. */
-export function activityDay(timestamp: string): string {
+/** Technical timestamps are instants. Use the same business timezone as the server filters. */
+export function activityDay(timestamp: string, timezone = 'Europe/Moscow'): string {
   const parsed = new Date(timestamp)
   if (Number.isNaN(parsed.valueOf())) return ''
-  const parts = moscowDate.formatToParts(parsed)
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(parsed)
   const part = (type: string) => parts.find(value => value.type === type)?.value || ''
   return `${part('year').padStart(4, '0')}-${part('month')}-${part('day')}`
 }

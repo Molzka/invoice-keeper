@@ -5,11 +5,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import DEFAULT_TIMEZONE
 from app.models import AuditEvent, User
 from app.schemas.audit import AUDIT_ACTION_LABELS, SAFE_CHANGE_FIELDS, AuditChange
 from app.services.errors import api_error
-
-MOSCOW = ZoneInfo("Europe/Moscow")
 
 
 def record_audit_event(
@@ -62,6 +61,7 @@ async def list_audit_events(
     query: str | None,
     limit: int,
     offset: int,
+    timezone_name: str = DEFAULT_TIMEZONE,
 ) -> dict:
     if date_from is not None and date_to is not None and date_from > date_to:
         message = "Начало диапазона позже его окончания"
@@ -71,15 +71,17 @@ async def list_audit_events(
             message,
             details=[{"field": "date_to", "code": "INVALID_RANGE", "message": message}],
         )
+    timezone = ZoneInfo(timezone_name)
     filters = []
     if date_from is not None and date_from != date.min:
         filters.append(
-            AuditEvent.occurred_at >= datetime.combine(date_from, time.min, MOSCOW).astimezone(UTC)
+            AuditEvent.occurred_at
+            >= datetime.combine(date_from, time.min, timezone).astimezone(UTC)
         )
     if date_to is not None and date_to != date.max:
         filters.append(
             AuditEvent.occurred_at
-            < datetime.combine(date_to + timedelta(days=1), time.min, MOSCOW).astimezone(UTC)
+            < datetime.combine(date_to + timedelta(days=1), time.min, timezone).astimezone(UTC)
         )
     if actor and actor.strip():
         filters.append(_contains(AuditEvent.actor_username, actor.strip()))

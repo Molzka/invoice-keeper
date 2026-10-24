@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -121,6 +121,46 @@ async def test_audit_dates_are_inclusive_moscow_days_and_bounds_are_independent(
         assert [item["id"] for item in response.json()["items"]] == [
             str(records[index].id) for index in indices
         ]
+
+
+@pytest.mark.parametrize(
+    ("timezone_name", "day", "start", "end"),
+    [
+        (
+            "Asia/Tokyo",
+            "2026-11-07",
+            datetime(2026, 11, 6, 15, tzinfo=UTC),
+            datetime(2026, 11, 7, 15, tzinfo=UTC),
+        ),
+        (
+            "America/New_York",
+            "2026-11-01",
+            datetime(2026, 11, 1, 4, tzinfo=UTC),
+            datetime(2026, 11, 2, 5, tzinfo=UTC),
+        ),
+    ],
+)
+async def test_audit_dates_follow_configured_timezone_including_dst_day(
+    app, client, create_user, login, timezone_name, day, start, end
+):
+    app.state.settings.app_timezone = timezone_name
+    await create_user()
+    await login(client)
+    records = await seed_events(
+        app,
+        [
+            {"occurred_at": start - timedelta(microseconds=1)},
+            {"occurred_at": start},
+            {"occurred_at": end - timedelta(microseconds=1)},
+            {"occurred_at": end},
+        ],
+    )
+    response = await client.get(PATH, params={"date_from": day, "date_to": day})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["total"] == 2
+    assert [item["id"] for item in data["items"]] == [str(records[2].id), str(records[1].id)]
+    assert all(item["occurred_at"].endswith("Z") for item in data["items"])
 
 
 async def test_audit_filters_search_names_labels_and_literal_wildcards(

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from app.api.dependencies import AdminUser, DbSession
 from app.schemas.audit import AuditAction, AuditEventList
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/audit-events", tags=["audit"])
 async def get_audit_events(
     _admin: AdminUser,
     db: DbSession,
+    request: Request,
     date_from: IsoDate | None = None,
     date_to: IsoDate | None = None,
     actor: Annotated[str | None, Query(max_length=64)] = None,
@@ -31,4 +32,5 @@ async def get_audit_events(
         query=query,
         limit=limit,
         offset=offset,
+        timezone_name=request.app.state.settings.app_timezone,
     )

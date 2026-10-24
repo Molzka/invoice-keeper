@@ -11,7 +11,7 @@ import { PaymentStatus } from './PaymentStatus'
 import { SelectField } from './SelectField'
 import { EmptyState, ErrorNotice } from './UI'
 
-interface Props { today: string; revision: number; onChanged: () => void; notify: (message: string) => void; onHistory: (id: string, title: string) => void }
+interface Props { today: string; timezone: string; revision: number; onChanged: () => void; notify: (message: string) => void; onHistory: (id: string, title: string) => void }
 const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const subscribeHash = (changed: () => void) => { window.addEventListener('hashchange', changed); return () => window.removeEventListener('hashchange', changed) }
 const hashSnapshot = () => window.location.hash
@@ -32,7 +32,7 @@ function focusDayDetails() {
   document.getElementById('calendar-day-details')?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
 }
 
-export function PaymentCalendar({ today, revision, onChanged, notify, onHistory }: Props) {
+export function PaymentCalendar({ today, timezone, revision, onChanged, notify, onHistory }: Props) {
   const hash = useSyncExternalStore(subscribeHash, hashSnapshot)
   const route = useMemo(() => readCalendarRoute(hash, today), [hash, today])
   const [rows, setRows] = useState<PaymentOccurrence[] | null>(null)
@@ -46,7 +46,7 @@ export function PaymentCalendar({ today, revision, onChanged, notify, onHistory 
     pendingDetails.current = ''
     focusDayDetails()
   }, [day])
-  const filterKey = `${month}:${currency}:${status}:${revision}:${retry}`
+  const filterKey = `${month}:${currency}:${status}:${revision}:${retry}:${today}`
   // A key identifies the fully loaded month; old rows never appear under new filters.
   const [loadedKey, setLoadedKey] = useState('')
   useEffect(() => {
@@ -83,7 +83,7 @@ export function PaymentCalendar({ today, revision, onChanged, notify, onHistory 
     <section className="payment-calendar-card" aria-label="Календарь сроков платежей">
       <div className="calendar-topline"><div className="calendar-month-control"><span className="calendar-heading-icon" aria-hidden="true"><CalendarDays size={23}/></span><div><p className="eyebrow">План по срокам</p><h2 aria-live="polite">{monthLabel(month)}</h2></div></div><div className="calendar-navigation"><button className="btn btn-secondary btn-small" type="button" onClick={() => change({ month: today.slice(0, 7), day: today })}>Сегодня</button><button className="icon-button" type="button" disabled={!previousMonth} aria-label="Предыдущий месяц" onClick={() => changeMonth(previousMonth)}><ChevronLeft size={18}/></button><button className="icon-button" type="button" disabled={!nextMonth} aria-label="Следующий месяц" onClick={() => changeMonth(nextMonth)}><ChevronRight size={18}/></button><button className="icon-button" type="button" aria-label="Обновить календарь" disabled={!ready} onClick={() => setRetry(value => value + 1)}><RefreshCw size={17}/></button></div></div>
       <div className="calendar-filters"><div className="field"><label htmlFor="calendar-currency">Валюта</label><SelectField id="calendar-currency" value={currency} options={currencyOptions} onChange={value => change({ currency: value as CalendarRoute['currency'] })}/></div><div className="field"><label htmlFor="calendar-status">Статус платежа</label><SelectField id="calendar-status" value={status} options={statusOptions} onChange={value => change({ status: value as CalendarRoute['status'] })}/></div><button className="calendar-clear btn btn-secondary btn-small" type="button" onClick={() => change({ currency: '', status: 'all' })}>Сбросить фильтры</button><p className="calendar-count" role="status">{!ready ? 'Загружаем все периоды…' : error ? 'Данные недоступны' : `Платежей в месяце: ${visibleRows?.length || 0}`}</p></div>
-      <p className="calendar-explanation">Платежи расположены по сроку оплаты. Статусы определяет сервер; даты — по МСК.{future && ' Будущие периоды ещё могут быть не сформированы.'}</p>
+      <p className="calendar-explanation">Платежи расположены по сроку оплаты. Статусы определяет сервер; часовой пояс — {timezone}.{future && ' Будущие периоды ещё могут быть не сформированы.'}</p>
       <div className="calendar-status-legend" aria-label="Обозначения статусов"><span data-status="status-neutral">Не оплачено</span><span data-status="status-danger">Просрочено</span><span data-status="status-success">Оплачено</span><span data-status="status-warning">С опозданием</span></div>
       {!ready ? <div className="calendar-loading" role="status" aria-label="Загрузка календаря" aria-busy="true"><span className="spinner"/><p>Собираем платежи за месяц…</p><div className="calendar-loading-grid" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <div key={index} className="skeleton"/>)}</div></div> : error ? <div className="calendar-error"><ErrorNotice error={error} onRetry={() => setRetry(value => value + 1)}/></div> : <>
         <div className="calendar-desktop-layout"><div className="calendar-grid-scroll"><table className="calendar-month-table"><caption className="sr-only">Платежи по срокам за {monthLabel(month)}</caption><thead><tr>{weekdays.map(name => <th scope="col" key={name}>{name}</th>)}</tr></thead><tbody>{Array.from({ length: cells.length / 7 }, (_, week) => <tr key={week}>{cells.slice(week * 7, week * 7 + 7).map((date, index) => {
@@ -96,6 +96,6 @@ export function PaymentCalendar({ today, revision, onChanged, notify, onHistory 
         {!visibleRows?.length && <p className="calendar-month-empty-note" role="status">{future ? 'Сервер пока не вернул периодов на этот месяц. Это не прогноз будущих расходов.' : 'За выбранный месяц и с этими фильтрами платежей не найдено.'}</p>}
       </>}
     </section>
-    {selected && <PaymentDrawer initial={selected} today={today} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>} 
+    {selected && <PaymentDrawer initial={selected} today={today} timezone={timezone} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>}
   </section>
 }

@@ -6,10 +6,11 @@ const monthNames = ['января', 'февраля', 'марта', 'апрел�
 const [demoYear, demoMonth, demoDay] = DEMO_TODAY.split('-').map(Number)
 export const DEMO_DATE_LABEL = `${demoDay} ${monthNames[demoMonth - 1]} ${demoYear}`
 
-export function businessToday(mode: 'mock' | 'real', now?: Date): string {
+export function businessToday(mode: 'mock' | 'real', now?: Date, timezone?: string): string {
   if (mode === 'mock') return DEMO_TODAY
+  if (!timezone) throw new RangeError('The authenticated server timezone is required')
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
   }).formatToParts(now ?? new Date())
   const value = (type: string) => parts.find(part => part.type === type)?.value ?? ''
   return `${value('year')}-${value('month')}-${value('day')}`

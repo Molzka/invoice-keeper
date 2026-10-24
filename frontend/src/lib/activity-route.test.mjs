@@ -44,3 +44,13 @@ test('activity groups technical timestamps by Moscow day across UTC midnight', (
   assert.equal(activityDay('2026-10-23T00:30:00+03:00'), '2026-10-23')
   assert.equal(activityDay('not-a-timestamp'), '')
 })
+
+test('audit day follows the authenticated timezone, including UTC midnight and daylight-saving boundaries', () => {
+  const timestamp = '2026-10-22T21:00:00Z'
+  assert.equal(activityDay(timestamp, 'Europe/Moscow'), '2026-10-23')
+  assert.equal(activityDay(timestamp, 'UTC'), '2026-10-22')
+  assert.equal(activityDay(timestamp, 'America/New_York'), '2026-10-22')
+  assert.equal(activityDay('2026-11-01T03:59:59Z', 'America/New_York'), '2026-10-31')
+  assert.equal(activityDay('2026-11-01T04:00:00Z', 'America/New_York'), '2026-11-01')
+  assert.equal(activityDay('2026-10-23T00:30:00Z', 'Asia/Tokyo'), '2026-10-23')
+})

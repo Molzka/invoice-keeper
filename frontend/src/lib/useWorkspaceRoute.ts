@@ -14,9 +14,9 @@ function subscribe(onChange: () => void) {
 }
 function snapshot() { return window.location.hash }
 
-export function useWorkspaceRoute(today: string) {
+export function useWorkspaceRoute(today: string | null) {
   const hash = useSyncExternalStore(subscribe, snapshot)
-  return useMemo(() => readPaymentRoute(hash, today), [hash, today])
+  return useMemo(() => today ? readPaymentRoute(hash, today) : null, [hash, today])
 }
 
 export function writeWorkspaceHash(hash: string, replace = false) {
