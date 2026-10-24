@@ -3,18 +3,19 @@ from typing import Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import DEFAULT_TIMEZONE
 from app.delivery.locking import lock_payments
 from app.delivery.schema import deliveries
 
-MOSCOW = ZoneInfo("Europe/Moscow")
 
-
-def reminder_at(due_date: date) -> datetime:
-    return datetime.combine(due_date - timedelta(days=3), time.min, MOSCOW).astimezone(UTC)
+def reminder_at(due_date: date, timezone_name: str = DEFAULT_TIMEZONE) -> datetime:
+    return datetime.combine(
+        due_date - timedelta(days=3), time.min, ZoneInfo(timezone_name)
+    ).astimezone(UTC)
 
 
 def utc_time(value: datetime | None = None) -> datetime:
@@ -31,6 +32,7 @@ async def enqueue_payment_reminder(
     occurrence_id: UUID,
     due_date: date,
     now: datetime | None = None,
+    timezone_name: str = DEFAULT_TIMEZONE,
 ) -> UUID:
     """Insert once in the caller's transaction; never commit, reset or send.
 
@@ -39,7 +41,7 @@ async def enqueue_payment_reminder(
     """
     now = utc_time(now)
     await db.flush()
-    scheduled_at = reminder_at(due_date)
+    scheduled_at = reminder_at(due_date, timezone_name)
     inserted = await db.scalar(
         insert(deliveries)
         .values(
@@ -60,13 +62,36 @@ async def enqueue_payment_reminder(
         return inserted
     existing = (
         await db.execute(
-            select(deliveries.c.id, deliveries.c.payment_id).where(
-                deliveries.c.occurrence_id == occurrence_id
-            )
+            select(
+                deliveries.c.id,
+                deliveries.c.payment_id,
+                deliveries.c.status,
+                deliveries.c.scheduled_at,
+            ).where(deliveries.c.occurrence_id == occurrence_id)
         )
     ).one()
     if existing.payment_id != payment_id:
         raise ValueError("Occurrence already belongs to a different payment")
+    # Reconcile changed calendar settings without resetting retries or outcomes.
+    if existing.status in {"pending", "retry"} and existing.scheduled_at != scheduled_at:
+        await db.execute(
+            update(deliveries)
+            .where(deliveries.c.id == existing.id)
+            .values(
+                scheduled_at=scheduled_at,
+                available_at=case(
+                    (
+                        or_(
+                            deliveries.c.status == "retry",
+                            deliveries.c.available_at != deliveries.c.scheduled_at,
+                        ),
+                        func.greatest(deliveries.c.available_at, scheduled_at),
+                    ),
+                    else_=scheduled_at,
+                ),
+                updated_at=now,
+            )
+        )
     return existing.id
 
 

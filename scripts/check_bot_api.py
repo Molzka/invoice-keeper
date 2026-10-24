@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 
-def check(image, bot_image):
+def check(image, bot_image, timezone):
     root = Path(__file__).resolve().parents[1]
     project = "invoice-keeper-bot-check-" + secrets.token_hex(6)
     env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_")}
@@ -37,7 +37,7 @@ def check(image, bot_image):
         CHAT_ID="-1001234567890",
         PANEL_URL="",
         APP_ENV="test",
-        APP_TIMEZONE="Europe/Moscow",
+        APP_TIMEZONE=timezone,
         SESSION_COOKIE_SECURE="false",
         ALLOWED_ORIGINS='["http://bot-check.local"]',
     )
@@ -139,6 +139,7 @@ def check(image, bot_image):
                             "API_USERNAME",
                             "API_PASSWORD",
                             "API_ORIGIN",
+                            "APP_TIMEZONE",
                         )
                     },
                     "APP_ENV": "test",
@@ -226,6 +227,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", help="Existing immutable backend image ID")
     parser.add_argument("--bot-image", help="Existing immutable bot image ID")
+    parser.add_argument("--timezone", default="Europe/Moscow", help="Business timezone to exercise")
     args = parser.parse_args()
     for value in (args.image, args.bot_image):
         if value and not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
@@ -236,7 +238,7 @@ def main():
 
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        check(args.image, args.bot_image)
+        check(args.image, args.bot_image, args.timezone)
     except KeyboardInterrupt:
         return 130
     except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as error:

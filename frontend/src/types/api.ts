@@ -5,7 +5,7 @@ export type Money = string
 export interface User { id: string; username: string; role: Role; created_at: string }
 export interface LoginRequest { username: string; password: string }
 export interface ChangePasswordRequest { current_password: string; new_password: string }
-export interface AuthResponse { user: User; csrf_token: string }
+export interface AuthResponse { user: User; csrf_token: string; timezone: string }
 export interface PaginationParams { limit?: number; offset?: number }
 export interface Page<T> { items: T[]; total: number; limit: number; offset: number }
 export interface RecurringPayment {
@@ -29,7 +29,7 @@ export interface OccurrenceFilters extends PaginationParams {
 export type UpdateOccurrenceRequest = { status: 'paid'; paid_on: CalendarDate } | { status: 'unpaid'; paid_on: null }
 export interface CurrencyTotals { planned: Money; paid: Money; unpaid: Money; overdue: Money }
 export interface PaymentSummary {
-  date_from: CalendarDate; date_to: CalendarDate; as_of_date: CalendarDate; timezone: 'Europe/Moscow'
+  date_from: CalendarDate; date_to: CalendarDate; as_of_date: CalendarDate; timezone: string
   totals: Record<Currency, CurrencyTotals>
 }
 export interface SummaryParams { date_from?: CalendarDate; date_to?: CalendarDate }

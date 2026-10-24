@@ -32,14 +32,15 @@ def seed():
             payload = response.read()
             return json.loads(payload) if payload else None
 
-    csrf = request(
+    auth = request(
         "POST",
         "/auth/login",
         {
             "username": os.environ["ADMIN_USERNAME"],
             "password": os.environ["ADMIN_PASSWORD"],
         },
-    )["csrf_token"]
+    )
+    csrf = auth["csrf_token"]
     user = request(
         "POST",
         "/users",
@@ -49,7 +50,7 @@ def seed():
         },
         201,
     )
-    today = datetime.now(ZoneInfo("Europe/Moscow")).date()
+    today = datetime.now(ZoneInfo(auth["timezone"])).date()
 
     def payment(title, due, *, paid=False, stopped=False):
         created = request(
@@ -91,7 +92,7 @@ def seed():
     for index in range(3):
         payment(f"Bot overdue {index}", today - timedelta(days=index + 1), stopped=index == 2)
     payment("Bot overdue paid excluded", today - timedelta(days=1), paid=True)
-    expected = {}
+    expected = {"timezone": auth["timezone"], "today": today.isoformat()}
     for kind, filters in {
         "upcoming": {"date_from": today, "date_to": today + timedelta(days=6)},
         "overdue": {"is_overdue": "true"},

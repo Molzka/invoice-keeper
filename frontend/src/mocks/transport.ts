@@ -1,6 +1,6 @@
 import type { Currency, ErrorDetail, Page, PaymentOccurrence, RecurringPayment, User } from '../types/api'
 import { ADMIN_ID, createFixtures } from './fixtures'
-import { businessNowIso, calendarMonthBounds, calendarMonthDate, DEMO_TODAY } from '../config/demo'
+import { APP_TIMEZONE, businessNowIso, calendarMonthBounds, calendarMonthDate, DEMO_TODAY } from '../config/demo'
 export { DEMO_TODAY } from '../config/demo'
 const demoMonth = calendarMonthBounds(DEMO_TODAY)
 
@@ -140,10 +140,10 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       if (typeof body.username !== 'string' || typeof body.password !== 'string' || passwords.get(body.username) !== body.password || !db.users.some(user => user.username === body.username)) fault(401, 'INVALID_CREDENTIALS', 'Неверный логин или пароль')
       saveSession(body.username as string)
       csrfToken = crypto.randomUUID()
-      return json({ user: getCurrentUser(), csrf_token: csrfToken })
+      return json({ user: getCurrentUser(), csrf_token: csrfToken, timezone: APP_TIMEZONE })
     }
     const user = getCurrentUser()
-    if (path === '/auth/me' && method === 'GET') { queryAllowed(url.searchParams, []); return json({ user, csrf_token: csrfToken }) }
+    if (path === '/auth/me' && method === 'GET') { queryAllowed(url.searchParams, []); return json({ user, csrf_token: csrfToken, timezone: APP_TIMEZONE }) }
     if (path === '/auth/change-password' && method === 'POST' && scenario === 'password-csrf' && !passwordScenarioUsed) {
       passwordScenarioUsed = true; csrfToken = crypto.randomUUID(); fault(403, 'CSRF_FAILED', 'Обновите сессию и повторите действие')
     }
@@ -156,6 +156,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
     if (['POST', 'PATCH', 'DELETE'].includes(method) && new Headers(init.headers).get('X-CSRF-Token') !== csrfToken) fault(403, 'CSRF_FAILED', 'Обновите страницу и повторите действие')
     if (path === '/auth/logout' && method === 'POST') { queryAllowed(url.searchParams, []); saveSession(null); return new Response(null, { status: 204 }) }
     if (path === '/auth/change-password' && method === 'POST') {
+      if (user.role === 'admin') fault(403, 'ADMIN_ACCOUNT_PROTECTED', 'Учётная запись администратора изменяется только в конфигурации сервера')
       queryAllowed(url.searchParams, [])
       const body = bodyObject(init, ['current_password', 'new_password'], ['current_password', 'new_password'])
       const currentPassword = passwordChangeValue(body.current_password, 'current_password', 1)
@@ -167,7 +168,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       passwords.set(user.username, newPassword)
       csrfToken = crypto.randomUUID()
       if (scenario === 'password-network' && !passwordScenarioUsed) { passwordScenarioUsed = true; throw new TypeError('Demo password response lost') }
-      return json({ user, csrf_token: csrfToken })
+      return json({ user, csrf_token: csrfToken, timezone: APP_TIMEZONE })
     }
     if (scenario === 'forbidden') fault(403, 'FORBIDDEN', 'У вас нет доступа к этому разделу')
     if (path === '/payments/summary' && method === 'GET') {

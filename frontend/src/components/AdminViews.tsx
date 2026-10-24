@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, API_MODE, ApiError } from '../api/client';
-import { businessToday } from '../config/demo';
+import { api, ApiError } from '../api/client';
 import { isCalendarDate, normalizeRecurringAmount, previewMonthlyDueDates } from '../lib/recurring-inputs';
 import type { RecurringPayment, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
@@ -13,6 +12,8 @@ export type AdminViewProps = {
   onHistory: (id: string, title: string) => void;
   notify: (message: string) => void;
   isAdmin: boolean;
+  today: string;
+  timezone: string;
   createRequested?: number;
   onCreateRequestHandled?: () => void;
 };
@@ -33,9 +34,9 @@ function calendarDate(date: string | null) {
   return `${day}.${month}.${year}`;
 }
 
-function createdDate(value: string) {
+function createdDate(value: string, timezone: string) {
   return new Intl.DateTimeFormat('ru-RU', {
-    timeZone: 'Europe/Moscow', day: '2-digit', month: 'short', year: 'numeric',
+    timeZone: timezone, day: '2-digit', month: 'short', year: 'numeric',
   }).format(new Date(value));
 }
 
@@ -64,7 +65,7 @@ function UncertainCreate({ onCheck }: { onCheck: () => void }) {
   return <div className="notice" role="alert"><strong>Результат создания пока неизвестен.</strong><p>Соединение прервалось до ответа сервера. Запись могла сохраниться. Сначала проверьте список, чтобы не создать дубликат.</p><button type="button" className="btn btn-secondary" onClick={onCheck}>Закрыть и проверить список</button></div>;
 }
 
-export function RecurringView({ onChanged, onHistory, notify, isAdmin, createRequested, onCreateRequestHandled }: AdminViewProps) {
+export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, timezone, createRequested, onCreateRequestHandled }: AdminViewProps) {
   const [activeFilter, setActiveFilter] = useState<'active' | 'all' | 'stopped'>('active');
   const [offset, setOffset] = useState(0);
   const [refresh, setRefresh] = useState(0);
@@ -95,7 +96,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
     }).catch(error => { if (alive) setLoadError(error); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [activeFilter, offset, refresh]);
+  }, [activeFilter, offset, refresh, today, timezone]);
 
   function reload() { setRefresh(value => value + 1); }
   function changed() { reload(); onChanged(); }
@@ -123,7 +124,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
         <div className="segmented" role="group" aria-label="Состояние регулярных платежей">
           {([['active', 'Активные'], ['all', 'Все платежи'], ['stopped', 'Прекращённые']] as const).map(([value, label]) => <button key={value} type="button" className={activeFilter === value ? 'segment active' : 'segment'} aria-pressed={activeFilter === value} onClick={() => { setOffset(0); setActiveFilter(value); }}>{label}</button>)}
         </div>
-        <span className="muted">Ежемесячно · по МСК</span>
+        <span className="muted">Ежемесячно · {timezone}</span>
       </div>
       {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем регулярные платежи…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">↻</span><h2>{activeFilter === 'stopped' ? 'Прекращённых платежей пока нет' : 'Здесь появятся регулярные платежи'}</h2><p className="muted">{activeFilter === 'stopped' ? 'Когда повторение будет прекращено, его история останется доступна.' : isAdmin ? 'Добавьте аренду, сервер или подписку — система создаст отдельные периоды оплаты.' : 'Администратор может добавить ежемесячные обязательства команды.'}</p>{isAdmin && activeFilter !== 'stopped' && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}</div> : <>
         <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма в месяц</th><th scope="col">Следующий срок</th><th scope="col">Состояние</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(payment => <tr key={payment.id}>
@@ -137,7 +138,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
       </>}
     </div>
     <p className="section-note">Прекращение повторения сохраняет историю. Уже созданные периоды остаются в списке платежей и в сводке.</p>
-    {creating && <RecurringForm onClose={() => setCreating(false)} onCreated={() => { setCreating(false); setOffset(0); notify('Регулярный платёж добавлен. Периоды оплаты уже созданы.'); changed(); }} onCheck={() => { setCreating(false); setActiveFilter('all'); setOffset(0); reload(); }} />}
+    {creating && <RecurringForm today={today} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); setOffset(0); notify('Регулярный платёж добавлен. Периоды оплаты уже созданы.'); changed(); }} onCheck={() => { setCreating(false); setActiveFilter('all'); setOffset(0); reload(); }} />}
     {stopping && <Drawer canClose={!busyStop} title="Прекратить повторение?" subtitle={stopping.title} onClose={() => { if (!busyStop) setStopping(null); }}>
       <div className="notice"><strong>История сохранится.</strong><p>Новые периоды и напоминания по этому правилу больше не будут создаваться. Уже созданные периоды останутся в истории и сводке; их оплату по-прежнему можно исправлять.</p></div>
       <p className="muted">Прекращение повторения не списывает существующие обязательства. Возобновить это правило через интерфейс v1 нельзя.</p>
@@ -147,11 +148,11 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
   </section>;
 }
 
-function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; onCreated: () => void; onCheck: () => void }) {
+function RecurringForm({ today, onClose, onCreated, onCheck }: { today: string; onClose: () => void; onCreated: () => void; onCheck: () => void }) {
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<Currency>('RUB');
-  const [firstDueDate, setFirstDueDate] = useState(() => businessToday(API_MODE));
+  const [firstDueDate, setFirstDueDate] = useState(today);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<unknown>(null);
   const [uncertain, setUncertain] = useState(false);
@@ -186,7 +187,7 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
     <form onSubmit={submit} noValidate className="form-grid">
       <label className="field" htmlFor="recurring-title"><span>Название платежа</span><input id="recurring-title" name="title" value={title} onChange={event => setTitle(event.target.value)} maxLength={200} placeholder="Например, аренда офиса" disabled={busy || uncertain} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? 'recurring-title-error' : undefined} required /><FieldMessage id="recurring-title-error" message={errors.title} /></label>
       <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000 или 45000,50" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Например: 45000, 45000,50 или 45000.50</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><SelectField id="recurring-currency" value={currency} onChange={value => setCurrency(value as Currency)} options={[{value: "RUB", label: "RUB · рубль"}, {value: "USD", label: "USD · доллар"}, {value: "EUR", label: "EUR · евро"}]} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}/><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
-      <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><DatePicker id="recurring-date" today={businessToday(API_MODE)} aria-label="Первый срок оплаты" value={firstDueDate} onChange={setFirstDueDate} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
+      <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><DatePicker id="recurring-date" today={today} aria-label="Первый срок оплаты" value={firstDueDate} onChange={setFirstDueDate} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
       <div className="field"><span>Периодичность</span><div className="static-field">↻ Каждый месяц</div><span className="field-hint">Если в месяце нет выбранного числа, сроком станет его последний день.</span><FieldMessage id="recurring-periodicity-error" message={errors.periodicity} /></div>
       <section className="recurring-preview" aria-labelledby="recurring-preview-title">
         <div className="recurring-preview-heading"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="4" stroke="currentColor" strokeWidth="1.6" /><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg><h3 id="recurring-preview-title">Предварительные сроки</h3><span>3 месяца</span></div>
@@ -203,7 +204,7 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
   </Drawer>;
 }
 
-export function UsersView({ onChanged, notify, isAdmin }: AdminViewProps) {
+export function UsersView({ onChanged, notify, isAdmin, timezone }: AdminViewProps) {
   const [offset, setOffset] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [page, setPage] = useState<Page<User> | null>(null);
@@ -257,7 +258,7 @@ export function UsersView({ onChanged, notify, isAdmin }: AdminViewProps) {
     <div className="panel">
       <div className="toolbar"><h2 className="panel-title">Участники команды</h2><span className="pill">Обычные пользователи</span></div>
       {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем пользователей…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">+</span><h2>Пригласите первого участника</h2><p className="muted">Пользователи смогут смотреть платежи и отмечать оплату каждого периода.</p><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div> : <>
-        <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Пользователь</th><th scope="col">Доступ</th><th scope="col">Дата создания</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(user => <tr key={user.id}><td><div className="user-cell"><span className="avatar" aria-hidden="true">{user.username.slice(0, 2).toUpperCase()}</span><strong className="payment-title">{user.username}</strong></div></td><td data-label="Доступ"><span className="status status-neutral">Пользователь</span><span className="muted table-caption">Просмотр и отметка оплаты</span></td><td className="date-cell" data-label="Дата создания">{createdDate(user.created_at)}</td><td><div className="inline-actions"><button className="btn btn-secondary btn-small" aria-label={`Изменить пользователя ${user.username}`} onClick={() => setEditing(user)}>Изменить</button><button className="icon-button danger-text" title="Удалить пользователя" aria-label={`Удалить пользователя ${user.username}`} onClick={() => { setDeleteError(null); setDeleting(user); }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button></div></td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Пользователь</th><th scope="col">Доступ</th><th scope="col">Дата создания</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(user => <tr key={user.id}><td><div className="user-cell"><span className="avatar" aria-hidden="true">{user.username.slice(0, 2).toUpperCase()}</span><strong className="payment-title">{user.username}</strong></div></td><td data-label="Доступ"><span className="status status-neutral">Пользователь</span><span className="muted table-caption">Просмотр и отметка оплаты</span></td><td className="date-cell" data-label="Дата создания">{createdDate(user.created_at, timezone)}</td><td><div className="inline-actions"><button className="btn btn-secondary btn-small" aria-label={`Изменить пользователя ${user.username}`} onClick={() => setEditing(user)}>Изменить</button><button className="icon-button danger-text" title="Удалить пользователя" aria-label={`Удалить пользователя ${user.username}`} onClick={() => { setDeleteError(null); setDeleting(user); }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button></div></td></tr>)}</tbody></table></div>
         <Pagination total={page.total} limit={page.limit} offset={page.offset} onPage={setOffset} />
       </>}
     </div>
