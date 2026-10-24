@@ -8,4 +8,5 @@ import './styles/date-picker.css';
 import './styles/motion.css';
 import './styles/workspace-art.css';
 import './styles/dashboard-detail.css';
+import './styles/button-polish.css';
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
