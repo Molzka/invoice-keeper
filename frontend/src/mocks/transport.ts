@@ -1,6 +1,8 @@
 import type { Currency, ErrorDetail, Page, PaymentOccurrence, RecurringPayment, User } from '../types/api'
-import { ADMIN_ID, createFixtures, DEMO_TODAY } from './fixtures'
-export { DEMO_TODAY } from './fixtures'
+import { ADMIN_ID, createFixtures } from './fixtures'
+import { businessNowIso, calendarMonthBounds, calendarMonthDate, DEMO_TODAY } from '../config/demo'
+export { DEMO_TODAY } from '../config/demo'
+const demoMonth = calendarMonthBounds(DEMO_TODAY)
 
 // This transport is a replaceable demo server. Real mode never falls back to it.
 const SESSION_KEY = 'invoice-keeper.demo-session.v1'
@@ -93,18 +95,11 @@ function username(value: unknown): string {
   return value
 }
 function password(value: unknown): string { if (typeof value !== 'string' || value.length < 8 || value.length > 128) invalid('password', 'Пароль должен содержать от 8 до 128 символов'); return value }
-function monthDate(year: number, month: number, anchor: number): string {
-  const days = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(Math.min(anchor, days)).padStart(2, '0')}`
-}
-function advanceMonth(value: string, anchor: number): string {
-  const [year, month] = value.split('-').map(Number)
-  return monthDate(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, anchor)
-}
+function advanceMonth(value: string, anchor: number): string { return calendarMonthDate(value, anchor, 1) }
 function addOccurrences(rule: RecurringPayment) {
   let due = rule.first_due_date
   const dates: string[] = []
-  while (due <= '2026-10-31') { dates.push(due); due = advanceMonth(due, rule.anchor_day) }
+  while (due <= demoMonth.date_to) { dates.push(due); due = advanceMonth(due, rule.anchor_day) }
   if (!dates.some(item => item >= DEMO_TODAY)) dates.push(due)
   rule.next_due_date = dates.find(item => item >= DEMO_TODAY) || due
   dates.forEach(due_date => db.occurrences.push({ id: crypto.randomUUID(), recurring_payment_id: rule.id, title: rule.title,
@@ -136,8 +131,8 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
     if (scenario === 'forbidden') fault(403, 'FORBIDDEN', 'У вас нет доступа к этому разделу')
     if (path === '/payments/summary' && method === 'GET') {
       queryAllowed(url.searchParams, ['date_from', 'date_to'])
-      const { from = '2026-10-01', to = '2026-10-31' } = range(url.searchParams, true)
-      if (to > '2026-10-31') invalid('query.date_to', 'Сводка доступна по последний день текущего месяца')
+      const { from = demoMonth.date_from, to = demoMonth.date_to } = range(url.searchParams, true)
+      if (to > demoMonth.date_to) invalid('query.date_to', 'Сводка доступна по последний день текущего месяца')
       if (scenario === 'periods-not-ready') fault(503, 'PERIODS_NOT_READY', 'Восстанавливаем историю платежей. Сводка появится, когда данные будут полными.')
       const totals = Object.fromEntries((['RUB', 'USD', 'EUR'] as Currency[]).map(currency => {
         const rows = db.occurrences.filter(item => item.currency === currency && item.due_date >= from && item.due_date <= to).map(occurrenceView)
@@ -185,7 +180,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
         const amount = money(body.amount), firstDue = date(body.first_due_date, 'first_due_date')
         if (typeof body.currency !== 'string' || !['RUB', 'USD', 'EUR'].includes(body.currency)) invalid('currency', 'Выберите RUB, USD или EUR')
         if (body.periodicity !== 'monthly') invalid('periodicity', 'Поддерживается ежемесячное повторение')
-        const item: RecurringPayment = { id: crypto.randomUUID(), title: (body.title as string).trim(), amount, currency: body.currency as Currency, first_due_date: firstDue, next_due_date: firstDue, periodicity: 'monthly', anchor_day: Number(firstDue.slice(-2)), is_active: true, created_at: new Date().toISOString() }
+        const item: RecurringPayment = { id: crypto.randomUUID(), title: (body.title as string).trim(), amount, currency: body.currency as Currency, first_due_date: firstDue, next_due_date: firstDue, periodicity: 'monthly', anchor_day: Number(firstDue.slice(-2)), is_active: true, created_at: businessNowIso('mock') }
         addOccurrences(item); db.recurring.push(item)
         return json(item, 201)
       }
@@ -208,7 +203,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
         const body = bodyObject(init, ['username', 'password'], ['username', 'password'])
         const name = username(body.username), secret = password(body.password)
         if (db.users.some(item => item.username === name)) fault(409, 'USERNAME_TAKEN', 'Этот логин уже занят')
-        const item: User = { id: crypto.randomUUID(), username: name, role: 'user', created_at: new Date().toISOString() }
+        const item: User = { id: crypto.randomUUID(), username: name, role: 'user', created_at: businessNowIso('mock') }
         db.users.push(item); passwords.set(name, secret); return json(item, 201)
       }
       const id = path.split('/').at(-1)!; uuid(id)
@@ -231,4 +226,5 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
     throw error
   }
 }
+
 

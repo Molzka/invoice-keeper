@@ -11,11 +11,6 @@ export function dateLabel(value: string | null): string {
   const [year, month, day] = value.split('-')
   return `${day}.${month}.${year}`
 }
-export function moscowToday(): string {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
-  const part = (key: string) => parts.find(item => item.type === key)?.value || ''
-  return `${part('year')}-${part('month')}-${part('day')}`
-}
 export function monthRange(month: string) {
   const [year, index] = month.split('-').map(Number)
   const end = new Date(Date.UTC(year, index, 0)).getUTCDate()

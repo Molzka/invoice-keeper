@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, ApiError } from '../api/client';
+import { api, API_MODE, ApiError } from '../api/client';
+import { businessToday } from '../config/demo';
 import type { RecurringPayment, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
+import { PageHeader } from './PageHeader';
+import { DatePicker } from './DatePicker';
+import { SelectField } from './SelectField';
 
 export type AdminViewProps = {
   onChanged: () => void;
@@ -26,14 +30,6 @@ function calendarDate(date: string | null) {
   if (!date) return '—';
   const [year, month, day] = date.split('-');
   return `${day}.${month}.${year}`;
-}
-
-function todayMoscow() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(new Date());
-  const value = (type: string) => parts.find(part => part.type === type)?.value ?? '';
-  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function createdDate(value: string) {
@@ -127,10 +123,9 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
   }
 
   return <section aria-labelledby="recurring-heading">
-    <div className="section-head">
-      <div><span className="eyebrow">Повторения под контролем</span><h1 className="page-title" id="recurring-heading" tabIndex={-1}>Регулярные платежи<span className="title-dot">.</span></h1><p className="muted">Правила ежемесячных обязательств и их полная история.</p></div>
+    <PageHeader kind="recurring" id="recurring-heading" title="Регулярные платежи" eyebrow="Повторения под контролем" description="Правила ежемесячных обязательств и их полная история.">
       {isAdmin && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}
-    </div>
+    </PageHeader>
     <div className="panel">
       <div className="toolbar">
         <div className="segmented" role="group" aria-label="Состояние регулярных платежей">
@@ -151,11 +146,11 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, createReq
     </div>
     <p className="section-note">Прекращение повторения сохраняет историю. Уже созданные периоды остаются в списке платежей и в сводке.</p>
     {creating && <RecurringForm onClose={() => setCreating(false)} onCreated={() => { setCreating(false); setOffset(0); notify('Регулярный платёж добавлен. Периоды оплаты уже созданы.'); changed(); }} onCheck={() => { setCreating(false); setActiveFilter('all'); setOffset(0); reload(); }} />}
-    {stopping && <Drawer title="Прекратить повторение?" subtitle={stopping.title} onClose={() => { if (!busyStop) setStopping(null); }}>
+    {stopping && <Drawer canClose={!busyStop} title="Прекратить повторение?" subtitle={stopping.title} onClose={() => { if (!busyStop) setStopping(null); }}>
       <div className="notice"><strong>История сохранится.</strong><p>Новые периоды и напоминания по этому правилу больше не будут создаваться. Уже созданные периоды останутся в истории и сводке; их оплату по-прежнему можно исправлять.</p></div>
       <p className="muted">Прекращение повторения не списывает существующие обязательства. Возобновить это правило через интерфейс v1 нельзя.</p>
       {stopError != null && <ErrorNotice error={stopError} />}
-      <div className="form-actions"><button className="btn btn-secondary" disabled={busyStop} onClick={() => setStopping(null)}>Отмена</button><button className="btn btn-danger" disabled={busyStop} onClick={confirmStop}>{busyStop ? 'Прекращаем…' : 'Прекратить повторение'}</button></div>
+      <div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busyStop} onClick={() => setStopping(null)}>Отмена</button><button className="btn btn-danger" disabled={busyStop} onClick={confirmStop}>{busyStop ? 'Прекращаем…' : 'Прекратить повторение'}</button></div>
     </Drawer>}
   </section>;
 }
@@ -164,7 +159,7 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<Currency>('RUB');
-  const [firstDueDate, setFirstDueDate] = useState(todayMoscow);
+  const [firstDueDate, setFirstDueDate] = useState(() => businessToday(API_MODE));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<unknown>(null);
   const [uncertain, setUncertain] = useState(false);
@@ -193,15 +188,15 @@ function RecurringForm({ onClose, onCreated, onCheck }: { onClose: () => void; o
     } finally { guard.current = false; setBusy(false); }
   }
 
-  return <Drawer title="Новый регулярный платёж" subtitle="Добавьте обязательство один раз — дальше каждый месяц." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
+  return <Drawer canClose={!busy} title="Новый регулярный платёж" subtitle="Добавьте обязательство один раз — дальше каждый месяц." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
     <form onSubmit={submit} noValidate className="form-grid">
       <label className="field" htmlFor="recurring-title"><span>Название платежа</span><input id="recurring-title" name="title" value={title} onChange={event => setTitle(event.target.value)} maxLength={200} placeholder="Например, аренда офиса" disabled={busy || uncertain} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? 'recurring-title-error' : undefined} required /><FieldMessage id="recurring-title-error" message={errors.title} /></label>
-      <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000.00" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Два знака после точки</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><select id="recurring-currency" value={currency} onChange={event => setCurrency(event.target.value as Currency)} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}><option value="RUB">RUB · рубль</option><option value="USD">USD · доллар</option><option value="EUR">EUR · евро</option></select><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
-      <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><input id="recurring-date" type="date" value={firstDueDate} onChange={event => setFirstDueDate(event.target.value)} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
+      <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000.00" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Два знака после точки</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><SelectField id="recurring-currency" value={currency} onChange={value => setCurrency(value as Currency)} options={[{value: "RUB", label: "RUB · рубль"}, {value: "USD", label: "USD · доллар"}, {value: "EUR", label: "EUR · евро"}]} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}/><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
+      <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><DatePicker id="recurring-date" today={businessToday(API_MODE)} aria-label="Первый срок оплаты" value={firstDueDate} onChange={setFirstDueDate} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
       <div className="field"><span>Периодичность</span><div className="static-field">↻ Каждый месяц</div><span className="field-hint">Если в месяце нет выбранного числа, сроком станет его последний день.</span><FieldMessage id="recurring-periodicity-error" message={errors.periodicity} /></div>
       <div className="notice"><strong>Напоминания в Telegram</strong><p>Неоплаченные периоды будут напоминать о себе за 3 дня до срока. Для уже близкого или прошедшего срока напоминание готовится сразу.</p></div>
       {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}
-      <div className="form-actions"><button className="btn btn-secondary" type="button" disabled={busy} onClick={() => uncertain ? onCheck() : onClose()}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Создаём…' : 'Добавить платёж'}</button></div>
+      <div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busy} onClick={() => uncertain ? onCheck() : onClose()}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Создаём…' : 'Добавить платёж'}</button></div>
     </form>
   </Drawer>;
 }
@@ -254,7 +249,9 @@ export function UsersView({ onChanged, notify, isAdmin }: AdminViewProps) {
 
   if (!isAdmin) return <Forbidden />;
   return <section aria-labelledby="users-heading">
-    <div className="section-head"><div><span className="eyebrow">Команда и доступ</span><h1 className="page-title" id="users-heading" tabIndex={-1}>Пользователи<span className="title-dot">.</span></h1><p className="muted">Дайте команде доступ к общему списку платежей.</p></div><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div>
+    <PageHeader kind="users" id="users-heading" title="Пользователи" eyebrow="Команда и доступ" description="Дайте команде доступ к общему списку платежей.">
+      <button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button>
+    </PageHeader>
     <div className="panel">
       <div className="toolbar"><h2 className="panel-title">Участники команды</h2><span className="pill">Обычные пользователи</span></div>
       {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем пользователей…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">+</span><h2>Пригласите первого участника</h2><p className="muted">Пользователи смогут смотреть платежи и отмечать оплату каждого периода.</p><button className="btn btn-primary" onClick={() => setEditing('new')}><PlusIcon />Добавить пользователя</button></div> : <>
@@ -264,7 +261,7 @@ export function UsersView({ onChanged, notify, isAdmin }: AdminViewProps) {
     </div>
     <p className="section-note">Учётная запись администратора задаётся в конфигурации сервера и защищена от изменения в этом разделе.</p>
     {editing != null && <UserForm key={editing === 'new' ? 'new' : editing.id} user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { notify(editing === 'new' ? 'Пользователь добавлен.' : 'Изменения пользователя сохранены.'); setEditing(null); changed(); }} onCheck={() => { setEditing(null); setOffset(0); reload(); }} />}
-    {deleting && <Drawer title="Удалить пользователя?" subtitle={deleting.username} onClose={() => { if (!busyDelete) setDeleting(null); }}><div className="notice"><strong>Доступ будет отозван сразу.</strong><p>Все сессии пользователя завершатся. Его удаление не затронет платежи, отметки об оплате или историю команды.</p></div>{deleteError != null && <ErrorNotice error={deleteError} />}<div className="form-actions"><button className="btn btn-secondary" disabled={busyDelete} onClick={() => setDeleting(null)}>Отмена</button><button className="btn btn-danger" disabled={busyDelete} onClick={confirmDelete}>{busyDelete ? 'Удаляем…' : 'Удалить пользователя'}</button></div></Drawer>}
+    {deleting && <Drawer canClose={!busyDelete} title="Удалить пользователя?" subtitle={deleting.username} onClose={() => { if (!busyDelete) setDeleting(null); }}><div className="notice"><strong>Доступ будет отозван сразу.</strong><p>Все сессии пользователя завершатся. Его удаление не затронет платежи, отметки об оплате или историю команды.</p></div>{deleteError != null && <ErrorNotice error={deleteError} />}<div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busyDelete} onClick={() => setDeleting(null)}>Отмена</button><button className="btn btn-danger" disabled={busyDelete} onClick={confirmDelete}>{busyDelete ? 'Удаляем…' : 'Удалить пользователя'}</button></div></Drawer>}
   </section>;
 }
 
@@ -307,13 +304,14 @@ function UserForm({ user, onClose, onSaved, onCheck }: { user: User | null; onCl
     } finally { guard.current = false; setBusy(false); }
   }
 
-  return <Drawer title={user ? 'Изменить пользователя' : 'Новый пользователь'} subtitle={user ? `Настройки доступа для ${user.username}` : 'Участник сможет просматривать платежи и отмечать оплату.'} onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
+  return <Drawer canClose={!busy} title={user ? 'Изменить пользователя' : 'Новый пользователь'} subtitle={user ? `Настройки доступа для ${user.username}` : 'Участник сможет просматривать платежи и отмечать оплату.'} onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
     <form className="form-grid" noValidate onSubmit={submit}>
       <label className="field" htmlFor="user-username"><span>Логин</span><input id="user-username" name="username" autoComplete="off" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} maxLength={64} placeholder="ivan.petrov" disabled={busy || uncertain} aria-invalid={Boolean(errors.username)} aria-describedby={errors.username ? 'user-username-error' : 'user-username-hint'} required /><span id="user-username-hint" className="field-hint">3–64 символа: a–z, 0–9, _, . и -</span><FieldMessage id="user-username-error" message={errors.username} /></label>
       <label className="field" htmlFor="user-password"><span>{user ? 'Новый пароль' : 'Пароль'}</span><div className="password-field"><input id="user-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} maxLength={128} placeholder={user ? 'Оставьте пустым, чтобы сохранить' : 'Не менее 8 символов'} disabled={busy || uncertain} aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'user-password-error' : 'user-password-hint'} required={!user} /><button type="button" className="password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'} aria-pressed={showPassword}>{showPassword ? 'Скрыть' : 'Показать'}</button></div><span id="user-password-hint" className="field-hint">{user ? 'При смене пароля все текущие сессии этого пользователя завершатся.' : 'От 8 до 128 символов. Пробелы и регистр сохраняются.'}</span><FieldMessage id="user-password-error" message={errors.password} /></label>
       <div className="notice"><strong>Доступ обычного пользователя</strong><p>Просмотр общего списка, истории и сводки; подтверждение, отмена и исправление даты оплаты. Управление правилами и участниками доступно администратору.</p></div>
       {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}
-      <div className="form-actions"><button type="button" className="btn btn-secondary" onClick={() => uncertain ? onCheck() : onClose()} disabled={busy}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Сохраняем…' : user ? 'Сохранить изменения' : 'Добавить пользователя'}</button></div>
+      <div className="form-actions"><button data-drawer-close type="button" className="btn btn-secondary" onClick={() => uncertain ? onCheck() : onClose()} disabled={busy}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Сохраняем…' : user ? 'Сохранить изменения' : 'Добавить пользователя'}</button></div>
     </form>
   </Drawer>;
 }
+

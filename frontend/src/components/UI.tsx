@@ -1,37 +1,68 @@
-import { useEffect, useId, useRef } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, ChevronLeft, ChevronRight, Inbox, X } from 'lucide-react'
 import { ApiError } from '../api/client'
 
-export function Drawer({ title, subtitle, children, onClose }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void }) {
+export function Drawer({ title, subtitle, children, onClose, canClose = true }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; canClose?: boolean }) {
   const titleId = useId()
   const panel = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
+  const canCloseRef = useRef(canClose)
+  const closingRef = useRef(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [closing, setClosing] = useState(false)
   closeRef.current = onClose
+  canCloseRef.current = canClose
+  const requestClose = useCallback(() => {
+    if (!canCloseRef.current || closingRef.current) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      closeRef.current()
+      return
+    }
+    closingRef.current = true
+    setClosing(true)
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null
+      closingRef.current = false
+      setClosing(false)
+      // The parent keeps the final say if a request began during the exit.
+      if (canCloseRef.current) closeRef.current()
+    }, 180)
+  }, [])
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const target = panel.current?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), button:not([disabled])')
-    target?.focus()
+    const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]):not(.ik-select-native), textarea:not([disabled]), [tabindex="0"]') || []).filter(el => el.tabIndex >= 0 && !el.closest('[hidden], [inert], [aria-hidden="true"]') && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden')
+    focusable()[0]?.focus()
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return }
+      if (event.defaultPrevented) return
+      if (closingRef.current && ['Tab', 'Enter', 'Escape', ' '].includes(event.key)) { event.preventDefault(); return }
+      if (event.key === 'Escape') { event.preventDefault(); requestClose(); return }
       if (event.key !== 'Tab') return
-      const items = Array.from(panel.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') || []).filter(el => el.getClientRects().length > 0)
+      const items = focusable()
       const first = items[0], last = items[items.length - 1]
       if (!first) return
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }
     document.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', onKey); if (previous?.isConnected) previous.focus(); else document.querySelector<HTMLElement>('.page-title')?.focus() }
-  }, [])
-  return createPortal(<div className="drawer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
-    <div ref={panel} className="drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="drawer-head"><div><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="icon-button" type="button" aria-label="Закрыть панель" onClick={onClose}><X size={18}/></button></div>
+    return () => { if (closeTimer.current) clearTimeout(closeTimer.current); document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', onKey); if (previous?.isConnected) previous.focus(); else document.querySelector<HTMLElement>('.page-title')?.focus() }
+  }, [requestClose])
+  return createPortal(<div className="drawer-backdrop" role="dialog" aria-modal="true" aria-labelledby={titleId} data-state={closing ? 'closing' : 'open'} onMouseDown={event => { if (event.target === event.currentTarget) requestClose() }}>
+    <div ref={panel} className="drawer" onClickCapture={event => {
+      if (event.defaultPrevented || !(event.target instanceof Element)) return
+      const action = event.target.closest('[data-drawer-close]')
+      if (!action || !event.currentTarget.contains(action)) return
+      event.preventDefault()
+      event.stopPropagation()
+      requestClose()
+    }}>
+      <div className="drawer-head"><div><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="icon-button" type="button" aria-label="Закрыть панель" disabled={!canClose || closing} onClick={requestClose}><X size={18}/></button></div>
       <div className="drawer-body">{children}</div>
     </div>
+    <div className="drawer-popover-root" data-drawer-popover-root=""/>
   </div>, document.body)
 }
 export function ErrorNotice({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
