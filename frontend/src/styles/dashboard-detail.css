@@ -1,0 +1,51 @@
+/* Decorative currency marks sit underneath all financial content. */
+.currency-card { isolation: isolate; }
+.currency-card > :not(.currency-art) { position: relative; z-index: 1; }
+.currency-art {
+  position: absolute;
+  z-index: 0;
+  top: 31px;
+  right: 18px;
+  width: 116px;
+  height: 118px;
+  color: #141616;
+  opacity: .085;
+  pointer-events: none;
+  overflow: visible;
+  transform: rotate(-7deg);
+  transition: opacity 350ms ease, transform 550ms var(--ease-out);
+  animation: currency-ink-arrive 750ms 130ms ease both;
+}
+.currency-art-orbit { opacity: .65; }
+@keyframes currency-ink-arrive {
+  from { opacity: 0; transform: translateY(6px) rotate(-11deg); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .currency-card:hover .currency-art { opacity: .13; transform: translateY(-2px) rotate(0); }
+}
+/* Keep error text beside its icon, including on wide screens. */
+.app-main .error-banner, .app-main .summary-error {
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 18px;
+}
+.app-main .error-banner > svg, .app-main .summary-error > svg { flex: 0 0 20px; margin-top: 2px; }
+.app-main .error-banner > div, .app-main .summary-error > div { min-width: 0; flex: 1; }
+.app-main .summary-error h3 { margin: 0 0 7px; font-size: 15px; }
+.app-main .summary-error p { margin: 0; }
+.app-main .summary-error .btn { margin-top: 12px; }
+.api-request-detail { margin: 12px 0 0; }
+.api-request-detail summary { cursor: pointer; width: fit-content; text-underline-offset: 3px; }
+.api-request-detail[open] summary { margin-bottom: 8px; }
+.api-request-detail code { display: block; padding: 8px 10px; border: 1px solid currentColor; border-radius: 8px; width: fit-content; max-width: 100%; overflow-wrap: anywhere; font-size: 11px; }
+@media (max-width: 760px) {
+  .currency-art { width: 106px; height: 108px; top: 25px; right: 20px; }
+  .app-main .error-banner, .app-main .summary-error { padding: 18px; gap: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .currency-art { animation: none; transition: none; }
+  .currency-card:hover .currency-art { transform: rotate(-7deg); }
+}

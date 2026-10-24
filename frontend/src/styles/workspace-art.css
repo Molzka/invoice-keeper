@@ -1,0 +1,74 @@
+/* Restrained background routes for the four workspace headers; login is unchanged. */
+.page-head.page-heading {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 30%) auto;
+  gap: 22px;
+}
+.page-heading:not(:has(.page-heading-action)) {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 44%);
+}
+.page-heading .page-intro,
+.page-heading .page-heading-action { position: relative; z-index: 1; }
+.page-heading .workspace-art {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 148px;
+  grid-column: 2;
+  align-self: center;
+  overflow: hidden;
+  color: #141616;
+  opacity: .6;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+.workspace-art-route { opacity: .6; }
+.workspace-art-node { opacity: .6; }
+.workspace-art-object {
+  opacity: .65;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 450ms cubic-bezier(.2, .75, .25, 1);
+  animation: workspace-ink-arrive 650ms 90ms ease both;
+}
+.workspace-art-secondary { opacity: .44; }
+.workspace-art-detail { opacity: .6; }
+.workspace-art-paper { fill: var(--bg, #f4f6f7); }
+.workspace-art-reveal { animation: workspace-route-draw 1000ms 140ms ease-out both; }
+.workspace-art-arrow { animation: workspace-ink-arrive 400ms 800ms ease both; }
+@keyframes workspace-route-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes workspace-ink-arrive {
+  from { opacity: 0; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .page-heading:hover .workspace-art { opacity: .72; }
+  .page-heading:hover .workspace-art-object { transform: translateY(-2px); }
+}
+@media (max-width: 1200px) {
+  .page-head.page-heading { grid-template-columns: minmax(0, 1fr) minmax(190px, 25%) auto; gap: 18px; }
+  .page-heading:not(:has(.page-heading-action)) { grid-template-columns: minmax(0, 1fr) minmax(250px, 40%); }
+  .page-heading .workspace-art { height: 130px; }
+}
+@media (min-width: 761px) and (max-width: 1000px) {
+  .page-head.page-heading,
+  .page-heading:not(:has(.page-heading-action)) { grid-template-columns: minmax(0, 1fr) 260px; }
+}
+@media (max-width: 760px) {
+  .page-head.page-heading,
+  .page-heading:not(:has(.page-heading-action)) { grid-template-columns: minmax(0, 1fr) 88px; gap: 14px 10px; }
+  .page-heading .workspace-art { width: 88px; height: 94px; margin: 3px 0 0; align-self: start; opacity: .4; }
+  .workspace-art-route { opacity: .22; }
+}
+@media (max-width: 360px) {
+  .page-head.page-heading,
+  .page-heading:not(:has(.page-heading-action)) { grid-template-columns: minmax(0, 1fr) 70px; gap: 14px 8px; }
+  .page-heading .workspace-art { width: 70px; height: 84px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-heading .workspace-art,
+  .workspace-art * { animation: none !important; transition: none !important; }
+  .workspace-art-object { transform: none !important; }
+  .workspace-art-reveal { stroke-dashoffset: 0; }
+}
