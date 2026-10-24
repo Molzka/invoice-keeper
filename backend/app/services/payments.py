@@ -7,8 +7,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.delivery.locking import lock_payments
-from app.models import PaymentOccurrence, RecurringPayment
+from app.models import PaymentOccurrence, RecurringPayment, User
 from app.schemas.payments import PaymentStateUpdate, RecurringPaymentCreate
+from app.services.audit import record_audit_event
 from app.services.errors import api_error
 from app.services.payment_calendar import next_due_date
 from app.services.payment_periods import (
@@ -74,6 +75,8 @@ async def create_recurring_payment(
     db: AsyncSession,
     payload: RecurringPaymentCreate,
     today: date,
+    *,
+    actor: User | None = None,
 ) -> RecurringPayment:
     await lock_payments(db)
     payment = RecurringPayment(
@@ -87,6 +90,36 @@ async def create_recurring_payment(
     db.add(payment)
     await db.flush()
     await ensure_payment_periods(db, payment.id, today)
+    if actor is not None:
+        record_audit_event(
+            db,
+            actor=actor,
+            action="payment.created",
+            entity_type="payment",
+            entity_id=payment.id,
+            entity_title=payment.title,
+            changes=[
+                {"field": "title", "label": "Название", "before": None, "after": payment.title},
+                {
+                    "field": "amount",
+                    "label": "Сумма",
+                    "before": None,
+                    "after": money_string(payment.amount),
+                },
+                {
+                    "field": "currency",
+                    "label": "Валюта",
+                    "before": None,
+                    "after": payment.currency,
+                },
+                {
+                    "field": "first_due_date",
+                    "label": "Первый срок",
+                    "before": None,
+                    "after": payment.first_due_date.isoformat(),
+                },
+            ],
+        )
     await db.commit()
     return payment
 
@@ -115,12 +148,31 @@ async def stop_recurring_payment(
     db: AsyncSession,
     payment_id: UUID,
     today: date,
+    *,
+    actor: User | None = None,
 ) -> None:
     payment = await ensure_payment_periods(db, payment_id, today, through=today)
     if payment is None:
         raise api_error(404, "RECURRING_PAYMENT_NOT_FOUND", "Регулярный платёж не найден")
     if payment.is_active:
         payment.is_active = False
+        if actor is not None:
+            record_audit_event(
+                db,
+                actor=actor,
+                action="payment.stopped",
+                entity_type="payment",
+                entity_id=payment.id,
+                entity_title=payment.title,
+                changes=[
+                    {
+                        "field": "is_active",
+                        "label": "Регулярный платёж",
+                        "before": "Действует",
+                        "after": "Прекращён",
+                    }
+                ],
+            )
     await db.commit()
 
 
@@ -200,6 +252,8 @@ async def update_payment_state(
     occurrence_id: UUID,
     payload: PaymentStateUpdate,
     today: date,
+    *,
+    actor: User | None = None,
 ) -> dict:
     await lock_payments(db)
     payment_id = await db.scalar(
@@ -236,7 +290,45 @@ async def update_payment_state(
                 }
             ],
         )
+    previous_status, previous_paid_on = occurrence.status, occurrence.paid_on
     occurrence.status = payload.status
     occurrence.paid_on = payload.paid_on
+    if actor is not None and (previous_status, previous_paid_on) != (
+        occurrence.status,
+        occurrence.paid_on,
+    ):
+        if previous_status != occurrence.status:
+            action = "payment.paid" if occurrence.status == "paid" else "payment.unpaid"
+        else:
+            action = "payment.date_changed"
+        status_labels = {"paid": "Оплачено", "unpaid": "Не оплачено"}
+        record_audit_event(
+            db,
+            actor=actor,
+            action=action,
+            entity_type="payment",
+            entity_id=payment.id,
+            entity_title=payment.title,
+            changes=[
+                {
+                    "field": "due_date",
+                    "label": "Период со сроком",
+                    "before": None,
+                    "after": occurrence.due_date.isoformat(),
+                },
+                {
+                    "field": "status",
+                    "label": "Статус",
+                    "before": status_labels[previous_status],
+                    "after": status_labels[occurrence.status],
+                },
+                {
+                    "field": "paid_on",
+                    "label": "Дата оплаты",
+                    "before": previous_paid_on.isoformat() if previous_paid_on else None,
+                    "after": occurrence.paid_on.isoformat() if occurrence.paid_on else None,
+                },
+            ],
+        )
     await db.commit()
     return occurrence_data(payment, occurrence, today)

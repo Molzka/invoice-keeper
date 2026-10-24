@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
 from app.api.payments import router as payments_router
@@ -62,7 +63,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 response.headers["Cache-Control"] = "no-store"
                 return response
         response = await call_next(request)
-        if request.url.path.startswith(("/api/v1/auth", "/api/v1/users")):
+        if request.url.path.startswith(("/api/v1/auth", "/api/v1/users", "/api/v1/audit-events")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -94,6 +95,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     api_router.include_router(auth_router)
+    api_router.include_router(audit_router)
     api_router.include_router(users_router)
     api_router.include_router(payments_router)
     app.include_router(api_router)
