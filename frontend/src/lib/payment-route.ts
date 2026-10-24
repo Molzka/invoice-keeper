@@ -1,4 +1,4 @@
-export type WorkspaceView = 'payments' | 'history' | 'recurring' | 'users'
+export type WorkspaceView = 'payments' | 'history' | 'recurring' | 'users' | 'calendar' | 'activity'
 export type PaymentTab = 'all' | 'unpaid' | 'overdue' | 'paid'
 export type PaymentCurrency = '' | 'RUB' | 'USD' | 'EUR'
 export type PaymentFilters = {
@@ -21,7 +21,7 @@ export type PaymentRouteOptions = {
   ruleId?: string | null
 }
 
-const views: readonly string[] = ['payments', 'history', 'recurring', 'users']
+const views: readonly string[] = ['payments', 'history', 'recurring', 'users', 'calendar', 'activity']
 const tabs: readonly string[] = ['all', 'unpaid', 'overdue', 'paid']
 const currencies: readonly string[] = ['RUB', 'USD', 'EUR']
 const pageSizes: readonly number[] = [6, 12, 24]

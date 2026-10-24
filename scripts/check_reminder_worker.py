@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 
-def check(image=None):
+def check(image=None, timezone="Europe/Moscow"):
     root = Path(__file__).resolve().parents[1]
     project = "invoice-keeper-worker-check-" + secrets.token_hex(6)
     env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_")}
@@ -33,7 +33,7 @@ def check(image=None):
         CHAT_ID="-1001234567890",
         PANEL_URL="",
         APP_ENV="test",
-        APP_TIMEZONE="Europe/Moscow",
+        APP_TIMEZONE=timezone,
         SESSION_COOKIE_SECURE="false",
         ALLOWED_ORIGINS='["http://127.0.0.1:8000"]',
         REMINDER_POLL_SECONDS="1",
@@ -305,6 +305,7 @@ def check(image=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", help="Existing immutable backend/worker image ID (sha256:...)")
+    parser.add_argument("--timezone", default="Europe/Moscow", help="Business timezone to exercise")
     args = parser.parse_args()
     if args.image and not re.fullmatch(r"sha256:[0-9a-f]{64}", args.image):
         parser.error("--image must be a full immutable sha256 image ID")
@@ -314,7 +315,7 @@ def main():
 
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        check(args.image)
+        check(args.image, args.timezone)
     except KeyboardInterrupt:
         print("Worker integration check interrupted", file=sys.stderr)
         return 130

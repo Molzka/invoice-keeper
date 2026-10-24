@@ -1,3 +1,4 @@
+import type { AuditFilters, AuditPage } from '../types/activity'
 import type {
   AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
@@ -14,7 +15,17 @@ const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/,
 const REQUEST_TIMEOUT_MS = 12000
 let csrfToken: string | null = null
 let sessionUser: AuthResponse['user'] | null = null
-function installSession(data: AuthResponse) { csrfToken = data.csrf_token; sessionUser = data.user }
+function installSession(data: AuthResponse) {
+  try {
+    if (typeof data?.timezone !== 'string' || !data.timezone.trim()) throw new RangeError()
+    new Intl.DateTimeFormat('en', { timeZone: data.timezone }).format()
+  } catch {
+    const message = 'Сервер не сообщил поддерживаемый часовой пояс. Обратитесь к администратору.'
+    clearSession(message)
+    throw new ApiError(200, 'INVALID_RESPONSE', message)
+  }
+  csrfToken = data.csrf_token; sessionUser = data.user
+}
 function clearSession(message?: string) {
   csrfToken = null; sessionUser = null
   window.dispatchEvent(new CustomEvent('invoice:unauthorized', { detail: { message } }))
@@ -88,9 +99,11 @@ async function recoverCsrfSession(expectedUser: AuthResponse['user'], context: {
     throw new ApiError(401, 'AUTH_REQUIRED', message, [], context)
   }
   installSession(data)
+  window.dispatchEvent(new CustomEvent('invoice:session', { detail: data }))
 }
 
 export const api = {
+  listAuditEvents: (filters: AuditFilters): Promise<AuditPage> => request<AuditPage>('/audit-events' + query(filters)),
   async login(payload: LoginRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/login', 'POST', payload); installSession(data); return data },
   async changePassword(payload: ChangePasswordRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/change-password', 'POST', { current_password: payload.current_password, new_password: payload.new_password }); installSession(data); return data },
   async me(): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/me'); installSession(data); return data },

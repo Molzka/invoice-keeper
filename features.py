@@ -1,35 +1,47 @@
-"""Pure functions for invoice display; no Telegram or database dependency."""
+"""Telegram presentation helpers; business dates and statuses come from the API."""
+
 import html
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
-def money(amount, currency):
-    try: value = Decimal(str(amount).replace(' ', '').replace('\u00a0','').replace(',', '.')).quantize(Decimal('0.01'), ROUND_HALF_UP)
-    except InvalidOperation as e: raise ValueError('Некорректная сумма') from e
-    return f"{value:,.2f}".replace(',', ' ').replace('.', ',') + f' {currency}'
+from formatting import format_amount, format_date
 
-def date_text(value):
-    if isinstance(value, datetime): value = value.date()
-    if isinstance(value, date): return value.strftime('%d.%m.%Y')
-    for fmt in ('%Y-%m-%d', '%d.%m.%Y'):
-        try: return datetime.strptime(str(value).strip(), fmt).strftime('%d.%m.%Y')
-        except ValueError: pass
-    raise ValueError('Некорректная дата')
 
-def status(payment, today=None):
-    today = today or date.today()
-    due = datetime.strptime(date_text(payment['due_date']), '%d.%m.%Y').date()
-    return 'Просрочен' if due < today else ('К оплате сегодня' if due == today else 'Ожидает оплаты')
+def escaped(value):
+    return html.escape(str(value), quote=False)
 
-def payment_card(payment, index=1):
-    title = html.escape(str(payment['title']), quote=False)
-    amount = html.escape(money(payment['amount'], payment['currency']), quote=False)
-    due = html.escape(date_text(payment['due_date']), quote=False)
-    return f"<b>{index}. {title}</b>\nСумма: {amount}\nСрок: {due}\nСтатус: {html.escape(status(payment))}"
 
-def summary_text(items):
-    overdue = [p for p in items if status(p) == 'Просрочен']
-    total = sum((Decimal(str(p['amount']).replace(',', '.')) for p in items), Decimal('0'))
-    currencies = {p['currency'] for p in items}
-    total_text = money(total, next(iter(currencies))) if len(currencies) == 1 else 'суммы в разных валютах'
-    return f'<b>Финансовая сводка</b>\nВсего счетов: {len(items)}\nПросрочено: {len(overdue)}\nСумма счетов: {html.escape(total_text)}'
+def payment_card(payment, texts, index=None):
+    if payment["status"] == "paid":
+        status = "paid_late" if payment["paid_late"] else "paid"
+    elif payment["status"] == "unpaid":
+        status = "overdue" if payment["is_overdue"] else "unpaid"
+    else:
+        raise ValueError("Unknown payment status")
+    title = str(payment["title"])
+    if index is not None:
+        title = f"{index}. {title}"
+    result = texts["PAYMENT_CARD"].format(
+        title=escaped(title),
+        amount=escaped(format_amount(payment["amount"], payment["currency"])),
+        due_date=escaped(format_date(payment["due_date"])),
+        status=escaped(texts["PAYMENT_STATUSES"][status]),
+    )
+    if payment["paid_on"] is not None:
+        result += texts["PAYMENT_CARD_PAID_ON"].format(paid_on=escaped(format_date(payment["paid_on"])))
+    if not payment["recurring_payment_is_active"]:
+        result += texts["PAYMENT_STOPPED"]
+    return result
+
+
+def summary_text(summary, texts):
+    header = texts["SUMMARY_TITLE"].format(
+        date_from=escaped(format_date(summary["date_from"])),
+        date_to=escaped(format_date(summary["date_to"])),
+        as_of_date=escaped(format_date(summary["as_of_date"])),
+        timezone=escaped(summary["timezone"]),
+    )
+    rows = [texts["SUMMARY_CURRENCY"].format(
+        currency=escaped(currency),
+        **{name: escaped(format_amount(summary["totals"][currency][name], currency))
+           for name in ("planned", "paid", "unpaid", "overdue")},
+    ) for currency in ("RUB", "USD", "EUR")]
+    return header + "\n\n" + "\n\n".join(rows)

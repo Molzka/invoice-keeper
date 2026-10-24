@@ -92,11 +92,11 @@ test('network and timeout creating POSTs have context and are attempted once', a
 })
 
 test('CSRF, bodyless logout and protected 401 handling are preserved', async () => {
-  let response = json({ user: { id: 'user-id' }, csrf_token: 'login-token' })
+  let response = json({ user: { id: 'user-id' }, csrf_token: 'login-token', timezone: 'Europe/Moscow' })
   const { api, calls, events } = await clientFixture(() => response)
   await api.login({ username: 'ivan', password: 'example-password-only' })
   assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), null)
-  response = json({ user: { id: 'user-id' }, csrf_token: 'me-token' })
+  response = json({ user: { id: 'user-id' }, csrf_token: 'me-token', timezone: 'Europe/Moscow' })
   await api.me()
   response = json({})
   await api.updateOccurrence('period-id', { status: 'paid', paid_on: '2026-10-23' })
@@ -124,10 +124,10 @@ test('CSRF, bodyless logout and protected 401 handling are preserved', async () 
 
 test('password change sends exact untrimmed JSON, keeps cookie auth and installs rotated CSRF before resolving', async () => {
   const user = { id: 'user-id', username: 'ivan', role: 'user' }
-  let response = json({ user, csrf_token: 'before-change' })
+  let response = json({ user, csrf_token: 'before-change', timezone: 'Europe/Moscow' })
   const { api, calls, events } = await clientFixture(() => response)
   await api.me()
-  response = json({ user, csrf_token: 'rotated-token' })
+  response = json({ user, csrf_token: 'rotated-token', timezone: 'Europe/Moscow' })
   const payload = { current_password: ' old password ', new_password: ' new password ' }
   const result = await api.changePassword({ ...payload, confirmation: 'must-stay-client-side' })
   assert.equal(result.csrf_token, 'rotated-token')
@@ -146,7 +146,7 @@ test('password change sends exact untrimmed JSON, keeps cookie auth and installs
 })
 
 test('password field errors retain details and failed changes do not replace the active CSRF token', async () => {
-  let response = json({ user: { id: 'user-id' }, csrf_token: 'existing-token' })
+  let response = json({ user: { id: 'user-id' }, csrf_token: 'existing-token', timezone: 'Europe/Moscow' })
   const { api, calls, events } = await clientFixture(() => response)
   await api.me()
   for (const [code, field] of [['CURRENT_PASSWORD_INVALID', 'current_password'], ['NEW_PASSWORD_UNCHANGED', 'new_password']]) {
@@ -201,5 +201,43 @@ test('a password-change 401 follows the existing global session-expiry flow', as
   const { api, calls, events } = await clientFixture(() => serverError(401, 'AUTH_REQUIRED'))
   await assert.rejects(api.changePassword({ current_password: 'old-password', new_password: 'new-password' }), error => error.status === 401)
   assert.equal(calls.length, 1)
+  assert.deepEqual(events, ['invoice:unauthorized'])
+})
+
+
+test('real audit requests preserve filters, cookie auth and the server response without demo fallback', async () => {
+  const page = { items: [{ id: 'event-id', action: 'payment.paid' }], total: 25, limit: 12, offset: 12 }
+  const { api, calls } = await clientFixture(() => json(page))
+  const filters = { date_from: '2026-10-01', date_to: '2026-10-31', actor: 'anna', action: 'payment.paid', query: 'Аренда офиса', limit: 12, offset: 12 }
+  assert.deepEqual(await api.listAuditEvents(filters), page)
+  const call = calls[0]
+  const url = new URL(call.url, 'http://localhost')
+  assert.equal(url.pathname, '/api/v1/audit-events')
+  assert.deepEqual(Object.fromEntries(url.searchParams), Object.fromEntries(Object.entries(filters).map(([key, value]) => [key, String(value)])))
+  assert.equal(call.init.method, 'GET')
+  assert.equal(call.init.credentials, 'include')
+  assert.equal(call.init.headers.get('Content-Type'), null)
+  assert.equal(call.init.body, undefined)
+  assert.equal(calls.length, 1)
+})
+
+test('audit requests omit empty filters and retain backend authorization, availability and network failures', async () => {
+  let response = () => json({ items: [], total: 0, limit: 12, offset: 0 })
+  const { api, calls, events } = await clientFixture(() => response())
+  const filters = { date_from: '', date_to: '', actor: '', action: '', query: '', limit: 12, offset: 0 }
+  assert.deepEqual(await api.listAuditEvents(filters), { items: [], total: 0, limit: 12, offset: 0 })
+  assert.equal(calls[0].url, '/api/v1/audit-events?limit=12&offset=0')
+  for (const [status, code] of [[403, 'FORBIDDEN'], [404, 'NOT_FOUND'], [503, 'SERVICE_UNAVAILABLE'], [401, 'AUTH_REQUIRED']]) {
+    response = () => serverError(status, code)
+    await assert.rejects(api.listAuditEvents(filters), error => {
+      assert.equal(error.status, status)
+      assert.equal(error.code, code)
+      assert.deepEqual(error.request, { method: 'GET', path: '/audit-events' })
+      return true
+    })
+  }
+  response = () => { throw new TypeError('Offline') }
+  await assert.rejects(api.listAuditEvents(filters), error => error.code === 'NETWORK_ERROR')
+  assert.equal(calls.length, 6)
   assert.deepEqual(events, ['invoice:unauthorized'])
 })

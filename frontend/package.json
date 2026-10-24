@@ -14,7 +14,7 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test src/config/demo.test.mjs src/api/client.test.mjs src/lib/recurring-inputs.test.mjs src/lib/payment-route.test.mjs src/lib/password-fields.test.mjs src/mocks/transport.test.mjs",
+    "test": "node --test src/config/demo.test.mjs src/api/client.test.mjs src/lib/recurring-inputs.test.mjs src/lib/payment-route.test.mjs src/lib/password-fields.test.mjs src/mocks/transport.test.mjs src/lib/payment-calendar.test.mjs src/lib/activity-route.test.mjs src/mocks/activity.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

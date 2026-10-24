@@ -7,12 +7,16 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import DEFAULT_TIMEZONE, settings
 from app.delivery.contracts import PaymentSnapshot
 from app.models import PaymentOccurrence, RecurringPayment
 from app.services.payment_periods import ensure_payment_periods
 
 
 class PaymentSourceAdapter:
+    def __init__(self, timezone_name: str = DEFAULT_TIMEZONE):
+        self.timezone_name = timezone_name
+
     async def active_payment_ids(
         self, db: AsyncSession, *, after: UUID | None, limit: int
     ) -> Sequence[UUID]:
@@ -33,7 +37,9 @@ class PaymentSourceAdapter:
     async def ensure_payment_periods(
         self, db: AsyncSession, payment_id: UUID, today: date, through: date | None = None
     ) -> None:
-        await ensure_payment_periods(db, payment_id, today, through)
+        await ensure_payment_periods(
+            db, payment_id, today, through, timezone_name=self.timezone_name
+        )
 
     async def unpaid_occurrences(
         self, db: AsyncSession, payment_id: UUID
@@ -85,4 +91,4 @@ class PaymentSourceAdapter:
 
 
 def make_source() -> PaymentSourceAdapter:
-    return PaymentSourceAdapter()
+    return PaymentSourceAdapter(settings.app_timezone)
