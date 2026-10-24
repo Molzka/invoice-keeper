@@ -72,14 +72,14 @@ Csrf = Annotated[None, Depends(require_csrf)]
 )
 async def create_payment(
     payload: RecurringPaymentCreate,
-    _admin: AdminUser,
+    admin: AdminUser,
     _csrf: Csrf,
     db: DbSession,
     request: Request,
 ) -> dict:
     today = today_in_timezone(request.app.state.settings.app_timezone)
     payment = await create_recurring_payment(
-        db, payload, today, timezone_name=request.app.state.settings.app_timezone
+        db, payload, today, actor=admin, timezone_name=request.app.state.settings.app_timezone
     )
     return recurring_payment_data(payment, today)
 
@@ -115,14 +115,14 @@ async def get_recurring_payments(
 )
 async def delete_recurring_payment(
     payment_id: UUID,
-    _admin: AdminUser,
+    admin: AdminUser,
     _csrf: Csrf,
     db: DbSession,
     request: Request,
 ) -> Response:
     today = today_in_timezone(request.app.state.settings.app_timezone)
     await stop_recurring_payment(
-        db, payment_id, today, timezone_name=request.app.state.settings.app_timezone
+        db, payment_id, today, actor=admin, timezone_name=request.app.state.settings.app_timezone
     )
     return Response(status_code=204)
 
@@ -187,13 +187,13 @@ async def get_payment_occurrence_by_id(
 async def patch_payment_occurrence(
     occurrence_id: UUID,
     payload: PaymentStateUpdate,
-    _user: CurrentUser,
+    user: CurrentUser,
     _csrf: Csrf,
     db: DbSession,
     request: Request,
 ) -> dict:
     today = today_in_timezone(request.app.state.settings.app_timezone)
-    return await update_payment_state(db, occurrence_id, payload, today)
+    return await update_payment_state(db, occurrence_id, payload, today, actor=user)
 
 
 @router.get(

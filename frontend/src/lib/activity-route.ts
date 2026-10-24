@@ -10,6 +10,8 @@ export const auditActionLabels: Record<AuditAction, string> = {
   'user.updated': 'Изменение пользователя',
   'user.deleted': 'Удаление пользователя',
   'password.changed': 'Смена своего пароля',
+  'payment.receipt_updated': 'Изменение подтверждения оплаты',
+  'payment.receipt_deleted': 'Удаление подтверждения оплаты',
 }
 const actions = Object.keys(auditActionLabels)
 const maxOffset = 1_000_000
@@ -73,8 +75,7 @@ export function activityHash(filters: AuditFilters): string {
   return '#activity?' + params.toString()
 }
 
-
-/** Technical timestamps are instants, unlike calendar date filters. Group them by the authenticated business timezone. */
+/** Technical timestamps are instants. Use the same business timezone as the server filters. */
 export function activityDay(timestamp: string, timezone: string): string {
   const parsed = new Date(timestamp)
   if (Number.isNaN(parsed.valueOf())) return ''

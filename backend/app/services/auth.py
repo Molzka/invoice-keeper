@@ -16,6 +16,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models import LoginRateLimit, User, UserSession
+from app.services.audit import record_audit_event
 from app.services.errors import api_error
 
 
@@ -168,6 +169,14 @@ async def change_password(
             created_at=now,
             expires_at=expires_at,
         )
+    )
+    record_audit_event(
+        db,
+        actor=user,
+        action="password.changed",
+        entity_type="account",
+        entity_id=user.id,
+        entity_title=user.username,
     )
     await db.commit()
     return user, token, expires_at

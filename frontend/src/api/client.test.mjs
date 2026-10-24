@@ -205,12 +205,39 @@ test('a password-change 401 follows the existing global session-expiry flow', as
 })
 
 
-test('real activity source reports unavailable without inventing an endpoint or making a network request', async () => {
-  const { api, calls } = await clientFixture(() => { throw new Error('Unexpected request') })
-  await assert.rejects(api.listAuditEvents({ date_from: '', date_to: '', actor: '', action: '', query: '', limit: 12, offset: 0 }), error => {
-    assert.equal(error.status, 501)
-    assert.equal(error.code, 'AUDIT_NOT_AVAILABLE')
-    return true
-  })
-  assert.equal(calls.length, 0)
+test('real audit requests preserve filters, cookie auth and the server response without demo fallback', async () => {
+  const page = { items: [{ id: 'event-id', action: 'payment.paid' }], total: 25, limit: 12, offset: 12 }
+  const { api, calls } = await clientFixture(() => json(page))
+  const filters = { date_from: '2026-10-01', date_to: '2026-10-31', actor: 'anna', action: 'payment.paid', query: 'Аренда офиса', limit: 12, offset: 12 }
+  assert.deepEqual(await api.listAuditEvents(filters), page)
+  const call = calls[0]
+  const url = new URL(call.url, 'http://localhost')
+  assert.equal(url.pathname, '/api/v1/audit-events')
+  assert.deepEqual(Object.fromEntries(url.searchParams), Object.fromEntries(Object.entries(filters).map(([key, value]) => [key, String(value)])))
+  assert.equal(call.init.method, 'GET')
+  assert.equal(call.init.credentials, 'include')
+  assert.equal(call.init.headers.get('Content-Type'), null)
+  assert.equal(call.init.body, undefined)
+  assert.equal(calls.length, 1)
+})
+
+test('audit requests omit empty filters and retain backend authorization, availability and network failures', async () => {
+  let response = () => json({ items: [], total: 0, limit: 12, offset: 0 })
+  const { api, calls, events } = await clientFixture(() => response())
+  const filters = { date_from: '', date_to: '', actor: '', action: '', query: '', limit: 12, offset: 0 }
+  assert.deepEqual(await api.listAuditEvents(filters), { items: [], total: 0, limit: 12, offset: 0 })
+  assert.equal(calls[0].url, '/api/v1/audit-events?limit=12&offset=0')
+  for (const [status, code] of [[403, 'FORBIDDEN'], [404, 'NOT_FOUND'], [503, 'SERVICE_UNAVAILABLE'], [401, 'AUTH_REQUIRED']]) {
+    response = () => serverError(status, code)
+    await assert.rejects(api.listAuditEvents(filters), error => {
+      assert.equal(error.status, status)
+      assert.equal(error.code, code)
+      assert.deepEqual(error.request, { method: 'GET', path: '/audit-events' })
+      return true
+    })
+  }
+  response = () => { throw new TypeError('Offline') }
+  await assert.rejects(api.listAuditEvents(filters), error => error.code === 'NETWORK_ERROR')
+  assert.equal(calls.length, 6)
+  assert.deepEqual(events, ['invoice:unauthorized'])
 })

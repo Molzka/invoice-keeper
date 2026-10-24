@@ -220,6 +220,516 @@
         }
       }
     },
+    "/api/v1/audit-events": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Журнал действий (только администратор)",
+        "operationId": "get_audit_events_api_v1_audit_events_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "payment.created",
+                    "payment.stopped",
+                    "payment.paid",
+                    "payment.unpaid",
+                    "payment.date_changed",
+                    "user.created",
+                    "user.updated",
+                    "user.deleted",
+                    "password.changed",
+                    "payment.receipt_updated",
+                    "payment.receipt_deleted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/budget": {
+      "get": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Бюджет месяца или года с прогнозом будущих платежей",
+        "description": "Расчёт по сроку оплаты, отдельно для каждой валюты. planned = paid + unpaid + forecast; overdue входит в unpaid. Прогноз не создаёт периоды и напоминания. Без month возвращаются все 12 месяцев выбранного года.",
+        "operationId": "payments_budget_api_v1_payments_budget_get",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9999,
+              "minimum": 1,
+              "title": "Year"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 12,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentsBudget"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется авторизация",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTH_REQUIRED",
+                    "message": "Требуется авторизация",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Некорректные данные запроса",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Некорректные данные запроса",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "История периодов ещё восстанавливается",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "PERIODS_NOT_READY",
+                    "message": "История периодов ещё восстанавливается",
+                    "details": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payment-occurrences/{occurrence_id}/receipt": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Получить чек периода",
+        "operationId": "read_receipt_api_v1_payment_occurrences__occurrence_id__receipt_get",
+        "parameters": [
+          {
+            "name": "occurrence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Occurrence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PaymentReceiptRead"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Read Receipt Api V1 Payment Occurrences  Occurrence Id  Receipt Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Прикрепить HTTPS-ссылку или файл чека к периоду",
+        "operationId": "put_receipt_api_v1_payment_occurrences__occurrence_id__receipt_put",
+        "parameters": [
+          {
+            "name": "occurrence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Occurrence Id"
+            }
+          },
+          {
+            "name": "X-Filename",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Filename"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentReceiptRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "url": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "title": "Url",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url"
+                ],
+                "title": "ReceiptLinkUpdate",
+                "type": "object"
+              }
+            },
+            "application/pdf": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Удалить чек периода",
+        "operationId": "remove_receipt_api_v1_payment_occurrences__occurrence_id__receipt_delete",
+        "parameters": [
+          {
+            "name": "occurrence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Occurrence Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payment-occurrences/{occurrence_id}/receipt/file": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Скачать прикреплённый файл чека",
+        "operationId": "download_receipt_api_v1_payment_occurrences__occurrence_id__receipt_file_get",
+        "parameters": [
+          {
+            "name": "occurrence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Occurrence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users": {
       "get": {
         "tags": [
@@ -1222,6 +1732,182 @@
   },
   "components": {
     "schemas": {
+      "AuditActor": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username"
+        ],
+        "title": "AuditActor"
+      },
+      "AuditChange": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field",
+          "label",
+          "before",
+          "after"
+        ],
+        "title": "AuditChange"
+      },
+      "AuditEntity": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "payment",
+              "user",
+              "account"
+            ],
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "title"
+        ],
+        "title": "AuditEntity"
+      },
+      "AuditEventList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AuditEventList"
+      },
+      "AuditEventRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditActor"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "payment.created",
+              "payment.stopped",
+              "payment.paid",
+              "payment.unpaid",
+              "payment.date_changed",
+              "user.created",
+              "user.updated",
+              "user.deleted",
+              "password.changed",
+              "payment.receipt_updated",
+              "payment.receipt_deleted"
+            ],
+            "title": "Action"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/AuditEntity"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/AuditChange"
+            },
+            "type": "array",
+            "title": "Changes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "actor",
+          "action",
+          "entity",
+          "changes"
+        ],
+        "title": "AuditEventRead"
+      },
       "AuthResponse": {
         "properties": {
           "user": {
@@ -1244,6 +1930,74 @@
           "timezone"
         ],
         "title": "AuthResponse"
+      },
+      "BudgetCurrencyTotals": {
+        "properties": {
+          "planned": {
+            "type": "string",
+            "title": "Planned",
+            "description": "Оплаченные, неоплаченные периоды и прогноз вместе"
+          },
+          "paid": {
+            "type": "string",
+            "title": "Paid",
+            "description": "Оплаченные существующие периоды по сроку оплаты"
+          },
+          "unpaid": {
+            "type": "string",
+            "title": "Unpaid",
+            "description": "Неоплаченные существующие периоды"
+          },
+          "overdue": {
+            "type": "string",
+            "title": "Overdue",
+            "description": "Просроченная часть unpaid на дату расчёта"
+          },
+          "forecast": {
+            "type": "string",
+            "title": "Forecast",
+            "description": "Будущие сроки активных правил без созданного периода"
+          }
+        },
+        "type": "object",
+        "required": [
+          "planned",
+          "paid",
+          "unpaid",
+          "overdue",
+          "forecast"
+        ],
+        "title": "BudgetCurrencyTotals"
+      },
+      "BudgetMonth": {
+        "properties": {
+          "month": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month"
+          },
+          "totals": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BudgetCurrencyTotals"
+            },
+            "propertyNames": {
+              "enum": [
+                "RUB",
+                "USD",
+                "EUR"
+              ]
+            },
+            "type": "object",
+            "title": "Totals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "totals"
+        ],
+        "title": "BudgetMonth"
       },
       "ChangePasswordRequest": {
         "properties": {
@@ -1480,6 +2234,83 @@
         ],
         "title": "PaymentOccurrenceRead"
       },
+      "PaymentReceiptRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "link"
+            ],
+            "title": "Kind"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Uploaded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "url",
+          "filename",
+          "content_type",
+          "size_bytes",
+          "uploaded_at"
+        ],
+        "title": "PaymentReceiptRead"
+      },
       "PaymentStateUpdate": {
         "properties": {
           "status": {
@@ -1527,6 +2358,81 @@
             "status": "unpaid"
           }
         ]
+      },
+      "PaymentsBudget": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 9999.0,
+            "minimum": 1.0,
+            "title": "Year"
+          },
+          "month": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 12.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Month"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          },
+          "as_of_date": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of Date"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "totals": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BudgetCurrencyTotals"
+            },
+            "propertyNames": {
+              "enum": [
+                "RUB",
+                "USD",
+                "EUR"
+              ]
+            },
+            "type": "object",
+            "title": "Totals"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/BudgetMonth"
+            },
+            "type": "array",
+            "title": "Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "date_from",
+          "date_to",
+          "as_of_date",
+          "timezone",
+          "totals",
+          "months"
+        ],
+        "title": "PaymentsBudget"
       },
       "PaymentsSummary": {
         "properties": {
