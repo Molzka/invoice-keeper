@@ -35,7 +35,7 @@ async function captureViews(page: Page, info: TestInfo, name: string) {
     await page.setViewportSize({ width, height });
     expect(await page.locator('html').evaluate(element => element.scrollWidth), `${size}: no horizontal overflow`).toBeLessThanOrEqual(width);
     const path = info.outputPath(`${name}-${size}.png`);
-    await page.screenshot({ path, fullPage: true, animations: 'disabled' });
+    await page.screenshot({ path, fullPage: await page.getByRole('dialog').count() === 0, animations: 'disabled' });
     await info.attach(`${name}-${size}`, { path, contentType: 'image/png' });
   }
   if (original) await page.setViewportSize(original);
@@ -154,6 +154,7 @@ test('запоздавший настоящий 401 не завершает но
     });
     await test.step('Поздний ответ прежнего запроса не стирает успешный повторный вход', async () => {
       await login(page);
+      expect(await page.getByText('Сессия завершилась. Войдите снова.', { exact: true }).count()).toBe(0);
       release();
       await expect.poll(() => completed).toBe(true);
       await page.waitForLoadState('networkidle');

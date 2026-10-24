@@ -121,7 +121,7 @@ export default function App() {
     finally { logoutGuard.current = false; setLogoutBusy(false) }
   }
   if (restoring) return <div className="empty-state" style={{ minHeight: '100vh' }} role="status"><Brand/><span className="spinner"/><p>Восстанавливаем вашу сессию…</p></div>
-  if (!user || !session || !route || !today) return <><Login onLogin={value => { setPasswordOpen(false); setSession(value); setRestoreError(null); changed() }} restoreError={restoreError} onRestore={() => void restore()}/>{toast && <div className="toast" role="status">{toast}<button className="toast-close" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</>
+  if (!user || !session || !route || !today) return <><Login onLogin={value => { setPasswordOpen(false); setSession(value); setRestoreError(null); setToast(''); changed() }} restoreError={restoreError} onRestore={() => void restore()}/>{toast && <div className="toast" role="status">{toast}<button className="toast-close" aria-label="Скрыть сообщение" onClick={() => setToast('')}><X size={16}/></button></div>}</>
   const admin = user.role === 'admin'
   const titles: Record<View,string> = { payments:'Платежи', recurring:'Регулярные платежи', history:'История оплат', users:'Пользователи', calendar:'Календарь оплат', activity:'Журнал действий' }
   const subtitles: Record<View,string> = { payments:'Ближайшие сроки и обязательства команды — в одном месте.', recurring:'Настройте повторение один раз. История каждого периода сохранится.', history:'Каждый месяц — отдельный срок, статус и фактическая дата оплаты.', users:'Управляйте доступом обычных пользователей к общей панели.', calendar:'Сроки платежей на одном календаре.', activity:'История изменений в рабочем пространстве.' }
