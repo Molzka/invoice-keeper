@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from './BrandIcons'
 import { api, API_MODE } from '../api/client'
-import type { PaymentOccurrence } from '../types/api'
+import type { Currency, PaymentOccurrence } from '../types/api'
 import { dateLabel, money, monthLabel, statusInfo } from '../lib/format'
-import { calendarCells, calendarHash, calendarMonthDays, calendarOccurrenceFilters, loadCalendarOccurrences, moveCalendarMonth, readCalendarRoute } from '../lib/payment-calendar'
+import { calendarCells, calendarHash, calendarMonthDays, calendarOccurrenceFilters, calendarTotals, loadCalendarOccurrences, moveCalendarMonth, readCalendarRoute } from '../lib/payment-calendar'
 import type { CalendarRoute } from '../lib/payment-calendar'
 import { PageHeader } from './PageHeader'
 import { DeletePaymentDrawer } from './DeletePaymentDrawer'
@@ -32,6 +32,20 @@ function focusDayDetails() {
   const heading = document.getElementById('calendar-day-heading')
   heading?.focus({ preventScroll: true })
   document.getElementById('calendar-day-details')?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+}
+
+function DayTotals({ items, day }: { items: PaymentOccurrence[]; day: string }) {
+  const totals = calendarTotals(items)
+  return <section className="calendar-day-totals" aria-label={`Итоги за ${dateLabel(day)}`}>
+    <p>Итого за день <span>· по выбранным фильтрам</span></p>
+    <dl>{(['RUB', 'USD', 'EUR'] as Currency[]).map(currency => <div key={currency}>
+      <dt>{currency}</dt><dd><strong>{money(totals[currency].planned, currency)}</strong>
+        <span>Оплачено: {money(totals[currency].paid, currency)}</span>
+        <span>К оплате: {money(totals[currency].unpaid, currency)}</span>
+        {totals[currency].overdue !== '0.00' && <span className="overdue">Из них просрочено: {money(totals[currency].overdue, currency)}</span>}
+      </dd>
+    </div>)}</dl>
+  </section>
 }
 
 export function PaymentCalendar({ isAdmin, today, timezone, revision, onChanged, notify, onHistory }: Props) {
@@ -95,8 +109,11 @@ export function PaymentCalendar({ isAdmin, today, timezone, revision, onChanged,
           const items = days.get(date) || []
           return <td key={date} data-selected={date === day} data-today={date === today}><button className="calendar-day-number" type="button" aria-label={`${dateLabel(date)}, платежей: ${items.length}${date === today ? ', сегодня' : ''}`} aria-pressed={date === day} onClick={() => change({ day: date })}><span>{+date.slice(-2)}</span>{items.length > 0 && <small>{items.length}</small>}</button><div className="calendar-day-payments">{items.slice(0, 2).map(item => <CalendarPayment key={item.id} compact item={item} open={setSelected}/>)}{items.length > 2 && <button className="calendar-more" type="button" aria-controls="calendar-day-details" onClick={() => revealDay(date)} aria-label={`Все ${items.length} платежей за ${dateLabel(date)}`}>Ещё {items.length - 2} <ArrowUpRight size={12} aria-hidden="true"/></button>}</div></td>
         })}</tr>)}</tbody></table></div>
-        <aside id="calendar-day-details" className="calendar-day-panel" aria-label="Платежи выбранного дня"><div className="calendar-day-panel-heading"><span className="calendar-selected-date" aria-hidden="true">{+day.slice(-2)}</span><div><p className="eyebrow">Выбранный день</p><h3 id="calendar-day-heading" tabIndex={-1}>{dateLabel(day)}</h3></div></div><p className="calendar-day-count" aria-live="polite">Платежей: {selectedRows.length}{day === today && ' · Сегодня'}</p>{selectedRows.length ? <div className="calendar-day-detail-list">{selectedRows.map(item => <CalendarPayment key={item.id} item={item} open={setSelected}/>)}</div> : <div className="calendar-day-empty"><CalendarDays size={26} aria-hidden="true"/><h4>На этот день платежей нет</h4><p>{future ? 'Будущие периоды появятся после формирования на сервере.' : currency || status !== 'all' ? 'Попробуйте другие фильтры или выберите день с отметкой.' : 'Выберите другую дату в календаре.'}</p></div>}</aside></div>
-        <div className="calendar-mobile-agenda" aria-label="Платежи месяца по дням">{visibleRows?.length ? Array.from(days.entries()).map(([date, items]) => <section className="calendar-agenda-day" key={date}><h3><span>{+date.slice(-2)}</span><span>{dateLabel(date)}{date === today && <small>Сегодня</small>}</span><small>{items.length}</small></h3><div>{items.map(item => <CalendarPayment key={item.id} item={item} open={setSelected}/>)}</div></section>) : <EmptyState title="В этом месяце платежей нет">{future ? 'Будущие периоды ещё могут быть не сформированы на сервере.' : 'Измените месяц или сбросьте фильтры.'}</EmptyState>}</div>
+        <aside id="calendar-day-details" className="calendar-day-panel" aria-label="Платежи выбранного дня"><div className="calendar-day-panel-heading"><span className="calendar-selected-date" aria-hidden="true">{+day.slice(-2)}</span><div><p className="eyebrow">Выбранный день</p><h3 id="calendar-day-heading" tabIndex={-1}>{dateLabel(day)}</h3></div></div><p className="calendar-day-count" aria-live="polite">Платежей: {selectedRows.length}{day === today && ' · Сегодня'}</p>
+          {(!future || selectedRows.length > 0) && <DayTotals items={selectedRows} day={day}/>}
+          {selectedRows.length ? <div className="calendar-day-detail-list">{selectedRows.map(item => <CalendarPayment key={item.id} item={item} open={setSelected}/>)}</div> : <div className="calendar-day-empty"><CalendarDays size={26} aria-hidden="true"/><h4>На этот день платежей нет</h4><p>{future ? 'Будущие периоды появятся после формирования на сервере.' : currency || status !== 'all' ? 'Попробуйте другие фильтры или выберите день с отметкой.' : 'Выберите другую дату в календаре.'}</p></div>}</aside></div>
+        <div className="calendar-mobile-agenda" aria-label="Платежи месяца по дням">{visibleRows?.length ? Array.from(days.entries()).map(([date, items]) => <section className="calendar-agenda-day" key={date}><h3><span>{+date.slice(-2)}</span><span>{dateLabel(date)}{date === today && <small>Сегодня</small>}</span><small>{items.length}</small></h3>
+          <DayTotals items={items} day={date}/><div>{items.map(item => <CalendarPayment key={item.id} item={item} open={setSelected}/>)}</div></section>) : <EmptyState title="В этом месяце платежей нет">{future ? 'Будущие периоды ещё могут быть не сформированы на сервере.' : 'Измените месяц или сбросьте фильтры.'}</EmptyState>}</div>
         {!visibleRows?.length && <p className="calendar-month-empty-note" role="status">{future ? 'Сервер пока не вернул периодов на этот месяц. Это не прогноз будущих расходов.' : 'За выбранный месяц и с этими фильтрами платежей не найдено.'}</p>}
       </>}
     </section>

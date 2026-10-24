@@ -61,6 +61,16 @@
 .calendar-day-panel-heading .eyebrow { margin: 0 0 6px; font-size: 9px; }
 .calendar-day-panel-heading h3 { margin: 0; font-size: 15px; letter-spacing: -.2px; }
 .calendar-day-count { margin: 16px 0; font-size: 11px; color: var(--muted); }
+.calendar-day-totals { --totals-gap: 12px; margin: 0 0 20px; padding-block: var(--totals-gap); border-block: 1px solid var(--line); }
+.calendar-day-totals > p { margin: 0 0 var(--totals-gap); font-size: 12px; font-weight: 600; }
+.calendar-day-totals > p span { color: var(--muted); font-size: 10px; font-weight: 400; }
+.calendar-day-totals dl { margin: 0; display: grid; gap: var(--totals-gap); }
+.calendar-day-totals dl > div { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--totals-gap); }
+.calendar-day-totals dt { color: var(--muted); font-size: 12px; }
+.calendar-day-totals dd { margin: 0; display: grid; gap: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.calendar-day-totals dd strong { font-size: 16px; }
+.calendar-day-totals dd span { color: var(--muted); font-size: 12px; }
+.calendar-day-totals dd .overdue { color: var(--red); }
 .calendar-day-detail-list { display: grid; gap: 10px; }
 .calendar-day-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 13px; padding: 18px 2px; color: color-mix(in srgb, var(--cyan) 97%, var(--tone-depth)); }
 .calendar-day-empty h4 { margin: 0; font-size: 14px; color: var(--ink); line-height: 1.5; }
