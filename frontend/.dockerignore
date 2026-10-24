@@ -11,3 +11,5 @@ README.md
 **/*.key
 **/*.log
 **/*.tsbuildinfo
+playwright-report
+test-results
