@@ -16,10 +16,13 @@ interface BrandLoginProps {
 
 function LoginPattern() {
   return <div className="aeza-login-pattern-panel" aria-hidden="true">
-    <svg className="aeza-login-pattern" viewBox="0 0 640 200" preserveAspectRatio="xMidYMid meet" fill="none" focusable="false">
-      <path className="aeza-login-pattern-lines" d="M86 0v200M114 0v200M142 0v200" strokeWidth="9"/>
-      <path className="aeza-login-pattern-accent" d="M182 0v56c0 32 16 48 48 48h410" strokeWidth="10" strokeLinecap="round" pathLength="1"/>
-      <path className="aeza-login-pattern-return" d="M0 164h362c24 0 36-12 36-36V0" strokeWidth="4" strokeLinecap="round" pathLength="1"/>
+    <svg className="aeza-login-pattern" viewBox="0 0 640 900" preserveAspectRatio="none" fill="none" focusable="false">
+      <path className="aeza-login-pattern-lines" d="M-24 120h92c34 0 50-16 50-50v-94M-24 138h110c34 0 50-16 50-50V-24M-24 156h128c34 0 50-16 50-50V-24M666 730H530c-34 0-50 16-50 50v144M666 748H548c-34 0-50 16-50 50v126M666 766H566c-34 0-50 16-50 50v108" strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+      <path className="aeza-login-pattern-accent" d="M352-30v120c0 42 22 64 64 64h254" strokeWidth="5" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength="1"/>
+      <path className="aeza-login-pattern-return" d="M670 280H584c-30 0-46 16-46 46v98c0 30-16 46-46 46h-30" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength="1"/>
+      <path className="aeza-login-pattern-accent aeza-login-pattern-accent--bottom" d="M138 932v-98c0-40 20-60 60-60h150c40 0 60-20 60-60v-34" strokeWidth="4" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength="1"/>
+      <path className="aeza-login-pattern-return aeza-login-pattern-return--short" d="M-30 644h74c30 0 46-16 46-46v-84" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength="1"/>
+      <path className="aeza-login-pattern-lines" d="M624 36H518c-22 0-34 12-34 34v20M54 862h64M670 564h-52c-26 0-40 14-40 40v32" strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
     </svg>
   </div>
 }
@@ -67,6 +70,7 @@ export function BrandLogin({ onLogin, restoreError, onRestore }: BrandLoginProps
 
   return <div className="aeza-login">
     <section className="aeza-login-story" aria-labelledby="aeza-login-story-title">
+      <LoginPattern/>
       <div className="aeza-login-brand" aria-label="Aeza, Invoice Keeper">
         <BrandMark size={56}/>
         <span className="aeza-login-product">Invoice<span>Keeper</span></span>
@@ -77,7 +81,6 @@ export function BrandLogin({ onLogin, restoreError, onRestore }: BrandLoginProps
         <p className="aeza-login-story-caption">Платежи, бюджет и история решений. Меньше рутины — больше ясности в каждом дне.</p>
         <div className="aeza-login-topics" aria-label="Возможности рабочего пространства"><span>Платежи</span><span>Бюджет</span><span>История</span></div>
       </div>
-      <LoginPattern/>
       <p className="aeza-login-story-footer">Чёткие сроки. Общая картина.</p>
     </section>
     <main className="aeza-login-main">

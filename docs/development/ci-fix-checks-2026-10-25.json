@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-25",
+  "checks": [
+    {
+      "check": "HTTP checker regressions",
+      "status": "passed",
+      "seconds": 1.88,
+      "timeout_seconds": 30
+    },
+    {
+      "check": "TypeScript",
+      "status": "passed",
+      "seconds": 6.33,
+      "timeout_seconds": 35
+    },
+    {
+      "check": "ESLint",
+      "status": "passed",
+      "seconds": 4.03,
+      "timeout_seconds": 35
+    },
+    {
+      "check": "Frontend unit tests",
+      "status": "passed",
+      "seconds": 2.44,
+      "timeout_seconds": 35
+    },
+    {
+      "check": "Real production build",
+      "status": "passed",
+      "seconds": 0.81,
+      "timeout_seconds": 35
+    },
+    {
+      "check": "Geometry check",
+      "status": "passed",
+      "seconds": 1.89,
+      "timeout_seconds": 30
+    }
+  ]
+}

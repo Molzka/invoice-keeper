@@ -1,8 +1,9 @@
-/* Full-width routes frame the header instead of occupying a separate column. */
+/* Bleed the decoration to the viewport edges without expanding the page scroll area. */
+.app-shell { overflow-x: clip; }
 .page-head.page-heading,
 .page-head.page-heading:not(:has(.page-heading-action)) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px;
+  grid-template-columns: minmax(0, 1fr) 80px;
   grid-template-rows: auto auto;
   align-items: start;
   align-content: start;
@@ -13,11 +14,23 @@
 .page-head.page-heading .page-intro {
   grid-column: 1;
   grid-row: 1;
-  width: auto;
-  max-width: none;
+  animation: none;
+  width: fit-content;
+  max-width: min(660px, 100%);
   min-width: 0;
   position: relative;
   z-index: 1;
+}
+.page-head.page-heading .page-intro > :is(.eyebrow, .page-title, .page-subtitle) { animation: workspace-arrive var(--motion-enter) var(--ease-out) both; }
+.page-head.page-heading .page-intro::before,
+.page-head.page-heading .page-heading-action::before {
+  content: '';
+  position: absolute;
+  inset: -12px -16px;
+  z-index: -1;
+  background: var(--bg);
+  border-radius: 16px;
+  pointer-events: none;
 }
 .page-head.page-heading .page-heading-art {
   position: absolute;
@@ -54,29 +67,28 @@
   color: var(--ink);
   pointer-events: none;
 }
-.page-heading .workspace-art--recurring,
-.page-heading .workspace-art--activity { --art-accent: var(--pink); --art-trace: var(--cyan); }
-.page-heading .workspace-art--history,
-.page-heading .workspace-art--receipts { --art-accent: var(--orange); }
 .workspace-art-pattern {
+  position: absolute;
+  top: 0;
+  left: 50%;
   display: block;
-  width: 100%;
+  width: 100vw;
+  max-width: none;
   height: 100%;
+  transform: translateX(-50%);
   overflow: hidden;
-  /* The lower routes fill the left edge; the upper-left copy stays unobstructed. */
-  mask-image: linear-gradient(90deg, transparent 0%, transparent 42%, #000 74%), linear-gradient(0deg, #000 0%, #000 18%, transparent 32%);
-  mask-composite: add;
+  /* Opaque copy guards above keep every letter and control clear. */
 }
-.brand-pattern-lines { opacity: .1; }
+.brand-pattern-lines { opacity: .14; }
 .brand-pattern-accent {
   stroke: var(--art-accent);
-  opacity: .7;
+  opacity: .46;
   stroke-dasharray: 1;
-  transition: opacity 220ms;
   animation: brand-route-reveal 1050ms 100ms ease-out both;
 }
-.brand-pattern-detail { opacity: .4; animation-delay: 220ms; }
-.brand-pattern-detail--contrast { stroke: var(--art-trace); opacity: .54; animation-delay: 340ms; }
+.brand-pattern-route--strong { opacity: .7; }
+.brand-pattern-tone--pink { stroke: var(--art-trace); opacity: .5; animation-delay: 180ms; }
+.brand-pattern-route--2 { opacity: .4; animation-delay: 260ms; }
 .workspace-art--calendar .brand-pattern-accent,
 .workspace-art--history .brand-pattern-accent,
 .workspace-art--activity .brand-pattern-accent,
@@ -85,46 +97,40 @@
 .workspace-art--budget .brand-pattern-accent { animation-duration: 900ms; }
 .page-heading .brand-section-symbol {
   position: absolute;
-  top: 36px;
+  top: 34px;
   right: 8px;
-  display: grid;
-  place-items: center;
-  width: 80px;
-  height: 80px;
-  border: 1px solid transparent;
-  border-radius: 18px;
-  background: var(--cyan);
-  color: #000;
+  display: block;
+  width: 60px;
+  height: 60px;
+  border: 0;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 3px 12px #0000000d;
+  overflow: hidden;
   animation: brand-symbol-reveal 400ms 100ms ease-out backwards;
-  transition: border-color 220ms, background-color 220ms;
 }
-.page-heading .brand-section-icon { display: block; width: 42px; height: 42px; color: inherit; }
-html[data-theme='dark'] .page-heading .brand-section-symbol { background: #000; color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 24%, #000); }
-html[data-theme='dark'] .page-heading .brand-section-icon { color: var(--cyan); }
-@media (hover: hover) and (pointer: fine) {
-  .page-heading:hover .brand-section-symbol { border-color: var(--art-accent); }
-  .page-heading:hover .brand-pattern-accent { opacity: .85; }
-  .page-heading:hover .brand-pattern-detail { opacity: .52; }
-  .page-heading:hover .brand-pattern-detail--contrast { opacity: .68; }
-}
+.page-heading .brand-section-icon { display: block; width: 100%; height: 100%; object-fit: contain; }
+.page-heading .brand-section-icon--dark { display: none; }
+html[data-theme='dark'] .page-heading .brand-section-symbol { background: #1b2027; box-shadow: 0 4px 14px #00000024; }
+html[data-theme='dark'] .page-heading .brand-section-icon--light { display: none; }
+html[data-theme='dark'] .page-heading .brand-section-icon--dark { display: block; }
 @keyframes brand-route-reveal { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes brand-route-reveal-reverse { from { stroke-dashoffset: -1; } to { stroke-dashoffset: 0; } }
 @keyframes brand-symbol-reveal { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 760px) {
   .page-head.page-heading,
   .page-head.page-heading:not(:has(.page-heading-action)) {
-    grid-template-columns: minmax(0, 1fr) 68px;
+    grid-template-columns: minmax(0, 1fr) 52px;
     gap: 18px 16px;
     min-height: 220px;
     padding: 0 0 52px;
   }
   .page-head.page-heading .page-heading-action { grid-column: 1 / -1; }
-  .page-heading .brand-section-symbol { top: 12px; right: 0; width: 64px; height: 64px; border-radius: 15px; }
-  .page-heading .brand-section-icon { width: 34px; height: 34px; }
+  .page-heading .brand-section-symbol { top: 12px; right: 0; width: 48px; height: 48px; }
   .workspace-art-pattern { opacity: .72; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .workspace-art *, .page-heading:hover .brand-section-symbol { animation: none; transition: none; transform: none; }
+  .workspace-art *, .page-heading:hover .brand-section-symbol, .page-head.page-heading .page-intro > :is(.eyebrow, .page-title, .page-subtitle) { animation: none; transition: none; }
   .brand-pattern-accent { stroke-dashoffset: 0; }
 }
 .page-head.page-heading .page-title { overflow-wrap: anywhere; }

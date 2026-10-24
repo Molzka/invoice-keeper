@@ -1,0 +1,72 @@
+{
+  "shield": {
+    "source_page": 21,
+    "dark": "shield-dark.svg",
+    "light": "shield-light.svg",
+    "glyph": "shield-glyph.svg",
+    "source_paths": 2
+  },
+  "chart": {
+    "source_page": 21,
+    "dark": "chart-dark.svg",
+    "light": "chart-light.svg",
+    "glyph": "chart-glyph.svg",
+    "source_paths": 2
+  },
+  "headset": {
+    "source_page": 21,
+    "dark": "headset-dark.svg",
+    "light": "headset-light.svg",
+    "glyph": "headset-glyph.svg",
+    "source_paths": 3
+  },
+  "users": {
+    "source_page": 21,
+    "dark": "users-dark.svg",
+    "light": "users-light.svg",
+    "glyph": "users-glyph.svg",
+    "source_paths": 5
+  },
+  "chat": {
+    "source_page": 21,
+    "dark": "chat-dark.svg",
+    "light": "chat-light.svg",
+    "glyph": "chat-glyph.svg",
+    "source_paths": 2
+  },
+  "bag": {
+    "source_page": 21,
+    "dark": "bag-dark.svg",
+    "light": "bag-light.svg",
+    "glyph": "bag-glyph.svg",
+    "source_paths": 4
+  },
+  "flag": {
+    "source_page": 21,
+    "dark": "flag-dark.svg",
+    "light": "flag-light.svg",
+    "glyph": "flag-glyph.svg",
+    "source_paths": 2
+  },
+  "hourglass": {
+    "source_page": 21,
+    "dark": "hourglass-dark.svg",
+    "light": "hourglass-light.svg",
+    "glyph": "hourglass-glyph.svg",
+    "source_paths": 2
+  },
+  "credit-card": {
+    "source_page": 21,
+    "dark": "credit-card-dark.svg",
+    "light": "credit-card-light.svg",
+    "glyph": "credit-card-glyph.svg",
+    "source_paths": 3
+  },
+  "note-pencil": {
+    "source_page": 21,
+    "dark": "note-pencil-dark.svg",
+    "light": "note-pencil-light.svg",
+    "glyph": "note-pencil-glyph.svg",
+    "source_paths": 3
+  }
+}
