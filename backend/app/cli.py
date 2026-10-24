@@ -70,17 +70,29 @@ def main() -> None:
     create = commands.add_parser(
         "create-admin", help="Создать администратора, не изменяя существующих"
     )
-    create.add_argument("--username", required=True)
+    create.add_argument(
+        "--username",
+        help="Ручной ввод пароля; без аргумента используются ADMIN_USERNAME/ADMIN_PASSWORD",
+    )
     commands.add_parser("cleanup-auth", help="Удалить истёкшие сессии и устаревшие счётчики входа")
     args = parser.parse_args()
     data = None
     try:
         if args.command == "create-admin":
-            password = getpass("Пароль (8–128 символов): ")
-            if password != getpass("Повторите пароль: "):
-                raise ValueError("Пароли не совпадают.")
+            if args.username is None:
+                username = settings.admin_username
+                password = (
+                    settings.admin_password.get_secret_value() if settings.admin_password else None
+                )
+                if not username or not password:
+                    raise ValueError("Укажите ADMIN_USERNAME и ADMIN_PASSWORD в backend/.env.")
+            else:
+                username = args.username
+                password = getpass("Пароль (8–128 символов): ")
+                if password != getpass("Повторите пароль: "):
+                    raise ValueError("Пароли не совпадают.")
             data = UserCreate(
-                username=args.username,
+                username=username,
                 password=password,
             )
         asyncio.run(run(args, data))

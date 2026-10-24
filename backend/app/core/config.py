@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     app_timezone: str = "Europe/Moscow"
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str | None = Field(default=None, repr=False)
+    admin_username: str | None = None
+    admin_password: SecretStr | None = Field(default=None, repr=False)
     session_cookie_name: str = "session_id"
     session_cookie_secure: bool = False
     session_ttl_seconds: int = Field(default=604800, ge=60, le=2592000)

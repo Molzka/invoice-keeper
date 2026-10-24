@@ -1,0 +1,84 @@
+name: Backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend / PostgreSQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    env:
+      COMPOSE_PROJECT_NAME: invoice-keeper-backend-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_DB: invoice_keeper_ci
+      POSTGRES_USER: invoice_keeper_ci
+      POSTGRES_PORT: "0"
+      APP_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate temporary database password
+        run: |
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+
+      - name: Install pinned uv
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uv-tools"
+          "$RUNNER_TEMP/uv-tools/bin/python" -m pip install --disable-pip-version-check "uv==0.13.5"
+          echo "$RUNNER_TEMP/uv-tools/bin" >> "$GITHUB_PATH"
+
+      - name: Install locked backend dependencies
+        run: |
+          uv python install 3.12.15
+          uv sync --locked --project backend
+
+      - name: Check Python lint and formatting
+        working-directory: backend
+        run: |
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+
+      - name: Start temporary PostgreSQL
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example up -d --wait --wait-timeout 90 postgres
+          address=$(docker compose --env-file .env.example port postgres 5432)
+          database_url="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${address}/${POSTGRES_DB}"
+          echo "::add-mask::$database_url"
+          echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
+
+      - name: Check authentication and migrations on PostgreSQL
+        working-directory: backend
+        run: uv run --locked python scripts/test_postgres.py
+
+      - name: Show PostgreSQL logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env.example ps -a
+          docker compose --env-file .env.example logs --no-color --tail=80 postgres
+
+      - name: Remove temporary PostgreSQL
+        if: always()
+        run: |
+          docker compose --env-file .env.example down --volumes --timeout 10
+          test -z "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
+          test -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
