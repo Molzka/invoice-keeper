@@ -131,7 +131,7 @@ jobs:
 
       - name: Check Telegram commands with the real API
         run: |
-          docker compose --env-file .env.example create --no-build --no-deps bot
+          docker compose --env-file .env.example create --no-build bot
           backend=$(docker compose --env-file .env.example ps -q backend)
           bot=$(docker compose --env-file .env.example ps -aq bot)
           image=$(docker inspect --format '{{.Image}}' "$backend")
