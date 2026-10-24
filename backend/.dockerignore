@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!docker-entrypoint.py
+!alembic.ini
+!app/
+!app/**
+!alembic/
+!alembic/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.log
