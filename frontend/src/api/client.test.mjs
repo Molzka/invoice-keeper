@@ -23,7 +23,7 @@ async function clientFixture(handler) {
   }
   return { ...(await import(encodeModule(source) + '#client-' + ++clientId)), calls, events }
 }
-function json(body, status = 200) { return new globalThis.Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }) }
+function json(body, status = 200, headers = {}) { return new globalThis.Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }) }
 function serverError(status, code) { return json({ error: { code, message: 'Ответ сервера', details: [] } }, status) }
 
 // This is deliberately narrower than a generic 404 detector.
@@ -119,4 +119,87 @@ test('CSRF, bodyless logout and protected 401 handling are preserved', async () 
   assert.equal(calls.at(-1).init.body, undefined)
   assert.equal(calls.at(-1).init.headers.get('Content-Type'), null)
   assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), null)
+})
+
+
+test('password change sends exact untrimmed JSON, keeps cookie auth and installs rotated CSRF before resolving', async () => {
+  const user = { id: 'user-id', username: 'ivan', role: 'user' }
+  let response = json({ user, csrf_token: 'before-change' })
+  const { api, calls, events } = await clientFixture(() => response)
+  await api.me()
+  response = json({ user, csrf_token: 'rotated-token' })
+  const payload = { current_password: ' old password ', new_password: ' new password ' }
+  const result = await api.changePassword({ ...payload, confirmation: 'must-stay-client-side' })
+  assert.equal(result.csrf_token, 'rotated-token')
+  const change = calls.at(-1)
+  assert.equal(change.url, '/api/v1/auth/change-password')
+  assert.equal(change.init.method, 'POST')
+  assert.equal(change.init.credentials, 'include')
+  assert.equal(change.init.headers.get('X-CSRF-Token'), 'before-change')
+  assert.equal(change.init.headers.get('Content-Type'), 'application/json')
+  assert.deepEqual(JSON.parse(change.init.body), payload)
+  assert.deepEqual(Object.keys(JSON.parse(change.init.body)), ['current_password', 'new_password'])
+  response = json({})
+  await api.updateOccurrence('period-id', { status: 'unpaid', paid_on: null })
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), 'rotated-token')
+  assert.deepEqual(events, [])
+})
+
+test('password field errors retain details and failed changes do not replace the active CSRF token', async () => {
+  let response = json({ user: { id: 'user-id' }, csrf_token: 'existing-token' })
+  const { api, calls, events } = await clientFixture(() => response)
+  await api.me()
+  for (const [code, field] of [['CURRENT_PASSWORD_INVALID', 'current_password'], ['NEW_PASSWORD_UNCHANGED', 'new_password']]) {
+    response = json({ error: { code, message: 'Ошибка поля', details: [{ field, code, message: 'Проверьте пароль' }] } }, 422)
+    await assert.rejects(api.changePassword({ current_password: 'old-password', new_password: 'new-password' }), error => {
+      assert.equal(error.status, 422); assert.equal(error.code, code)
+      assert.deepEqual(error.details, [{ field, code, message: 'Проверьте пароль' }])
+      assert.deepEqual(error.request, { method: 'POST', path: '/auth/change-password' })
+      return true
+    })
+  }
+  response = json({})
+  await api.updateOccurrence('period-id', { status: 'unpaid', paid_on: null })
+  assert.equal(calls.at(-1).init.headers.get('X-CSRF-Token'), 'existing-token')
+  assert.deepEqual(events, [])
+})
+
+test('rate-limit errors expose strictly parsed bounded Retry-After without replaying password changes', async () => {
+  let header = '900'
+  const { api, calls } = await clientFixture(() => json({ error: { code: 'PASSWORD_CHANGE_RATE_LIMITED', message: 'Подождите', details: [] } }, 429, header === undefined ? {} : { 'Retry-After': header }))
+  for (const [value, expected] of [['900', 900], ['0', 0], ['999999999999999999999', 86400], ['-1', undefined], ['1.5', undefined], ['1e2', undefined], ['Thu, 01 Jan 2037 00:00:00 GMT', undefined], ['garbage', undefined], [undefined, undefined]]) {
+    header = value
+    const before = calls.length
+    await assert.rejects(api.changePassword({ current_password: 'old-password', new_password: 'new-password' }), error => {
+      assert.equal(error.code, 'PASSWORD_CHANGE_RATE_LIMITED'); assert.equal(error.status, 429)
+      assert.equal(error.retryAfterSeconds, expected); return true
+    })
+    assert.equal(calls.length, before + 1)
+  }
+})
+
+test('password network, timeout and CSRF failures never trigger an automatic POST or recovery GET', async context => {
+  let response = () => { throw new TypeError('Lost response') }
+  const { api, calls, events } = await clientFixture((url, init) => response(url, init))
+  const payload = { current_password: 'old-password', new_password: 'new-password' }
+  await assert.rejects(api.changePassword(payload), error => error.code === 'NETWORK_ERROR')
+  assert.equal(calls.length, 1)
+  response = () => serverError(403, 'CSRF_FAILED')
+  await assert.rejects(api.changePassword(payload), error => error.code === 'CSRF_FAILED')
+  assert.equal(calls.length, 2); assert.deepEqual(events, [])
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  response = (url, init) => new Promise((resolve, reject) => { init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }) })
+  const pending = api.changePassword(payload)
+  const rejected = assert.rejects(pending, error => error.code === 'TIMEOUT')
+  context.mock.timers.tick(12000)
+  await rejected
+  assert.equal(calls.length, 3)
+  assert.deepEqual(calls.map(call => call.init.method), ['POST', 'POST', 'POST'])
+})
+
+test('a password-change 401 follows the existing global session-expiry flow', async () => {
+  const { api, calls, events } = await clientFixture(() => serverError(401, 'AUTH_REQUIRED'))
+  await assert.rejects(api.changePassword({ current_password: 'old-password', new_password: 'new-password' }), error => error.status === 401)
+  assert.equal(calls.length, 1)
+  assert.deepEqual(events, ['invoice:unauthorized'])
 })

@@ -1,5 +1,5 @@
 import type {
-  AuthResponse, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
+  AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
   RecurringPayment, RecurringPaymentFilters, SummaryParams, UpdateOccurrenceRequest, UpdateUserRequest, User,
 } from '../types/api'
@@ -19,6 +19,12 @@ function query(params?: object): string {
   Object.entries(params || {}).forEach(([key, value]) => { if (value !== undefined && value !== null && value !== '') search.set(key, String(value)) })
   return search.size ? '?' + search.toString() : ''
 }
+/** This API uses delta-seconds, not dates. Ignore malformed values and bound UI timers. */
+function retryAfterSeconds(response: Response): number | undefined {
+  const value = response.headers.get('Retry-After')
+  if (value === null || !/^\d+$/.test(value)) return undefined
+  return Math.min(Number(value), 86400)
+}
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const requestContext = { method: method.toUpperCase(), path: path.split(/[?#]/, 1)[0] }
   const headers = new Headers({ Accept: 'application/json' })
@@ -36,11 +42,11 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       if (response.status === 401) { csrfToken = null; window.dispatchEvent(new CustomEvent('invoice:unauthorized')) }
       // A disconnected or timed-out response body still has an unknown mutation outcome.
       if (abort.signal.aborted || error instanceof TypeError) throw error
-      throw new ApiError(response.status, 'INVALID_RESPONSE', 'Сервер вернул ответ в неизвестном формате', [], requestContext)
+      throw new ApiError(response.status, 'INVALID_RESPONSE', 'Сервер вернул ответ в неизвестном формате', [], requestContext, retryAfterSeconds(response))
     }
     if (!response.ok) {
       const serverError = (payload as Partial<ErrorResponse>)?.error
-      const error = new ApiError(response.status, serverError?.code || 'HTTP_ERROR', serverError?.message || 'Не удалось выполнить запрос', Array.isArray(serverError?.details) ? serverError.details : [], requestContext)
+      const error = new ApiError(response.status, serverError?.code || 'HTTP_ERROR', serverError?.message || 'Не удалось выполнить запрос', Array.isArray(serverError?.details) ? serverError.details : [], requestContext, retryAfterSeconds(response))
       if (response.status === 401 && !(path === '/auth/login' && error.code === 'INVALID_CREDENTIALS')) {
         csrfToken = null
         window.dispatchEvent(new CustomEvent('invoice:unauthorized'))
@@ -57,6 +63,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
 
 export const api = {
   async login(payload: LoginRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/login', 'POST', payload); csrfToken = data.csrf_token; return data },
+  async changePassword(payload: ChangePasswordRequest): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/change-password', 'POST', { current_password: payload.current_password, new_password: payload.new_password }); csrfToken = data.csrf_token; return data },
   async me(): Promise<AuthResponse> { const data = await request<AuthResponse>('/auth/me'); csrfToken = data.csrf_token; return data },
   async logout(): Promise<void> { await request<void>('/auth/logout', 'POST'); csrfToken = null },
   listOccurrences: (filters: OccurrenceFilters = {}) => request<Page<PaymentOccurrence>>('/payment-occurrences' + query(filters)),
