@@ -1,0 +1,11 @@
+# Only the bot and its locked dependencies belong in this build context.
+**
+!bot.py
+!reminders.py
+!docker/
+docker/**
+!docker/bot/
+docker/bot/**
+!docker/bot/Dockerfile
+!docker/bot/pyproject.toml
+!docker/bot/uv.lock
