@@ -58,6 +58,7 @@ services:
       # Validate the token at bot startup, so other services work without it.
       BOT_TOKEN: ${BOT_TOKEN:-}
       CHAT_ID: ${CHAT_ID:-}
+      PANEL_URL: ${PANEL_URL:-}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
       TZ: ${APP_TIMEZONE:-Europe/Moscow}
     read_only: true
