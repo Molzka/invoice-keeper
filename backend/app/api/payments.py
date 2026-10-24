@@ -1,12 +1,18 @@
-from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, Security
 from fastapi.security import APIKeyCookie
 
-from app.api.dependencies import AdminUser, CurrentUser, DbSession, require_csrf
+from app.api.dependencies import (
+    AdminUser,
+    CurrentUser,
+    DbSession,
+    require_csrf,
+    require_json_request,
+)
 from app.schemas.payments import (
+    IsoDate,
     PaymentOccurrenceList,
     PaymentOccurrenceRead,
     PaymentsSummary,
@@ -61,6 +67,7 @@ Csrf = Annotated[None, Depends(require_csrf)]
     response_model=RecurringPaymentRead,
     status_code=201,
     summary="Создать регулярный платёж",
+    dependencies=[Depends(require_json_request)],
     responses={403: error_response("FORBIDDEN", "Требуются права администратора")},
 )
 async def create_payment(
@@ -125,8 +132,8 @@ async def get_payment_occurrences(
     _user: CurrentUser,
     db: DbSession,
     request: Request,
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: IsoDate | None = None,
+    date_to: IsoDate | None = None,
     status: Literal["paid", "unpaid"] | None = None,
     currency: Literal["RUB", "USD", "EUR"] | None = None,
     recurring_payment_id: UUID | None = None,
@@ -170,6 +177,7 @@ async def get_payment_occurrence_by_id(
     "/payment-occurrences/{occurrence_id}",
     response_model=PaymentOccurrenceRead,
     summary="Изменить состояние оплаты",
+    dependencies=[Depends(require_json_request)],
     responses={404: error_response("PAYMENT_OCCURRENCE_NOT_FOUND", "Период платежа не найден")},
 )
 async def patch_payment_occurrence(
@@ -194,8 +202,8 @@ async def payments_summary(
     _user: CurrentUser,
     db: DbSession,
     request: Request,
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: IsoDate | None = None,
+    date_to: IsoDate | None = None,
 ) -> dict:
     today = today_in_timezone(request.app.state.settings.app_timezone)
     return await get_payments_summary(

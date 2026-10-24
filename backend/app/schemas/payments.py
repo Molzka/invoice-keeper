@@ -21,6 +21,22 @@ MAX_PAYMENT_AMOUNT = Decimal("999999999999.99")
 MIN_PAYMENT_AMOUNT = Decimal("0.01")
 
 
+def validate_iso_date(value: object) -> date:
+    if not isinstance(value, str) or re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value
+    ) is None:
+        raise PydanticCustomError("date_format", "Передайте дату в формате YYYY-MM-DD")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise PydanticCustomError(
+            "date_format", "Передайте существующую дату в формате YYYY-MM-DD"
+        ) from None
+
+
+IsoDate = Annotated[date, BeforeValidator(validate_iso_date)]
+
+
 def validate_amount(value: object) -> str:
     if not isinstance(value, str) or re.fullmatch(r"[0-9]+\.[0-9]{2}", value) is None:
         raise PydanticCustomError(
@@ -78,7 +94,7 @@ class RecurringPaymentCreate(BaseModel):
     title: Title
     amount: Amount = Field(description="Строка с точкой и ровно двумя десятичными знаками")
     currency: Currency
-    first_due_date: date
+    first_due_date: IsoDate
     periodicity: Literal["monthly"]
 
 
@@ -97,7 +113,7 @@ class PaymentStateUpdate(BaseModel):
     )
 
     status: PaymentStatus
-    paid_on: date | None
+    paid_on: IsoDate | None
 
     @model_validator(mode="after")
     def validate_state(self) -> "PaymentStateUpdate":

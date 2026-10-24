@@ -82,6 +82,10 @@ def field_error(error: dict) -> dict[str, str]:
         "string_too_long": ("TOO_LONG", "Значение слишком длинное"),
         "string_pattern_mismatch": ("INVALID_FORMAT", "Неверный формат поля"),
         "string_type": ("INVALID_TYPE", "Передайте строку"),
+        "date_format": (
+            "INVALID_FORMAT",
+            "Передайте существующую дату в формате YYYY-MM-DD",
+        ),
         "money_format": (
             "INVALID_MONEY_FORMAT",
             "Передайте положительную сумму строкой с двумя знаками после точки",
