@@ -1,0 +1,91 @@
+name: Telegram
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  telegram:
+    name: Telegram / Compose
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      COMPOSE_PROJECT_NAME: invoice-keeper-telegram-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      BOT_TOKEN: ""
+      CHAT_ID: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate temporary Compose password
+        run: |
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+
+      - name: Validate Compose without Telegram credentials
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example config --quiet frontend postgres
+
+      - name: Build bot image
+        run: docker compose --env-file .env.example build bot
+
+      - name: Check runtime without contacting Telegram
+        run: |
+          docker compose --env-file .env.example create bot
+          container=$(docker compose --env-file .env.example ps -aq bot)
+          test -n "$container"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = "true"
+          test "$(docker inspect --format '{{.HostConfig.Init}}' "$container")" = "true"
+          image=$(docker inspect --format '{{.Image}}' "$container")
+
+          docker run --rm --network none --read-only --tmpfs /tmp \
+            --init --cap-drop ALL --security-opt no-new-privileges:true \
+            "$image" sh -ec '
+              test "$(id -u)" != "0"
+              test ! -e /app/.env
+              test ! -d /app/.git
+              python -c "import aiogram, dotenv, bot, reminders; from zoneinfo import ZoneInfo; print(ZoneInfo(\"Europe/Moscow\")); print(\"Bot modules import successfully\")"
+            '
+
+          # CHAT_ID stays optional so /id can be used during first-time setup.
+          # The default command must reject a missing token before polling starts.
+          probe="${COMPOSE_PROJECT_NAME}-settings"
+          trap 'docker rm -f "$probe" >/dev/null 2>&1 || true' EXIT
+          if timeout 15s docker run --rm --name "$probe" --network none \
+            --read-only --tmpfs /tmp -e BOT_TOKEN= -e CHAT_ID=-123 \
+            "$image" > "$RUNNER_TEMP/bot-no-token.log" 2>&1; then
+            echo "Bot accepted an empty BOT_TOKEN"
+            exit 1
+          fi
+          grep -Fq 'Set BOT_TOKEN in .env' "$RUNNER_TEMP/bot-no-token.log"
+
+          echo "Offline runtime and missing-token checks passed; Telegram polling was not tested"
+
+      - name: Show bot logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env.example ps -a
+          docker compose --env-file .env.example logs --no-color --tail=80 bot
+
+      - name: Remove temporary bot
+        if: always()
+        run: |
+          docker compose --env-file .env.example down --timeout 10
+          test -z "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
