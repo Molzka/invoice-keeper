@@ -41,7 +41,7 @@ async def load_backend_cases(kind: str = "upcoming", limit: int = 3) -> list[tup
 
 async def main(args) -> int:
     if args.backend or args.send:
-        load_dotenv(Path(__file__).parent / ".env", override=False)
+        load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
     if args.backend:
         try:
             cases = await load_backend_cases(args.kind, args.limit)

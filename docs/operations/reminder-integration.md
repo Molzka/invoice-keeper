@@ -236,8 +236,8 @@ occurrence(db, payment_id, occurrence_id) -> PaymentSnapshot | None
 платежей. Для небольшой командной системы принято как начальная реализация;
 ослаблять блокировку без нового согласованного протокола нельзя.
 
-`TelegramSender` делает одну попытку через aiogram. В существующие `bot.py` и
-`reminders.py` участника Telegram изменения не вносятся; bot polling и доставка
+`TelegramSender` делает одну попытку через aiogram. В существующие `telegram/bot.py` и
+`telegram/reminders.py` участника Telegram изменения не вносятся; bot polling и доставка
 очереди — разные процессы. Worker не вызывает массовую рассылку.
 
 В Compose сервис `worker` использует backend-образ и его entrypoint. Команда
@@ -301,3 +301,69 @@ uv run --locked python -m app.delivery.cli run --adapter app.services.payment_so
 5. После объединения и изменений схемы повторить PostgreSQL runner: создание
    чистой БД, переход до `head`, откат и повторное обновление, `alembic check`
    и существующие проверки платежей и доставки.
+
+## Доставка напоминаний: интеграция с платежами
+
+
+Пакет `backend/app/delivery` содержит очередь, worker и одну попытку отправки в
+Telegram. Ревизия `0003` добавляет очередь и платёжные таблицы; адаптер
+`app.services.payment_source:make_source` подключает worker к платежам. Порядок
+блокировок и обработка неизвестного исхода описаны в
+[документе интеграции](reminder-integration.md).
+
+Сервис `worker` включён в общий `docker compose up`. Он использует тот же образ,
+зависимости и платёжный адаптер, что backend; отдельный планировщик не нужен.
+При старте проверяется наличие таблицы очереди, но миграции не применяются.
+Для отдельного запуска после подготовки БД:
+
+```sh
+docker compose up -d --build worker
+docker compose logs --tail=100 -f worker
+```
+
+Настройки берутся из корневого `.env`: подключение собирается из `POSTGRES_DB`,
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, для доставки нужны `BOT_TOKEN` и `CHAT_ID`.
+`APP_TIMEZONE` и `TZ` передаются с тем же часовым поясом, что API; по умолчанию это `Europe/Moscow`.
+`REMINDER_POLL_SECONDS` задаёт паузу между циклами: по умолчанию 30 секунд,
+допустимо положительное целое. Уже наступившее напоминание отправляется ближайшим
+циклом; время зависит также от очереди и ответа Telegram. После изменения настроек
+выполните `docker compose up -d --no-deps --force-recreate worker`.
+
+Состояние очереди можно посмотреть без остановки worker:
+
+```sh
+docker compose run --rm worker python -m app.delivery.cli list --status sent
+docker compose run --rm worker python -m app.delivery.cli list --status failed
+docker compose run --rm worker python -m app.delivery.cli list --status unknown
+```
+
+Эти команды используют те же настройки БД и не отправляют сообщения. `failed`
+означает подтверждённый отказ или исчерпанные безопасные повторы. `unknown` означает,
+что исход отправки неизвестен; автоматического повтора нет. Команды исправления
+и проверки перед повтором описаны в [документе интеграции](reminder-integration.md).
+
+Если контейнер перезапускается с `Delivery command failed (ValueError)`, проверьте
+`BOT_TOKEN`, `CHAT_ID` и миграции; при `ValidationError` — настройки общего backend,
+включая часовой пояс и production-настройки cookie/Origin. Неположительный интервал
+даёт ошибку аргументов. `Delivery cycle failed (...)` в работающем контейнере требует
+проверки БД, схемы и очереди: `running` не означает успешную доставку. Отсутствие
+новых строк в логах может быть нормальным — успешные циклы CLI не печатает.
+
+Без Docker команда остаётся прежней: из `backend/` выполнить
+`uv run --locked python -m app.delivery.cli run --adapter app.services.payment_source:make_source`.
+Для этого способа нужны `DATABASE_URL`, `BOT_TOKEN` и `CHAT_ID` в `backend/.env`;
+интервал можно задать флагом `--poll-seconds 30`. Проверки очереди используют
+тестового отправителя и не отправляют сообщения в настоящий Telegram.
+
+Проверка worker в Docker без настоящей рассылки:
+
+```sh
+python scripts/checks/check_reminder_worker.py
+```
+
+Скрипт собирает worker и поднимает отдельный временный проект с тестовой БД,
+не используя рабочий `.env`. Он проверяет запуск, наступившие и будущие сроки,
+пропуск оплаченных и прекращённых платежей, восстановление периода и отсутствие
+повторной подтверждённой отправки после перезапуска. Telegram заменён внутри
+закрытой Docker-сети; временные контейнеры и БД удаляются после проверки.
+Готовый образ можно передать через `--image IMAGE_ID`, чтобы не собирать его повторно.

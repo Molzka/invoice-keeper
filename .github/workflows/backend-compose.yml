@@ -102,8 +102,8 @@ jobs:
 
       - name: Check real authentication through Nginx
         run: |
-          python3 scripts/check_backend.py "$FRONTEND_URL"
-          python3 scripts/check_frontend.py "$FRONTEND_URL" --api-ready
+          python3 scripts/checks/check_backend.py "$FRONTEND_URL"
+          python3 scripts/checks/check_frontend.py "$FRONTEND_URL" --api-ready
 
       - name: Check proxy recovery after replacing API container
         run: |
@@ -113,7 +113,7 @@ jobs:
           test "$status" = 503
           python3 -c 'import json, os; from pathlib import Path; data = json.loads((Path(os.environ["RUNNER_TEMP"]) / "api-offline.json").read_text()); assert data["error"]["code"] == "API_NOT_AVAILABLE"'
           docker compose --env-file .env.example up -d --wait --wait-timeout 90 backend
-          python3 scripts/check_backend.py "$FRONTEND_URL"
+          python3 scripts/checks/check_backend.py "$FRONTEND_URL"
 
       - name: Check authentication and users in Chromium
         working-directory: frontend
@@ -127,7 +127,7 @@ jobs:
         run: |
           container=$(docker compose --env-file .env.example ps -q backend)
           image=$(docker inspect --format '{{.Image}}' "$container")
-          python3 scripts/check_reminder_worker.py --image "$image"
+          python3 scripts/checks/check_reminder_worker.py --image "$image"
 
       - name: Check Telegram commands with the real API
         run: |
@@ -136,7 +136,7 @@ jobs:
           bot=$(docker compose --env-file .env.example ps -aq bot)
           image=$(docker inspect --format '{{.Image}}' "$backend")
           bot_image=$(docker inspect --format '{{.Image}}' "$bot")
-          python3 scripts/check_bot_api.py --image "$image" --bot-image "$bot_image"
+          python3 scripts/checks/check_bot_api.py --image "$image" --bot-image "$bot_image"
 
       - name: Save browser report and failure details
         if: ${{ !cancelled() }}
