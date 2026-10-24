@@ -1,12 +1,14 @@
 from datetime import date
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.main import create_app
 from app.schemas.payments import PaymentStateUpdate, RecurringPaymentCreate
 from app.services.payment_calendar import due_date_in_month, monthly_due_dates, next_due_date
+from app.services.payments import next_amount_effective_date
 
 
 @pytest.mark.parametrize(
@@ -127,7 +129,8 @@ def test_payment_openapi_documents_contract_and_empty_pages():
     schema = create_app(Settings(_env_file=None, database_url=None)).openapi()
     paths = schema["paths"]
     assert set(paths["/api/v1/recurring-payments"]) == {"get", "post"}
-    assert "delete" in paths["/api/v1/recurring-payments/{payment_id}"]
+    assert set(paths["/api/v1/recurring-payments/{payment_id}"]) == {"patch", "delete"}
+    assert "patch" in paths["/api/v1/payment-occurrences/{occurrence_id}/amount"]
     assert "patch" in paths["/api/v1/payment-occurrences/{occurrence_id}"]
     assert "get" in paths["/api/v1/payments/summary"]
     assert schema["components"]["securitySchemes"]["SessionCookie"]["name"] == "session_id"
@@ -153,3 +156,22 @@ def test_payment_openapi_documents_contract_and_empty_pages():
         for example in schema["components"]["schemas"]["RecurringPaymentList"]["examples"]
     )
     assert "503" in paths["/api/v1/payments/summary"]["get"]["responses"]
+
+
+@pytest.mark.parametrize(
+    ("day", "effective"),
+    [
+        (date(2027, 1, 31), date(2027, 2, 1)),
+        (date(2028, 2, 29), date(2028, 3, 1)),
+        (date(2027, 12, 31), date(2028, 1, 1)),
+    ],
+)
+def test_recurring_amount_changes_begin_with_the_next_calendar_month(day, effective):
+    assert next_amount_effective_date(day) == effective
+
+
+def test_recurring_amount_change_rejects_an_unrepresentable_following_month():
+    with pytest.raises(HTTPException) as raised:
+        next_amount_effective_date(date(9999, 12, 31))
+    assert raised.value.status_code == 422
+    assert raised.value.detail["error"]["code"] == "AMOUNT_EFFECTIVE_DATE_OUT_OF_RANGE"

@@ -219,6 +219,8 @@ async def test_each_period_has_independent_payment_and_delivery_state(delivery_d
             PaymentOccurrence(
                 id=unpaid_period_id,
                 recurring_payment_id=payment_id,
+                amount=Decimal("123.45"),
+                currency="RUB",
                 due_date=date(2026, 10, 10),
                 status="unpaid",
             )

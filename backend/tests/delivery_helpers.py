@@ -91,6 +91,8 @@ class TestPaymentSource:
             .values(
                 id=occurrence_id,
                 recurring_payment_id=payment_id,
+                amount=Decimal("123.45"),
+                currency="RUB",
                 due_date=row["due_date"],
                 status="unpaid",
             )
@@ -180,6 +182,8 @@ async def add_payment(
                 insert(PaymentOccurrence).values(
                     id=occurrence_id,
                     recurring_payment_id=payment_id,
+                    amount=Decimal("123.45"),
+                    currency="RUB",
                     due_date=due_date,
                     status="paid" if paid else "unpaid",
                     paid_on=due_date if paid else None,

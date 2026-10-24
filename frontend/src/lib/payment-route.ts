@@ -1,4 +1,4 @@
-export type WorkspaceView = 'payments' | 'history' | 'recurring' | 'users' | 'calendar' | 'activity'
+export type WorkspaceView = 'payments' | 'history' | 'recurring' | 'users' | 'calendar' | 'activity' | 'budget' | 'receipts'
 export type PaymentTab = 'all' | 'unpaid' | 'overdue' | 'paid'
 export type PaymentCurrency = '' | 'RUB' | 'USD' | 'EUR'
 export type PaymentFilters = {
@@ -6,6 +6,7 @@ export type PaymentFilters = {
   date_to: string
   currency: PaymentCurrency
   tab: PaymentTab
+  include_cancelled?: boolean
 }
 export type PaymentPageSize = 6 | 12 | 24
 export type PaymentRoute = {
@@ -21,7 +22,7 @@ export type PaymentRouteOptions = {
   ruleId?: string | null
 }
 
-const views: readonly string[] = ['payments', 'history', 'recurring', 'users', 'calendar', 'activity']
+const views: readonly string[] = ['payments', 'history', 'recurring', 'users', 'calendar', 'activity', 'budget', 'receipts']
 const tabs: readonly string[] = ['all', 'unpaid', 'overdue', 'paid']
 const currencies: readonly string[] = ['RUB', 'USD', 'EUR']
 const pageSizes: readonly number[] = [6, 12, 24]
@@ -108,6 +109,7 @@ export function readPaymentRoute(hash: string, today: string): PaymentRoute {
       date_to: dateTo,
       currency: currencies.includes(currency) ? currency as PaymentCurrency : '',
       tab: tabs.includes(status) ? status as PaymentTab : 'all',
+      ...(view === 'history' && params.get('include_cancelled') === 'true' ? { include_cancelled: true } : {}),
     },
     limit: pageSize(queryInteger(params.get('limit'))),
     offset: safeOffset(queryInteger(params.get('offset'))),
@@ -124,6 +126,7 @@ export function paymentHash(view: 'payments' | 'history', filters: PaymentFilter
     if (from) params.set('date_from', from)
     if (to) params.set('date_to', to)
   }
+  if (view === 'history' && filters.include_cancelled) params.set('include_cancelled', 'true')
   if (currencies.includes(filters.currency)) params.set('currency', filters.currency)
   params.set('status', tabs.includes(filters.tab) ? filters.tab : 'all')
   params.set('limit', String(pageSize(options.limit ?? 6)))

@@ -1,20 +1,23 @@
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
 from app.api.dependencies import CurrentUser, DbSession, require_csrf
 from app.models.payment_receipt import MAX_RECEIPT_BYTES
-from app.schemas.receipts import PaymentReceiptRead, ReceiptLinkUpdate
+from app.schemas.payments import Currency
+from app.schemas.receipts import PaymentReceiptList, PaymentReceiptRead, ReceiptLinkUpdate
 from app.services.errors import api_error
+from app.services.payments import today_in_timezone
 from app.services.receipts import (
     FILE_SIGNATURES,
     delete_receipt,
     get_receipt,
     get_receipt_file,
+    list_receipts,
     save_receipt,
 )
 
@@ -113,4 +116,30 @@ async def download_receipt(occurrence_id: UUID, _user: CurrentUser, db: DbSessio
             "Content-Security-Policy": "sandbox",
             "Cache-Control": "no-store",
         },
+    )
+
+
+@router.get(
+    "/payment-receipts",
+    response_model=PaymentReceiptList,
+    summary="Список подтверждений и периодов без подтверждения",
+)
+async def read_receipts(
+    _user: CurrentUser,
+    db: DbSession,
+    request: Request,
+    currency: Currency | None = None,
+    kind: Literal["all", "file", "link", "missing"] = "all",
+    query: Annotated[str, Query(max_length=200, pattern=r"^[^\x00]*$")] = "",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    return await list_receipts(
+        db,
+        today=today_in_timezone(request.app.state.settings.app_timezone),
+        currency=currency,
+        kind=kind,
+        query=query,
+        limit=limit,
+        offset=offset,
     )

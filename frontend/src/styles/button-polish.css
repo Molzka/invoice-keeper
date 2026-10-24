@@ -7,12 +7,12 @@
 }
 
 :is(.app-shell, .drawer-backdrop) .btn-primary {
-  background-color: #141616;
-  background-image: linear-gradient(115deg, #141616 0%, #141616 38%, #303b3c 65%, #141616 100%);
+  background-color: color-mix(in srgb, var(--ink) 92%, var(--surface));
+  background-image: linear-gradient(115deg, color-mix(in srgb, var(--ink) 92%, var(--surface)) 0%, color-mix(in srgb, var(--ink) 92%, var(--surface)) 38%, color-mix(in srgb, var(--ink) 79%, var(--surface)) 65%, color-mix(in srgb, var(--ink) 92%, var(--surface)) 100%);
   background-size: 240% 100%;
   background-position: 0 50%;
-  border-color: #141616;
-  box-shadow: inset 0 1px 0 #ffffff12, 0 2px 3px #1416160c;
+  border-color: color-mix(in srgb, var(--ink) 92%, var(--surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 7.1%, transparent), 0 2px 3px color-mix(in srgb, color-mix(in srgb, var(--ink) 92%, white) 4.7%, transparent);
 }
 
 :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button) > svg {
@@ -29,7 +29,7 @@
   width: 16px;
   height: 2px;
   border-radius: 2px;
-  background: #169daf;
+  background: color-mix(in srgb, var(--navy) 76%, var(--surface));
   opacity: 0;
   transform: translateX(-50%) scaleX(.4);
   transition: transform 260ms cubic-bezier(.2,.75,.25,1), opacity 180ms ease;
@@ -40,28 +40,28 @@
   transform: translateX(-50%) scaleX(1);
 }
 .app-shell .nav-link > svg { transition: transform 300ms cubic-bezier(.2,.75,.25,1), color 180ms ease; }
-.app-shell :is(.status-tab, .segment) { transition: color 180ms, background-color 200ms, box-shadow 240ms, transform 180ms; }
-.app-shell :is(.status-tab, .segment).active {
-  background: #141616;
-  color: #fff;
-  box-shadow: inset 0 -2px 0 #4bc3ce70, 0 2px 5px #1416160a;
+.app-shell:is(.status-tab, .segment) { transition: color 180ms, background-color 200ms, box-shadow 240ms, transform 180ms; }
+.app-shell:is(.status-tab, .segment).active {
+  background: color-mix(in srgb, var(--ink) 92%, var(--surface));
+  color: var(--on-solid);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, color-mix(in srgb, var(--cyan) 89%, black) 43.9%, transparent), 0 2px 5px color-mix(in srgb, color-mix(in srgb, var(--ink) 92%, white) 3.9%, transparent);
 }
 
 /* Keyboard users get the same surface feedback and a distinct focus ring. */
 :is(.app-shell, .drawer-backdrop) :is(.btn, .icon-button, .nav-link, .status-tab, .segment, .password-toggle):focus-visible {
-  outline: 3px solid #16879a;
+  outline: 3px solid color-mix(in srgb, var(--navy) 81%, var(--surface));
   outline-offset: 3px;
 }
 :is(.app-shell, .drawer-backdrop) .btn-primary:focus-visible:not(:disabled) {
-  background-image: linear-gradient(115deg, #141616 0%, #141616 38%, #303b3c 65%, #141616 100%);
+  background-image: linear-gradient(115deg, color-mix(in srgb, var(--ink) 92%, var(--surface)) 0%, color-mix(in srgb, var(--ink) 92%, var(--surface)) 38%, color-mix(in srgb, var(--ink) 79%, var(--surface)) 65%, color-mix(in srgb, var(--ink) 92%, var(--surface)) 100%);
   background-position: 100% 50%;
-  border-color: #3d5559;
-  box-shadow: inset 0 1px 0 #ffffff1c, 0 4px 12px #15383c16;
+  border-color: color-mix(in srgb, var(--navy) 87%, var(--surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 11%, transparent), 0 4px 12px color-mix(in srgb, color-mix(in srgb, var(--navy) 84%, black) 8.6%, transparent);
 }
 :is(.app-shell, .drawer-backdrop) .btn-secondary:focus-visible:not(:disabled),
 :is(.app-shell, .drawer-backdrop) .icon-button:not(.danger-text):focus-visible:not(:disabled) {
-  background: #eff9fa;
-  border-color: #91c7cf;
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  border-color: color-mix(in srgb, var(--cyan) 82%, var(--surface));
 }
 .app-shell .nav-link:focus-visible::after {
   opacity: 1;
@@ -70,22 +70,22 @@
 
 @media (hover: hover) and (pointer: fine) {
   :is(.app-shell, .drawer-backdrop) .btn-primary:hover:not(:disabled) {
-    background-color: #141616;
-    background-image: linear-gradient(115deg, #141616 0%, #141616 38%, #303b3c 65%, #141616 100%);
+    background-color: color-mix(in srgb, var(--ink) 92%, var(--surface));
+    background-image: linear-gradient(115deg, color-mix(in srgb, var(--ink) 92%, var(--surface)) 0%, color-mix(in srgb, var(--ink) 92%, var(--surface)) 38%, color-mix(in srgb, var(--ink) 79%, var(--surface)) 65%, color-mix(in srgb, var(--ink) 92%, var(--surface)) 100%);
     background-position: 100% 50%;
-    border-color: #3d5559;
-    box-shadow: inset 0 1px 0 #ffffff1c, 0 5px 14px #15383c16;
+    border-color: color-mix(in srgb, var(--navy) 87%, var(--surface));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 11%, transparent), 0 5px 14px color-mix(in srgb, color-mix(in srgb, var(--navy) 84%, black) 8.6%, transparent);
   }
   :is(.app-shell, .drawer-backdrop) .btn-secondary:hover:not(:disabled) {
-    background: #f1f9fa;
-    border-color: #aed3d9;
-    box-shadow: 0 3px 9px #1664710a;
+    background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+    border-color: color-mix(in srgb, var(--cyan) 62%, var(--surface));
+    box-shadow: 0 3px 9px color-mix(in srgb, color-mix(in srgb, var(--navy) 91%, white) 3.9%, transparent);
   }
   :is(.app-shell, .drawer-backdrop) .icon-button:not(.danger-text):hover:not(:disabled) {
-    background: #edf8f9;
-    border-color: #a5ced4;
-    color: #176f7c;
-    box-shadow: 0 3px 8px #1664710a;
+    background: color-mix(in srgb, var(--cyan) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--cyan) 69%, var(--surface));
+    color: color-mix(in srgb, var(--accent-ink) 88%, var(--surface));
+    box-shadow: 0 3px 8px color-mix(in srgb, color-mix(in srgb, var(--navy) 91%, white) 3.9%, transparent);
   }
   :is(.app-shell, .drawer-backdrop) .btn:not(:disabled):hover > .lucide-plus,
   .app-shell :is(.page-heading-action, .empty-state) .btn-primary:not(:disabled):hover > svg {
@@ -117,16 +117,16 @@
   .app-shell .nav-link:hover > svg { transform: translateY(-2px); }
   .app-shell .nav-link:hover > .lucide-repeat-2 { transform: rotate(-12deg); }
   .app-shell .nav-link:hover > .lucide-receipt-text { transform: translateY(-1px) rotate(7deg); }
-  .app-shell :is(.status-tab, .segment):not(.active):hover {
-    background: #edf6f7;
-    color: #155f6a;
-    box-shadow: inset 0 -2px 0 #9bd9df70;
+  .app-shell:is(.status-tab, .segment):not(.active):hover {
+    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    color: color-mix(in srgb, var(--accent-ink) 92%, var(--surface));
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, color-mix(in srgb, var(--cyan) 68%, white) 43.9%, transparent);
   }
   :is(.app-shell, .drawer-backdrop) .btn-danger:hover:not(:disabled),
   :is(.app-shell, .drawer-backdrop) .icon-button.danger-text:hover:not(:disabled) {
     transform: none;
-    background: #fff1f3;
-    border-color: #dfaab3;
+    background: color-mix(in srgb, var(--red) 5%, var(--surface));
+    border-color: color-mix(in srgb, var(--red) 38%, var(--surface));
   }
   :is(.app-shell, .drawer-backdrop) .btn-danger:hover > svg,
   :is(.app-shell, .drawer-backdrop) .icon-button.danger-text:hover > svg { transform: none; }

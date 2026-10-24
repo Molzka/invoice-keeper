@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowRight, ArrowUpRight, CalendarClock, Check, CirclePlus, KeyRound, ListChecks, RefreshCw, Search, ShieldCheck, SquarePen, Undo2, UserMinus, UserPlus, UserRound, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, CalendarClock, Check, CirclePlus, KeyRound, ListChecks, RefreshCw, Search, ShieldCheck, SquarePen, Undo2, UserMinus, UserPlus, UserRound, X } from './BrandIcons'
 import { API_MODE, ApiError } from '../api/client'
 import { activitySource } from '../api/activity'
 import type { AuditAction, AuditEvent, AuditFilters } from '../types/activity'
@@ -15,6 +15,10 @@ import { PageHeader } from './PageHeader'
 
 type Props = { isAdmin: boolean; revision: number; today: string; timezone: string; onHistory: (id: string, title: string) => void }
 const actionVisuals = {
+  'payment.deleted': { icon: X, tone: 'muted' },
+  'payment.period_deleted': { icon: X, tone: 'muted' },
+  'payment.amount_changed': { icon: SquarePen, tone: 'cyan' },
+  'payment.terms_changed': { icon: CalendarClock, tone: 'violet' },
   'payment.created': { icon: CirclePlus, tone: 'cyan' },
   'payment.stopped': { icon: X, tone: 'muted' },
   'payment.paid': { icon: Check, tone: 'green' },
@@ -30,7 +34,7 @@ const actionVisuals = {
 const dayFormat = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 function changeValue(field: string, value: string | null) {
   if (value === null || value === '') return 'Не указано'
-  if (['due_date', 'first_due_date', 'paid_on'].includes(field) && /^\d{4}-\d{2}-\d{2}$/.test(value)) return dateLabel(value)
+  if (['due_date', 'first_due_date', 'paid_on', 'amount_effective_from'].includes(field) && /^\d{4}-\d{2}-\d{2}$/.test(value)) return dateLabel(value)
   const amount = field === 'amount' ? value.match(/^(\d+\.\d{2}) (RUB|USD|EUR)$/) : null
   return amount ? money(amount[1], amount[2] as 'RUB' | 'USD' | 'EUR') : value
 }
@@ -69,7 +73,7 @@ function ActivityFilters({ filters, today, onApply, onReset }: { filters: AuditF
     <div className="field"><label htmlFor="activity-action">Действие</label><SelectField id="activity-action" value={draft.action} onChange={action => setDraft(value => ({ ...value, action: action as AuditAction | '' }))} options={[{ value: '', label: 'Все действия' }, ...Object.entries(auditActionLabels).map(([value, label]) => ({ value, label }))]}/></div>
     <div className="field"><label htmlFor="activity-from">Дата события с</label><DatePicker id="activity-from" value={draft.date_from} today={today} onChange={date_from => setDraft(value => ({ ...value, date_from }))} aria-label="Дата события с" aria-invalid={Boolean(error)} aria-describedby={error ? 'activity-filter-error' : undefined}/></div>
     <div className="field"><label htmlFor="activity-to">Дата события по</label><DatePicker id="activity-to" value={draft.date_to} today={today} onChange={date_to => setDraft(value => ({ ...value, date_to }))} aria-label="Дата события по" aria-invalid={Boolean(error)} aria-describedby={error ? 'activity-filter-error' : undefined}/></div>
-    <div className="activity-filter-actions"><button type="submit" className="btn btn-primary">Применить</button><button type="button" className="btn btn-secondary" onClick={reset}>Сбросить</button></div>
+    <div className="activity-filter-actions"><button type="submit" className="btn btn-primary">Применить</button><button type="button" className="btn btn-danger" onClick={reset}>Сбросить</button></div>
   </form>{error && <p id="activity-filter-error" className="query-error activity-filter-error" role="alert">{error}</p>}</>
 }
 

@@ -2,9 +2,9 @@
 .recurring-preview {
   margin: 0 0 20px;
   padding: 15px;
-  border: 1px solid #dce8eb;
+  border: 1px solid color-mix(in srgb, var(--cyan) 29%, var(--surface));
   border-radius: 17px;
-  background: linear-gradient(125deg, #f0f8f9, #fbfcfd 72%);
+  background: linear-gradient(125deg, color-mix(in srgb, var(--ink) 4%, var(--surface)), color-mix(in srgb, var(--ink) 1%, var(--surface)) 72%);
   color: var(--ink);
 }
 .recurring-preview-heading {
@@ -14,17 +14,17 @@
   gap: 8px;
   margin-bottom: 13px;
 }
-.recurring-preview-heading > svg { flex-shrink: 0; color: #158394; }
+.recurring-preview-heading > svg { flex-shrink: 0; color: color-mix(in srgb, var(--accent-ink) 82%, var(--surface)); }
 .drawer-body .recurring-preview-heading > h3 {
   margin: 0;
-  color: #273e46;
+  color: color-mix(in srgb, var(--accent-ink) 97%, var(--surface));
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0;
 }
 .recurring-preview-heading > span {
   margin-left: auto;
-  color: #62717b;
+  color: color-mix(in srgb, var(--ink) 60%, var(--surface));
   font-size: 10px;
 }
 .recurring-preview-dates > ol {
@@ -42,14 +42,14 @@
   align-items: flex-start;
   gap: 8px;
   padding: 10px;
-  border: 1px solid #e0e8eb;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, var(--surface));
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 4px #1f506504;
+  background: var(--surface);
+  box-shadow: 0 2px 4px color-mix(in srgb, color-mix(in srgb, var(--navy) 91%, white) 1.6%, transparent);
 }
 .recurring-preview-dates li:first-child {
-  border-color: #bbdee3;
-  background: #f6fcfc;
+  border-color: color-mix(in srgb, var(--cyan) 50%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 2%, var(--surface));
 }
 .recurring-preview-step {
   display: grid;
@@ -57,18 +57,18 @@
   height: 22px;
   place-items: center;
   border-radius: 7px;
-  background: #eef3f5;
-  color: #62717b;
+  background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+  color: color-mix(in srgb, var(--ink) 60%, var(--surface));
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .recurring-preview-dates li:first-child .recurring-preview-step {
-  background: #dff1f3;
-  color: #176c78;
+  background: color-mix(in srgb, var(--cyan) 23%, var(--surface));
+  color: color-mix(in srgb, var(--accent-ink) 89%, var(--surface));
 }
 .recurring-preview-dates time {
-  color: #25383f;
+  color: color-mix(in srgb, var(--accent-ink) 99%, var(--surface));
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
@@ -78,7 +78,7 @@
 .recurring-preview .recurring-preview-note,
 .recurring-preview .recurring-preview-empty {
   margin: 11px 0 0;
-  color: #5c6b74;
+  color: color-mix(in srgb, var(--ink) 60%, var(--surface));
   font-size: 10px;
   line-height: 1.65;
 }

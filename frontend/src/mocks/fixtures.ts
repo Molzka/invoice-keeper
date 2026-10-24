@@ -29,7 +29,7 @@ export function createFixtures(stress = false): { users: User[]; recurring: Recu
     id, title: stress && index === 8 ? title.repeat(2).slice(0, 200) : title,
     amount: stress && index === 8 ? '999999999999.99' : amount, currency,
     first_due_date: calendarMonthDate(DEMO_TODAY, day, -2), next_due_date: active ? calendarMonthDate(DEMO_TODAY, day, calendarMonthDate(DEMO_TODAY, day) < DEMO_TODAY ? 1 : 0) : null,
-    periodicity: 'monthly', anchor_day: day, is_active: active,
+    periodicity: 'monthly', anchor_day: day, is_active: active, amount_effective_from: null,
     created_at: `${calendarMonthDate(DEMO_TODAY, index + 1, -2)}T09:30:00Z`,
   }))
   const occurrences: PaymentOccurrence[] = []
@@ -43,7 +43,7 @@ export function createFixtures(stress = false): { users: User[]; recurring: Recu
       occurrences.push({ id: monthOffset === 0 && index === 0 ? '349e2b3b-1683-490a-a0ac-608cefc30248' : `a${String(month).padStart(7, '0')}-1111-4111-8111-${String(index + 1).padStart(12, '0')}`, recurring_payment_id: rule.id,
         title: rule.title, amount: rule.amount, currency: rule.currency, due_date, status: paid ? 'paid' : 'unpaid', paid_on,
         is_overdue: !paid && due_date < DEMO_TODAY, paid_late: Boolean(paid_on && paid_on > due_date), days_late: 0,
-        recurring_payment_is_active: rule.is_active,
+        recurring_payment_is_active: rule.is_active, amount_is_custom: false,
       })
     }
   })

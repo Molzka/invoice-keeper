@@ -1,0 +1,17 @@
+[
+  {
+    "check": "unit_tests",
+    "exit_code": 0,
+    "output": " it (4.0121ms)\n✔ early initialization restores the correct palette before React and agrees with the theme resolver (30.6535ms)\n✔ theme startup stays usable with blocked storage or unavailable system media preference (3.2742ms)\n(node:31296) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ audit filters use Moscow dates across UTC midnight and combine actor, action, text and pagination (22.5329ms)\n✔ audit store whitelists change fields, copies identities and returns immutable snapshots with stable new-event ordering (2.1716ms)\n✔ demo journal is admin-only, validates filters and has explicit empty/error scenarios (90.2824ms)\n✔ demo audit has distinguishable empty and temporarily unavailable outcomes (32.6256ms)\n✔ successful payment changes log one event, no-ops and rejected mutations log none, history uses recurring ID (75.3655ms)\n✔ user changes preserve deleted identity and never put password values or tokens in the journal (59.6656ms)\n(node:9148) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ one-time payments are single periods and deletion preserves a read-only history outside totals (138.0893ms)\n✔ archive preserves paid periods and deletes unpaid obligations, and members cannot delete (36.511ms)\n✔ budget separates forecast from saved obligations and receipt filters paginate matching server records (27.3886ms)\n✔ single unpaid period edit preserves other snapshots and moves exact currency totals (30.4701ms)\n✔ paid period edits reject even no-ops; unchanged default periods stay non-custom (36.1532ms)\n✔ regular terms apply next month and preserve current, paid and custom snapshots atomically (42.2169ms)\n✔ stopped unpaid periods remain editable while stopped recurring terms are rejected (31.0556ms)\n✔ editing enforces exact bodies, valid money, IDs, CSRF and admin role without mutating on failure (30.8026ms)\n✔ overdue amount and currency edits move overdue within unpaid without changing paid totals (14.0134ms)\n(node:13984) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ mock protects the administrator password (108.9561ms)\n✔ mock changes own password for user, rotates CSRF and accepts only the exact new secret afterward (26.8967ms)\n✔ mock rejects query/extra fields, enforces password bounds and keeps error fields distinct (20.805ms)\n✔ mock limiter counts wrong-current and successful changes per user, independently of login and CSRF failures (21.3203ms)\n✔ mock response-loss and stale-CSRF scenarios recover with me while preserving unknown password outcome (23.7989ms)\n✔ mock stale-CSRF scenario rejects the first change without changing the secret (14.2919ms)\n✔ mock account-switch scenario rejects the old form and me returns the other account without changing either password (18.6965ms)\nℹ tests 67\nℹ suites 0\nℹ pass 67\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1854.846\n"
+  },
+  {
+    "check": "typescript",
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "check": "eslint",
+    "exit_code": 0,
+    "output": ""
+  }
+]

@@ -51,6 +51,8 @@ async def _seed_rule(
             PaymentOccurrence(
                 id=uuid4(),
                 recurring_payment_id=rule.id,
+                amount=rule.amount,
+                currency=rule.currency,
                 due_date=due_date,
                 status=status,
                 paid_on=paid_on,

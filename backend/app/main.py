@@ -12,6 +12,7 @@ from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.budget import router as budget_router
 from app.api.dependencies import reject_unknown_query_parameters, require_allowed_origin
+from app.api.payment_lifecycle import router as lifecycle_router
 from app.api.payments import router as payments_router
 from app.api.receipts import router as receipts_router
 from app.api.users import router as users_router
@@ -74,6 +75,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 "/api/v1/payments",
                 "/api/v1/recurring-payments",
                 "/api/v1/payment-occurrences",
+                "/api/v1/payment-receipts",
+                "/api/v1/one-time-payments",
             )
         ):
             response.headers["Cache-Control"] = "no-store"
@@ -112,6 +115,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
     api_router.include_router(receipts_router)
     api_router.include_router(users_router)
     api_router.include_router(payments_router)
+    api_router.include_router(lifecycle_router)
     app.include_router(api_router)
     return app
 

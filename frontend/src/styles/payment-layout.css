@@ -1,0 +1,109 @@
+/* Payment rows reserve one stable action line at every table width. */
+#payment-results .payments-table .payment-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+}
+#payment-results .payment-row-actions > .btn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  height: 40px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+#payment-results .payment-row-actions > .icon-button {
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+@media (min-width: 761px) {
+  #payment-results .payments-table { min-width: 1120px; table-layout: fixed; }
+  #payment-results .payments-table .payment-money-column,
+  #payment-results .payments-table .payment-due-column,
+  #payment-results .payments-table .payment-paid-column { width: 12%; }
+  #payment-results .payments-table .payment-status-column { width: 20%; }
+  #payment-results .payments-table .payment-actions-column { width: 280px; }
+  #payment-results .payments-table th:first-child,
+  #payment-results .payments-table td:first-child { width: auto; }
+  #payment-results .payments-table th:last-child,
+  #payment-results .payments-table td:last-child { width: 280px; }
+  #payment-results .payments-table td { padding-top: 16px; padding-bottom: 16px; }
+}
+@media (max-width: 760px) {
+  #payment-results .payments-table colgroup { display: none; }
+  #payment-results .payments-table .payment-row-actions { justify-content: flex-start; gap: 8px; }
+  #payment-results .payment-row-actions > .btn { flex: 0 1 auto; min-width: 0; height: 44px; min-height: 44px; padding: 8px 10px; font-size: 11px; }
+  #payment-results .payment-row-actions > .icon-button { flex-basis: 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+}
+@media (pointer: coarse) {
+  #payment-results .payment-row-actions > .btn { min-height: 44px; height: 44px; }
+  #payment-results .payment-row-actions > .icon-button { flex-basis: 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+}
+/* Timing is a compact qualifier, never a checkbox or a second text tier. */
+.status.status-late {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  line-height: 1.2;
+  font-size: 11px;
+  font-weight: 550;
+  white-space: nowrap;
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--orange) 28%, var(--line));
+  background: color-mix(in srgb, var(--orange) 8%, var(--surface));
+}
+.status.status-late::before { display: block; width: 5px; height: 5px; background: var(--orange); }
+.status.status-late + .payment-period { margin-top: 6px; font-size: 11px; }
+/* One alignment grid unifies the facts, date and payment actions. */
+.payment-editor { min-width: 0; }
+.payment-editor .payment-detail { margin-bottom: 24px; }
+.payment-editor .payment-detail > h3.payment-title { margin: 0 0 20px; font-size: 22px; line-height: 1.35; letter-spacing: -.4px; overflow-wrap: anywhere; }
+.payment-editor .payment-detail dl { display: grid; gap: 14px; margin: 0; }
+.payment-editor .payment-detail dl > div { display: flex; justify-content: space-between; align-items: center; gap: 12px 20px; min-width: 0; }
+.payment-editor .payment-detail dt { flex: 0 1 auto; min-width: 0; font-size: 12px; line-height: 1.5; }
+.payment-editor .payment-detail dd { min-width: 0; max-width: 100%; margin: 0; font-size: 13px; line-height: 1.5; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.payment-editor .payment-detail > .notice { margin: 18px 0 0; }
+.payment-editor .payment-form { display: grid; gap: 18px; margin: 0; }
+.payment-editor .payment-form > .field { margin: 0; }
+.payment-editor .payment-form .field > small { display: block; margin-top: 10px; font-size: 11px; line-height: 1.6; }
+.payment-editor .payment-confirmation-note { margin: 0; padding: 12px 14px; gap: 10px; font-size: 12px; line-height: 1.6; color: var(--muted); background: var(--bg); border-color: var(--line); }
+.payment-editor .payment-confirmation-note > svg { margin-top: 1px; }
+.payment-editor .payment-action-layout { display: grid; gap: 12px; margin-top: 4px; }
+.payment-editor .payment-form .payment-actions,
+.payment-editor .payment-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 10px; padding: 0; margin: 0; }
+.payment-editor .payment-actions > .btn { min-width: 0; width: 100%; min-height: 48px; padding: 11px 14px; font-size: 12px; line-height: 1.4; }
+.payment-editor .payment-secondary-actions > .btn { min-width: 0; width: 100%; min-height: 44px; margin: 0; padding: 10px 12px; font-size: 12px; line-height: 1.4; }
+.payment-editor .payment-actions > .btn:only-child,
+.payment-editor .payment-secondary-actions > .btn:only-child { grid-column: 1 / -1; }
+.payment-editor .payment-action-layout .btn > span:not(.spinner) { min-width: 0; }
+@media (max-width: 430px) {
+  .payment-editor .payment-detail > h3.payment-title { font-size: 20px; }
+  .payment-editor .payment-form .payment-actions { grid-template-columns: minmax(0, 1fr); }
+  .payment-editor .payment-secondary-actions { gap: 8px; }
+  .payment-editor .payment-secondary-actions > .btn { padding: 10px 8px; font-size: 11px; gap: 6px; }
+  .payment-editor .payment-detail dl > div { flex-wrap: wrap; row-gap: 5px; }
+  .payment-editor .payment-detail dd { margin-left: auto; }
+}
+
+/* A single-line late badge needs the full mobile fact row, not half a card. */
+@media (max-width:760px) {
+  #payment-results .payments-table td:is(.payment-status-cell,.payment-paid-cell) { grid-column:1 / -1; flex-direction:row; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px 12px; }
+  #payment-results .payments-table .payment-status-cell .payment-period { flex-basis:100%; margin-top:0; text-align:right; }
+}
+
+.payment-secondary-actions .payment-delete-button { grid-column:1 / -1; min-height:40px; }

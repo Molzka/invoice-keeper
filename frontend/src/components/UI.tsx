@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, ChevronLeft, ChevronRight, Inbox, X } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, Inbox, X } from './BrandIcons'
 import { ApiError, isMissingPaymentRoute } from '../api/client'
 
 

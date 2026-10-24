@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from './BrandIcons'
 import { calendarMonthDate } from '../config/demo'
 
 type Props = {

@@ -288,6 +288,10 @@
               "anyOf": [
                 {
                   "enum": [
+                    "payment.amount_changed",
+                    "payment.terms_changed",
+                    "payment.deleted",
+                    "payment.period_deleted",
                     "payment.created",
                     "payment.stopped",
                     "payment.paid",
@@ -732,6 +736,111 @@
         }
       }
     },
+    "/api/v1/payment-receipts": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Список подтверждений и периодов без подтверждения",
+        "operationId": "read_receipts_api_v1_payment_receipts_get",
+        "parameters": [
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "RUB",
+                    "USD",
+                    "EUR"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "file",
+                "link",
+                "missing"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[^\\x00]*$",
+              "default": "",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentReceiptList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users": {
       "get": {
         "tags": [
@@ -1109,6 +1218,36 @@
               ],
               "title": "Is Active"
             }
+          },
+          {
+            "name": "periodicity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "monthly",
+                    "once"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Periodicity"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
+            }
           }
         ],
         "responses": {
@@ -1254,6 +1393,138 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Изменить сумму и валюту регулярного платежа со следующего месяца",
+        "operationId": "patch_recurring_payment_amount_api_v1_recurring_payments__payment_id__patch",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Payment Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmountCurrencyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringAmountUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется авторизация",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTH_REQUIRED",
+                    "message": "Требуется авторизация",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Некорректные данные запроса",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Некорректные данные запроса",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Требуются права администратора",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Требуются права администратора",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Регулярный платёж не найден",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "RECURRING_PAYMENT_NOT_FOUND",
+                    "message": "Регулярный платёж не найден",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Регулярный платёж прекращён",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "RECURRING_PAYMENT_STOPPED",
+                    "message": "Регулярный платёж прекращён",
+                    "details": []
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/payment-occurrences": {
@@ -1375,6 +1646,16 @@
                 }
               ],
               "title": "Is Overdue"
+            }
+          },
+          {
+            "name": "include_cancelled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Cancelled"
             }
           },
           {
@@ -1625,6 +1906,56 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Удалить неоплаченный период из обязательств с сохранением истории",
+        "operationId": "remove_occurrence_api_v1_payment_occurrences__occurrence_id__delete",
+        "parameters": [
+          {
+            "name": "occurrence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Occurrence Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/payments/summary": {
@@ -1730,10 +2061,287 @@
           }
         }
       }
+    },
+    "/api/v1/payment-occurrences/{occurrence_id}/amount": {
+      "patch": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Изменить сумму и валюту неоплаченного периода",
+        "operationId": "patch_payment_occurrence_amount_api_v1_payment_occurrences__occurrence_id__amount_patch",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "occurrence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Occurrence Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmountCurrencyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentOccurrenceRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется авторизация",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTH_REQUIRED",
+                    "message": "Требуется авторизация",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Некорректные данные запроса",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Некорректные данные запроса",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Требуются права администратора",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Требуются права администратора",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Период платежа не найден",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "PAYMENT_OCCURRENCE_NOT_FOUND",
+                    "message": "Период платежа не найден",
+                    "details": []
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Оплаченный период защищён от изменения",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "PAYMENT_ALREADY_PAID",
+                    "message": "Оплаченный период защищён от изменения",
+                    "details": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/one-time-payments": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Создать разовый платёж",
+        "operationId": "create_once_api_v1_one_time_payments_post",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OneTimePaymentCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentOccurrenceRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recurring-payments/{payment_id}/archive": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Удалить правило и неоплаченные обязательства с сохранением истории",
+        "operationId": "remove_payment_api_v1_recurring_payments__payment_id__archive_post",
+        "parameters": [
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Payment Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AmountCurrencyUpdate": {
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$",
+            "title": "Amount",
+            "description": "Строка с точкой и ровно двумя десятичными знаками"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RUB",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "title": "AmountCurrencyUpdate",
+        "examples": [
+          {
+            "amount": "45000.50",
+            "currency": "RUB"
+          }
+        ]
+      },
       "AuditActor": {
         "properties": {
           "id": {
@@ -1874,6 +2482,10 @@
           "action": {
             "type": "string",
             "enum": [
+              "payment.amount_changed",
+              "payment.terms_changed",
+              "payment.deleted",
+              "payment.period_deleted",
               "payment.created",
               "payment.stopped",
               "payment.paid",
@@ -2089,6 +2701,45 @@
         ],
         "title": "LoginRequest"
       },
+      "OneTimePaymentCreate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^\\x00]*$",
+            "title": "Title"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]{2}$",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RUB",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Due Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "amount",
+          "currency",
+          "due_date"
+        ],
+        "title": "OneTimePaymentCreate"
+      },
       "PaymentOccurrenceList": {
         "properties": {
           "items": {
@@ -2124,6 +2775,7 @@
             "items": [
               {
                 "amount": "45000.00",
+                "amount_is_custom": false,
                 "currency": "RUB",
                 "days_late": 0,
                 "due_date": "2026-10-31",
@@ -2182,6 +2834,24 @@
             "format": "date",
             "title": "Due Date"
           },
+          "amount_is_custom": {
+            "type": "boolean",
+            "title": "Amount Is Custom"
+          },
+          "periodicity": {
+            "type": "string",
+            "enum": [
+              "monthly",
+              "once"
+            ],
+            "title": "Periodicity",
+            "default": "monthly"
+          },
+          "is_cancelled": {
+            "type": "boolean",
+            "title": "Is Cancelled",
+            "default": false
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -2227,6 +2897,7 @@
           "amount",
           "currency",
           "due_date",
+          "amount_is_custom",
           "status",
           "paid_on",
           "is_overdue",
@@ -2235,6 +2906,37 @@
           "recurring_payment_is_active"
         ],
         "title": "PaymentOccurrenceRead"
+      },
+      "PaymentReceiptList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptListEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "PaymentReceiptList"
       },
       "PaymentReceiptRead": {
         "properties": {
@@ -2513,6 +3215,57 @@
           }
         ]
       },
+      "ReceiptListEntry": {
+        "properties": {
+          "occurrence": {
+            "$ref": "#/components/schemas/PaymentOccurrenceRead"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentReceiptRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurrence",
+          "receipt"
+        ],
+        "title": "ReceiptListEntry"
+      },
+      "RecurringAmountUpdateResponse": {
+        "properties": {
+          "payment": {
+            "$ref": "#/components/schemas/RecurringPaymentRead"
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective From"
+          },
+          "updated_periods": {
+            "type": "integer",
+            "title": "Updated Periods"
+          },
+          "preserved_custom_periods": {
+            "type": "integer",
+            "title": "Preserved Custom Periods"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payment",
+          "effective_from",
+          "updated_periods",
+          "preserved_custom_periods"
+        ],
+        "title": "RecurringAmountUpdateResponse"
+      },
       "RecurringPaymentCreate": {
         "properties": {
           "title": {
@@ -2664,6 +3417,18 @@
             ],
             "title": "Currency"
           },
+          "amount_effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Effective From"
+          },
           "first_due_date": {
             "type": "string",
             "format": "date",
@@ -2683,8 +3448,16 @@
           },
           "periodicity": {
             "type": "string",
-            "const": "monthly",
+            "enum": [
+              "monthly",
+              "once"
+            ],
             "title": "Periodicity"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
           },
           "anchor_day": {
             "type": "integer",

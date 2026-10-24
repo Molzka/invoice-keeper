@@ -5,6 +5,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, field_validator
 
 AuditAction = Literal[
+    "payment.amount_changed",
+    "payment.terms_changed",
+    "payment.deleted",
+    "payment.period_deleted",
     "payment.created",
     "payment.stopped",
     "payment.paid",
@@ -19,6 +23,10 @@ AuditAction = Literal[
 ]
 AuditEntityType = Literal["payment", "user", "account"]
 AUDIT_ACTION_LABELS: dict[str, str] = {
+    "payment.amount_changed": "Изменена сумма периода",
+    "payment.terms_changed": "Изменены условия платежа",
+    "payment.deleted": "Удалён платёж",
+    "payment.period_deleted": "Удалён период платежа",
     "payment.created": "Создан платёж",
     "payment.stopped": "Платёж прекращён",
     "payment.paid": "Отмечена оплата",
@@ -43,6 +51,9 @@ SAFE_CHANGE_FIELDS = frozenset(
         "is_active",
         "username",
         "receipt",
+        "amount_effective_from",
+        "is_cancelled",
+        "is_archived",
     }
 )
 

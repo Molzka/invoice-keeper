@@ -99,6 +99,17 @@ class RecurringPaymentCreate(BaseModel):
     periodicity: Literal["monthly"]
 
 
+class AmountCurrencyUpdate(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        hide_input_in_errors=True,
+        json_schema_extra={"examples": [{"amount": "45000.50", "currency": "RUB"}]},
+    )
+
+    amount: Amount = Field(description="Строка с точкой и ровно двумя десятичными знаками")
+    currency: Currency
+
+
 class PaymentStateUpdate(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -131,9 +142,11 @@ class RecurringPaymentRead(BaseModel):
     title: str
     amount: str
     currency: Currency
+    amount_effective_from: date | None = None
     first_due_date: date
     next_due_date: date | None
-    periodicity: Literal["monthly"]
+    periodicity: Literal["monthly", "once"]
+    is_archived: bool = False
     anchor_day: int
     is_active: bool
     created_at: datetime
@@ -144,6 +157,13 @@ class RecurringPaymentRead(BaseModel):
         return value.astimezone(UTC)
 
 
+class RecurringAmountUpdateResponse(BaseModel):
+    payment: RecurringPaymentRead
+    effective_from: date
+    updated_periods: int
+    preserved_custom_periods: int
+
+
 class PaymentOccurrenceRead(BaseModel):
     id: UUID
     recurring_payment_id: UUID
@@ -151,6 +171,9 @@ class PaymentOccurrenceRead(BaseModel):
     amount: str
     currency: Currency
     due_date: date
+    amount_is_custom: bool
+    periodicity: Literal["monthly", "once"] = "monthly"
+    is_cancelled: bool = False
     status: PaymentStatus
     paid_on: date | None
     is_overdue: bool
@@ -170,6 +193,7 @@ class RecurringPaymentList(BaseModel):
                             "title": "Аренда офиса",
                             "amount": "45000.00",
                             "currency": "RUB",
+                            "amount_effective_from": None,
                             "first_due_date": "2026-10-31",
                             "next_due_date": "2026-10-31",
                             "periodicity": "monthly",
@@ -206,6 +230,7 @@ class PaymentOccurrenceList(BaseModel):
                             "amount": "45000.00",
                             "currency": "RUB",
                             "due_date": "2026-10-31",
+                            "amount_is_custom": False,
                             "status": "unpaid",
                             "paid_on": None,
                             "is_overdue": False,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { AlertCircle, Check, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Check, Eye, EyeOff, KeyRound, ShieldCheck } from './BrandIcons'
 import { api, ApiError } from '../api/client'
 import type { AuthResponse, User } from '../types/api'
 import { validatePasswordFields } from '../lib/password-fields'

@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-24",
+  "directory": "frontend",
+  "checks": [
+    {
+      "check": "unit_tests",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 2.03,
+      "timeout_seconds": 45,
+      "tests": 67,
+      "passed": 67,
+      "failed": 0
+    },
+    {
+      "check": "typescript",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 3.8,
+      "timeout_seconds": 45
+    },
+    {
+      "check": "eslint",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 3.27,
+      "timeout_seconds": 45
+    },
+    {
+      "check": "real_build",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 0.53,
+      "timeout_seconds": 45,
+      "warning": "Main JavaScript chunk exceeds the default 500 kB warning threshold."
+    }
+  ],
+  "note": "TypeScript and real-mode build repeated after one-time deletion confirmation copy correction."
+}

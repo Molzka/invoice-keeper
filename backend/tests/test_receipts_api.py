@@ -36,9 +36,16 @@ async def seed_occurrences(app, *, active=True):
         db.add(payment)
         await db.flush()
         periods = [
-            PaymentOccurrence(recurring_payment_id=payment.id, due_date=today),
             PaymentOccurrence(
                 recurring_payment_id=payment.id,
+                due_date=today,
+                amount=payment.amount,
+                currency=payment.currency,
+            ),
+            PaymentOccurrence(
+                recurring_payment_id=payment.id,
+                amount=payment.amount,
+                currency=payment.currency,
                 due_date=date(today.year + 1, today.month, min(today.day, 28)),
             ),
         ]

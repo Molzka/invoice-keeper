@@ -3,7 +3,7 @@ import unicodedata
 from urllib.parse import unquote
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import utc_now
@@ -118,6 +118,12 @@ async def _lock_occurrence(
     )
     if payment is None or occurrence is None:
         raise api_error(404, "PAYMENT_OCCURRENCE_NOT_FOUND", "Период платежа не найден")
+    if occurrence.is_cancelled:
+        raise api_error(
+            409,
+            "PAYMENT_CANCELLED",
+            "Период удалён. Подтверждение сохранено в истории только для просмотра.",
+        )
     return payment, occurrence
 
 
@@ -230,3 +236,50 @@ async def delete_receipt(db: AsyncSession, occurrence_id: UUID, *, actor: User) 
         )
         await db.delete(receipt)
     await db.commit()
+
+
+async def list_receipts(db: AsyncSession, *, today, currency, kind, query, limit, offset) -> dict:
+    from app.services.payments import occurrence_data
+
+    conditions = [PaymentOccurrence.is_cancelled.is_(False)]
+    if currency is not None:
+        conditions.append(PaymentOccurrence.currency == currency)
+    if kind == "missing":
+        conditions.append(PaymentReceipt.id.is_(None))
+    elif kind in {"file", "link"}:
+        conditions.append(PaymentReceipt.kind == kind)
+    if query.strip():
+        value = (
+            "%" + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        )
+        conditions.append(
+            or_(
+                RecurringPayment.title.ilike(value, escape="\\"),
+                PaymentReceipt.filename.ilike(value, escape="\\"),
+                PaymentReceipt.url.ilike(value, escape="\\"),
+            )
+        )
+    query_rows = (
+        select(PaymentOccurrence, RecurringPayment, PaymentReceipt)
+        .join(RecurringPayment, RecurringPayment.id == PaymentOccurrence.recurring_payment_id)
+        .outerjoin(PaymentReceipt, PaymentReceipt.occurrence_id == PaymentOccurrence.id)
+        .where(*conditions)
+    )
+    total = await db.scalar(select(func.count()).select_from(query_rows.subquery()))
+    rows = await db.execute(
+        query_rows.order_by(PaymentOccurrence.due_date.desc(), PaymentOccurrence.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    return {
+        "items": [
+            {
+                "occurrence": occurrence_data(payment, occurrence, today),
+                "receipt": receipt_data(receipt) if receipt is not None else None,
+            }
+            for occurrence, payment, receipt in rows
+        ],
+        "total": total or 0,
+        "limit": limit,
+        "offset": offset,
+    }

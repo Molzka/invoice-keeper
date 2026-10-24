@@ -14,7 +14,7 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
         CheckConstraint(
-            "action IN ('payment.created', 'payment.stopped', 'payment.paid', "
+            "action IN ('payment.amount_changed', 'payment.terms_changed', 'payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', "
             "'payment.unpaid', 'payment.date_changed', 'user.created', 'user.updated', "
             "'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted')",
             name="action",

@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from './BrandIcons'
 import { api, API_MODE } from '../api/client'
 import type { PaymentOccurrence } from '../types/api'
 import { dateLabel, money, monthLabel, statusInfo } from '../lib/format'
 import { calendarCells, calendarHash, calendarMonthDays, calendarOccurrenceFilters, loadCalendarOccurrences, moveCalendarMonth, readCalendarRoute } from '../lib/payment-calendar'
 import type { CalendarRoute } from '../lib/payment-calendar'
 import { PageHeader } from './PageHeader'
+import { DeletePaymentDrawer } from './DeletePaymentDrawer'
+import { PaymentAmountDrawer } from './PaymentAmountDrawer'
 import { PaymentDrawer } from './PaymentsView'
 import { PaymentStatus } from './PaymentStatus'
 import { SelectField } from './SelectField'
 import { EmptyState, ErrorNotice } from './UI'
 
-interface Props { today: string; timezone: string; revision: number; onChanged: () => void; notify: (message: string) => void; onHistory: (id: string, title: string) => void }
+interface Props { isAdmin: boolean; today: string; timezone: string; revision: number; onChanged: () => void; notify: (message: string) => void; onHistory: (id: string, title: string) => void }
 const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const subscribeHash = (changed: () => void) => { window.addEventListener('hashchange', changed); return () => window.removeEventListener('hashchange', changed) }
 const hashSnapshot = () => window.location.hash
@@ -32,13 +34,15 @@ function focusDayDetails() {
   document.getElementById('calendar-day-details')?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
 }
 
-export function PaymentCalendar({ today, timezone, revision, onChanged, notify, onHistory }: Props) {
+export function PaymentCalendar({ isAdmin, today, timezone, revision, onChanged, notify, onHistory }: Props) {
   const hash = useSyncExternalStore(subscribeHash, hashSnapshot)
   const route = useMemo(() => readCalendarRoute(hash, today), [hash, today])
   const [rows, setRows] = useState<PaymentOccurrence[] | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [retry, setRetry] = useState(0)
   const [selected, setSelected] = useState<PaymentOccurrence | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<PaymentOccurrence | null>(null)
+  const [amountTarget, setAmountTarget] = useState<PaymentOccurrence | null>(null)
   const { month, day, currency, status } = route
   const pendingDetails = useRef('')
   useEffect(() => {
@@ -82,7 +86,7 @@ export function PaymentCalendar({ today, timezone, revision, onChanged, notify, 
     <PageHeader kind="calendar" title="Календарь оплат" description="Сроки на виду. Откройте день или платёж, чтобы посмотреть детали и отметить оплату." eyebrow={<>Рабочее пространство{API_MODE === 'mock' && <span className="demo-badge">Демо</span>}</>}/>
     <section className="payment-calendar-card" aria-label="Календарь сроков платежей">
       <div className="calendar-topline"><div className="calendar-month-control"><span className="calendar-heading-icon" aria-hidden="true"><CalendarDays size={23}/></span><div><p className="eyebrow">План по срокам</p><h2 aria-live="polite">{monthLabel(month)}</h2></div></div><div className="calendar-navigation"><button className="btn btn-secondary btn-small" type="button" onClick={() => change({ month: today.slice(0, 7), day: today })}>Сегодня</button><button className="icon-button" type="button" disabled={!previousMonth} aria-label="Предыдущий месяц" onClick={() => changeMonth(previousMonth)}><ChevronLeft size={18}/></button><button className="icon-button" type="button" disabled={!nextMonth} aria-label="Следующий месяц" onClick={() => changeMonth(nextMonth)}><ChevronRight size={18}/></button><button className="icon-button" type="button" aria-label="Обновить календарь" disabled={!ready} onClick={() => setRetry(value => value + 1)}><RefreshCw size={17}/></button></div></div>
-      <div className="calendar-filters"><div className="field"><label htmlFor="calendar-currency">Валюта</label><SelectField id="calendar-currency" value={currency} options={currencyOptions} onChange={value => change({ currency: value as CalendarRoute['currency'] })}/></div><div className="field"><label htmlFor="calendar-status">Статус платежа</label><SelectField id="calendar-status" value={status} options={statusOptions} onChange={value => change({ status: value as CalendarRoute['status'] })}/></div><button className="calendar-clear btn btn-secondary btn-small" type="button" onClick={() => change({ currency: '', status: 'all' })}>Сбросить фильтры</button><p className="calendar-count" role="status">{!ready ? 'Загружаем все периоды…' : error ? 'Данные недоступны' : `Платежей в месяце: ${visibleRows?.length || 0}`}</p></div>
+      <div className="calendar-filters"><div className="field"><label htmlFor="calendar-currency">Валюта</label><SelectField id="calendar-currency" value={currency} options={currencyOptions} onChange={value => change({ currency: value as CalendarRoute['currency'] })}/></div><div className="field"><label htmlFor="calendar-status">Статус платежа</label><SelectField id="calendar-status" value={status} options={statusOptions} onChange={value => change({ status: value as CalendarRoute['status'] })}/></div><button className="calendar-clear btn btn-danger btn-small" type="button" onClick={() => change({ currency: '', status: 'all' })}>Сбросить фильтры</button><p className="calendar-count" role="status">{!ready ? 'Загружаем все периоды…' : error ? 'Данные недоступны' : `Платежей в месяце: ${visibleRows?.length || 0}`}</p></div>
       <p className="calendar-explanation">Платежи расположены по сроку оплаты. Статусы определяет сервер; часовой пояс — {timezone}.{future && ' Будущие периоды ещё могут быть не сформированы.'}</p>
       <div className="calendar-status-legend" aria-label="Обозначения статусов"><span data-status="status-neutral">Не оплачено</span><span data-status="status-danger">Просрочено</span><span data-status="status-success">Оплачено</span><span data-status="status-warning">С опозданием</span></div>
       {!ready ? <div className="calendar-loading" role="status" aria-label="Загрузка календаря" aria-busy="true"><span className="spinner"/><p>Собираем платежи за месяц…</p><div className="calendar-loading-grid" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <div key={index} className="skeleton"/>)}</div></div> : error ? <div className="calendar-error"><ErrorNotice error={error} onRetry={() => setRetry(value => value + 1)}/></div> : <>
@@ -96,6 +100,8 @@ export function PaymentCalendar({ today, timezone, revision, onChanged, notify, 
         {!visibleRows?.length && <p className="calendar-month-empty-note" role="status">{future ? 'Сервер пока не вернул периодов на этот месяц. Это не прогноз будущих расходов.' : 'За выбранный месяц и с этими фильтрами платежей не найдено.'}</p>}
       </>}
     </section>
-    {selected && <PaymentDrawer key={selected.id} initial={selected} today={today} timezone={timezone} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>}
+    {deleteTarget && <DeletePaymentDrawer target={{ kind:"period", item:deleteTarget }} onClose={() => { setDeleteTarget(null); onChanged() }} onDeleted={() => { setDeleteTarget(null); onChanged(); notify("Платёж удалён из обязательств.") }}/>}
+    {amountTarget && <PaymentAmountDrawer key={`period:${amountTarget.id}`} target={{ ...amountTarget, kind: 'period', dueDate: amountTarget.due_date }} available onSave={async values => { await api.updateOccurrenceAmount(amountTarget.id, values) }} onSaved={() => { setAmountTarget(null); onChanged(); notify('Сумма и валюта периода обновлены. Календарь обновлён.') }} onClose={() => { setAmountTarget(null); onChanged() }}/>}
+    {selected && <PaymentDrawer key={selected.id} initial={selected} today={today} timezone={timezone} onAttachmentsChanged={onChanged} onDelete={isAdmin ? item => { setSelected(null); setDeleteTarget(item) } : undefined} onEditAmount={isAdmin ? item => { setSelected(null); setAmountTarget(item) } : undefined} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>}
   </section>
 }

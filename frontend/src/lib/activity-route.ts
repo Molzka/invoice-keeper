@@ -1,11 +1,14 @@
 import type { AuditAction, AuditFilters } from '../types/activity'
 
 export const auditActionLabels: Record<AuditAction, string> = {
+  'payment.deleted': 'Удалён платёж', 'payment.period_deleted': 'Удалён период платежа',
   'payment.created': 'Создание платежа',
   'payment.stopped': 'Прекращение платежа',
   'payment.paid': 'Отметка оплаты',
   'payment.unpaid': 'Отмена оплаты',
   'payment.date_changed': 'Исправление даты оплаты',
+  'payment.amount_changed': 'Изменение суммы периода',
+  'payment.terms_changed': 'Изменение условий платежа',
   'user.created': 'Создание пользователя',
   'user.updated': 'Изменение пользователя',
   'user.deleted': 'Удаление пользователя',

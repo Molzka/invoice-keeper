@@ -20,7 +20,7 @@ export function PageHeader({ kind, title, eyebrow, description, id, children }: 
       <h1 className="page-title" id={id} tabIndex={-1}>{title}<span className="title-dot" aria-hidden="true">.</span></h1>
       <p className="page-subtitle">{description}</p>
     </div>
-    <WorkspaceArt key={kind} kind={kind} className="page-heading-visual" />
+    <div className="page-heading-art"><WorkspaceArt key={kind} kind={kind} className="page-heading-visual" /></div>
     {children && <div className="page-heading-action">{children}</div>}
   </header>
 }
