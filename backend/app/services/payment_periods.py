@@ -2,22 +2,14 @@ from calendar import monthrange
 from datetime import date
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.delivery.locking import lock_payments
+from app.delivery.queue import enqueue_payment_reminder
 from app.models import PaymentOccurrence, RecurringPayment
 from app.services.payment_calendar import monthly_due_dates, next_due_date
-
-PAYMENT_LOCK_NAMESPACE = 0x494E56
-PAYMENT_LOCK_KEY = 2
-
-
-async def lock_payment_operations(db: AsyncSession) -> None:
-    await db.execute(
-        text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
-        {"namespace": PAYMENT_LOCK_NAMESPACE, "key": PAYMENT_LOCK_KEY},
-    )
 
 
 def active_generation_end(payment: RecurringPayment, today: date) -> date:
@@ -44,7 +36,7 @@ async def create_missing_periods(
     missing = [due_date for due_date in due_dates if due_date not in existing]
     for offset in range(0, len(missing), 1000):
         batch = missing[offset : offset + 1000]
-        await db.execute(
+        inserted = await db.execute(
             insert(PaymentOccurrence)
             .values(
                 [
@@ -58,18 +50,25 @@ async def create_missing_periods(
                 ]
             )
             .on_conflict_do_nothing(index_elements=["recurring_payment_id", "due_date"])
+            .returning(PaymentOccurrence.id, PaymentOccurrence.due_date)
         )
+        for occurrence_id, due_date in inserted:
+            await enqueue_payment_reminder(
+                db,
+                payment_id=payment.id,
+                occurrence_id=occurrence_id,
+                due_date=due_date,
+            )
 
 
 async def ensure_payment_periods(
     db: AsyncSession,
     payment_id: UUID,
     today: date,
-    *,
     through: date | None = None,
 ) -> RecurringPayment | None:
     """Lock a rule and fill periods without committing the caller's transaction."""
-    await lock_payment_operations(db)
+    await lock_payments(db)
     payment = await db.scalar(
         select(RecurringPayment)
         .where(RecurringPayment.id == payment_id)

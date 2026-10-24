@@ -7,10 +7,10 @@ from uuid import UUID
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.delivery.locking import lock_payments
 from app.models import PaymentOccurrence, RecurringPayment
 from app.services.errors import api_error
 from app.services.payment_calendar import monthly_due_dates
-from app.services.payment_periods import lock_payment_operations
 
 CURRENCIES = ("RUB", "USD", "EUR")
 ZERO = Decimal("0.00")
@@ -68,7 +68,7 @@ async def get_payments_summary(
     timezone_name: str,
 ) -> dict:
     date_from, date_to = _date_range(date_from, date_to, today)
-    await lock_payment_operations(db)
+    await lock_payments(db)
     active_rules = list(
         await db.scalars(
             select(RecurringPayment)

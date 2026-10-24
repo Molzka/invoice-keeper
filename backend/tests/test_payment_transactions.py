@@ -5,6 +5,7 @@ from datetime import date
 import pytest
 from sqlalchemy import delete, func, select
 
+from app.delivery.schema import deliveries
 from app.models import PaymentOccurrence, RecurringPayment
 from app.services.payment_calendar import monthly_due_dates
 from app.services.payment_periods import ensure_payment_periods
@@ -42,6 +43,15 @@ async def test_summary_waits_for_missing_period_and_worker_restores_it(
     missing_due_date = expected[len(expected) // 2]
     async with app.state.database.session_factory() as db:
         rule = await db.get(RecurringPayment, payment_data["id"])
+        missing_occurrence_id = await db.scalar(
+            select(PaymentOccurrence.id).where(
+                PaymentOccurrence.recurring_payment_id == rule.id,
+                PaymentOccurrence.due_date == missing_due_date,
+            )
+        )
+        await db.execute(
+            delete(deliveries).where(deliveries.c.occurrence_id == missing_occurrence_id)
+        )
         await db.execute(
             delete(PaymentOccurrence).where(
                 PaymentOccurrence.recurring_payment_id == rule.id,
@@ -76,6 +86,15 @@ async def test_concurrent_period_restores_keep_one_row_per_rule_and_due_date(
     expected = monthly_due_dates(first_due, 31, month_end)
     missing = expected[len(expected) // 2]
     async with app.state.database.session_factory() as db:
+        missing_occurrence_id = await db.scalar(
+            select(PaymentOccurrence.id).where(
+                PaymentOccurrence.recurring_payment_id == payment_data["id"],
+                PaymentOccurrence.due_date == missing,
+            )
+        )
+        await db.execute(
+            delete(deliveries).where(deliveries.c.occurrence_id == missing_occurrence_id)
+        )
         await db.execute(
             delete(PaymentOccurrence).where(
                 PaymentOccurrence.recurring_payment_id == payment_data["id"],

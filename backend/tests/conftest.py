@@ -66,6 +66,8 @@ def password_hash():
 
 @pytest_asyncio.fixture
 async def app(migrated_database_url):
+    from app.delivery.schema import deliveries
+
     config = Settings(
         _env_file=None,
         app_env="test",
@@ -81,6 +83,7 @@ async def app(migrated_database_url):
     async with application.router.lifespan_context(application):
         async with application.state.database.session_factory() as session:
             # Only the explicitly selected *_test database is modified.
+            await session.execute(delete(deliveries))
             for model in (PaymentOccurrence, RecurringPayment, UserSession, LoginRateLimit, User):
                 await session.execute(delete(model))
             await session.commit()
@@ -137,25 +140,22 @@ def login():
 
 @pytest_asyncio.fixture
 async def delivery_db(migrated_database_url):
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-
-    from app.delivery.schema import create_delivery_schema, drop_delivery_schema
+    from app.delivery.schema import deliveries
 
     from .delivery_helpers import metadata
 
     database = Database(migrated_database_url)
     async with database.engine.begin() as connection:
-        await connection.run_sync(
-            lambda sync: create_delivery_schema(Operations(MigrationContext.configure(sync)))
-        )
         await connection.run_sync(metadata.create_all)
+    async with database.session_factory() as db:
+        await db.execute(delete(deliveries))
+        await db.commit()
     try:
         yield database
     finally:
+        async with database.session_factory() as db:
+            await db.execute(delete(deliveries))
+            await db.commit()
         async with database.engine.begin() as connection:
             await connection.run_sync(metadata.drop_all)
-            await connection.run_sync(
-                lambda sync: drop_delivery_schema(Operations(MigrationContext.configure(sync)))
-            )
         await database.dispose()

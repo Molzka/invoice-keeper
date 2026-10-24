@@ -6,13 +6,13 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.delivery.locking import lock_payments
 from app.models import PaymentOccurrence, RecurringPayment
 from app.schemas.payments import PaymentStateUpdate, RecurringPaymentCreate
 from app.services.errors import api_error
 from app.services.payment_calendar import next_due_date
 from app.services.payment_periods import (
     ensure_payment_periods,
-    lock_payment_operations,
 )
 
 
@@ -75,7 +75,7 @@ async def create_recurring_payment(
     payload: RecurringPaymentCreate,
     today: date,
 ) -> RecurringPayment:
-    await lock_payment_operations(db)
+    await lock_payments(db)
     payment = RecurringPayment(
         title=payload.title,
         amount=Decimal(payload.amount),
@@ -201,17 +201,28 @@ async def update_payment_state(
     payload: PaymentStateUpdate,
     today: date,
 ) -> dict:
-    await lock_payment_operations(db)
+    await lock_payments(db)
+    payment_id = await db.scalar(
+        select(PaymentOccurrence.recurring_payment_id).where(PaymentOccurrence.id == occurrence_id)
+    )
+    if payment_id is None:
+        raise api_error(404, "PAYMENT_OCCURRENCE_NOT_FOUND", "Период платежа не найден")
+    payment = await db.scalar(
+        select(RecurringPayment)
+        .where(RecurringPayment.id == payment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if payment is None:
+        raise api_error(404, "PAYMENT_OCCURRENCE_NOT_FOUND", "Период платежа не найден")
     result = await db.execute(
-        select(PaymentOccurrence, RecurringPayment)
-        .join(RecurringPayment, PaymentOccurrence.recurring_payment_id == RecurringPayment.id)
+        select(PaymentOccurrence)
         .where(PaymentOccurrence.id == occurrence_id)
         .with_for_update(of=PaymentOccurrence)
     )
-    row = result.one_or_none()
-    if row is None:
+    occurrence = result.scalar_one_or_none()
+    if occurrence is None:
         raise api_error(404, "PAYMENT_OCCURRENCE_NOT_FOUND", "Период платежа не найден")
-    occurrence, payment = row
     if payload.paid_on is not None and payload.paid_on > today:
         raise api_error(
             422,

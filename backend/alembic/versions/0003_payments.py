@@ -93,9 +93,78 @@ def upgrade() -> None:
         "payment_occurrences",
         ["due_date", "id"],
     )
+    op.create_table(
+        "reminder_deliveries",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("payment_id", sa.Uuid(), nullable=False),
+        sa.Column("occurrence_id", sa.Uuid(), nullable=False),
+        sa.Column("scheduled_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("available_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "status", sa.String(length=16), server_default=sa.text("'pending'"), nullable=False
+        ),
+        sa.Column("attempt_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("attempt_id", sa.Uuid(), nullable=True),
+        sa.Column("lease_until", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("telegram_message_id", sa.BigInteger(), nullable=True),
+        sa.Column("last_error_code", sa.String(length=64), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "status IN ('pending', 'in_flight', 'retry', 'sent', 'unknown', 'cancelled', 'failed')",
+            name="ck_reminder_deliveries_status",
+        ),
+        sa.CheckConstraint("attempt_count >= 0", name="ck_reminder_deliveries_attempt_count"),
+        sa.CheckConstraint(
+            "status != 'in_flight' OR (attempt_id IS NOT NULL AND lease_until IS NOT NULL)",
+            name="ck_reminder_deliveries_claim",
+        ),
+        sa.CheckConstraint(
+            "status != 'sent' OR (sent_at IS NOT NULL AND telegram_message_id IS NOT NULL AND telegram_message_id > 0)",
+            name="ck_reminder_deliveries_confirmed",
+        ),
+        sa.ForeignKeyConstraint(
+            ["payment_id"],
+            ["recurring_payments.id"],
+            name="fk_reminder_deliveries_payment_id_recurring_payments",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["occurrence_id"],
+            ["payment_occurrences.id"],
+            name="fk_reminder_deliveries_occurrence_id_payment_occurrences",
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id", name="pk_reminder_deliveries"),
+        sa.UniqueConstraint("occurrence_id", name="uq_reminder_deliveries_occurrence_id"),
+    )
+    op.create_index(
+        "ix_reminder_deliveries_ready",
+        "reminder_deliveries",
+        ["status", "available_at"],
+    )
+    op.create_index(
+        "ix_reminder_deliveries_payment_id",
+        "reminder_deliveries",
+        ["payment_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_reminder_deliveries_payment_id", table_name="reminder_deliveries")
+    op.drop_index("ix_reminder_deliveries_ready", table_name="reminder_deliveries")
+    op.drop_table("reminder_deliveries")
     op.drop_index("ix_payment_occurrences_due_date_id", table_name="payment_occurrences")
     op.drop_table("payment_occurrences")
     op.drop_index("ix_recurring_payments_created_at", table_name="recurring_payments")
