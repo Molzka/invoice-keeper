@@ -8,8 +8,8 @@ COPY tsconfig*.json vite.config.ts eslint.config.js index.html ./
 COPY src ./src
 COPY public ./public
 
-# Keep the demo available until the payments API is implemented.
-ARG VITE_API_MODE=mock
+# Real API by default; mock remains available as an explicit demo build.
+ARG VITE_API_MODE=real
 ENV VITE_API_MODE=$VITE_API_MODE VITE_API_BASE_URL=/api/v1
 RUN test "$VITE_API_MODE" = mock || test "$VITE_API_MODE" = real
 RUN npm run typecheck && npm run lint && npm run build

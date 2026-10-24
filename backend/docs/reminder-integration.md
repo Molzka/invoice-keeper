@@ -10,7 +10,8 @@ PostgreSQL и тестового отправителя; реальные соо
 
 Цепочка миграций — `0002 → 0003 → 0004`, текущий head — `0004`. Ревизия
 `0004` исправляет default статуса периода и не меняет очередь. Worker не создаёт
-таблицы при старте и не запускается в Compose по умолчанию.
+таблицы при старте. В Compose он запускается отдельным сервисом `worker` после
+миграций, вместе с остальными приложениями.
 
 ## Ответственность и жизненный цикл периода
 
@@ -123,12 +124,13 @@ outcome="sent", telegram_message_id=...)` либо `outcome="not_sent"` **пос
 pending, а worker снова проверяет правило, оплату и время. Нельзя этим методом
 сбрасывать sent.
 
-После установки схемы доступны команды:
+После установки схемы доступны команды из корня проекта. `JOB_UUID` — ID записи
+очереди, `TELEGRAM_MESSAGE_ID` — подтверждённый ID сообщения в целевом чате:
 
 ```sh
-uv run --locked python -m app.delivery.cli list --status unknown
-uv run --locked python -m app.delivery.cli resolve JOB_UUID --sent TELEGRAM_MESSAGE_ID
-uv run --locked python -m app.delivery.cli resolve JOB_UUID --not-sent
+docker compose run --rm worker python -m app.delivery.cli list --status unknown
+docker compose run --rm worker python -m app.delivery.cli resolve JOB_UUID --sent TELEGRAM_MESSAGE_ID
+docker compose run --rm worker python -m app.delivery.cli resolve JOB_UUID --not-sent
 ```
 
 ### Восстановление failed после исправления настройки
@@ -136,14 +138,14 @@ uv run --locked python -m app.delivery.cli resolve JOB_UUID --not-sent
 Например, при неправильном `CHAT_ID` Telegram явно отклонил запрос, и задание
 получило `failed`. После исправления причины:
 
-1. Исправить конфигурацию процесса worker и перезапустить его, чтобы он прочитал
-   новый `CHAT_ID` / `BOT_TOKEN`. Одного изменения `.env` для работающего процесса
-   недостаточно.
-2. Из каталога `backend/` найти задания и повторно поставить выбранное:
+1. Исправить `CHAT_ID` / `BOT_TOKEN` в корневом `.env` и пересоздать процессы:
+   `docker compose up -d --no-deps --force-recreate worker bot`.
+   Одного изменения `.env` или `docker compose restart` недостаточно.
+2. Из корня проекта найти задания и повторно поставить выбранное:
 
    ```sh
-   uv run --locked python -m app.delivery.cli list --status failed
-   uv run --locked python -m app.delivery.cli requeue-failed JOB_UUID
+   docker compose run --rm worker python -m app.delivery.cli list --status failed
+   docker compose run --rm worker python -m app.delivery.cli requeue-failed JOB_UUID
    ```
 
 Команда работает с одним ID и принимает только `failed` без `sent_at` и
@@ -204,14 +206,41 @@ occurrence(db, payment_id, occurrence_id) -> PaymentSnapshot | None
 `reminders.py` участника Telegram изменения не вносятся; bot polling и доставка
 очереди — разные процессы. Worker не вызывает массовую рассылку.
 
-Worker запускается с платёжным адаптером из каталога `backend`:
+В Compose сервис `worker` использует backend-образ и его entrypoint. Команда
+сервиса — `python -m app.delivery.cli run --adapter app.services.payment_source:make_source`;
+интервал передаётся через `--poll-seconds` из `REMINDER_POLL_SECONDS` (по умолчанию
+30 секунд). Это пауза между циклами, а не отдельное расписание отправок.
+
+После миграций worker входит в общий `docker compose up -d`; отдельно его можно
+запустить командой `docker compose up -d --build worker`. Он ждёт готовности
+PostgreSQL, но не применяет миграции. Перед обновлением схемы остановите оба
+процесса: `docker compose stop backend worker`. После успешной миграции запускайте
+`backend` и `worker` вместе.
+
+Настройки берутся из корневого `.env`. EntryPoint собирает `DATABASE_URL` из
+`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`; для отправки нужны `BOT_TOKEN`
+и `CHAT_ID`. `APP_TIMEZONE` и `TZ` совпадают с настройками API. Общий класс
+Settings также проверяет настройки окружения, cookie и разрешённых Origin;
+worker получает их согласованно с API. После изменения `.env` нужен
+`docker compose up -d --no-deps --force-recreate worker`, а после изменения токена
+или чата — также пересоздание `bot`. Worker не использует Telegram polling,
+поэтому не конкурирует с ботом за `getUpdates`.
+
+Команды `compose run --rm worker ...` заменяют обычную команду сервиса: `list`,
+`resolve` и `requeue-failed` не запускают второй постоянный worker и не отправляют
+сообщения сами. Они используют тот же entrypoint и подключение к БД. Для просмотра
+ошибок: `docker compose logs --tail=100 worker`. Состояние `running` и тишина в
+логах не доказывают доставку: проверяйте записи `sent`, `failed`, `unknown` и чат.
+
+Для разработки без Docker сохранён запуск из каталога `backend`:
 
 ```sh
 uv run --locked python -m app.delivery.cli run --adapter app.services.payment_source:make_source
 ```
 
-Нужны `DATABASE_URL`, `BOT_TOKEN`, `CHAT_ID` в окружении worker / backend/.env.
-Worker в Compose по умолчанию не включён.
+Нужны `DATABASE_URL`, `BOT_TOKEN`, `CHAT_ID` в окружении процесса / `backend/.env`.
+Интервал задаётся CLI-флагом `--poll-seconds`; Compose-переменная
+`REMINDER_POLL_SECONDS` сама по себе на этот способ запуска не влияет.
 
 ## Миграции и общие метаданные
 
