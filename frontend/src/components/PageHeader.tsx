@@ -19,6 +19,7 @@ export function PageHeader({ kind, title, eyebrow, description, id, children }: 
   const introRef = useRef<HTMLDivElement>(null)
   const [copyEdge, setCopyEdge] = useState<number | null>(null)
   useEffect(() => {
+    headerRef.current?.querySelector('h1')?.focus()
     const measure = () => {
       const rect = introRef.current?.getBoundingClientRect()
       if (rect) setCopyEdge((rect.right + 24) / window.innerWidth * 1600)

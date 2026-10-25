@@ -96,4 +96,5 @@
 @media (prefers-reduced-motion: reduce) {
   .ik-field-trigger, .ik-select-chevron, .ik-select-option { transition: none; }
   .ik-field-popover, .ik-field-popover[data-state='closed'] { animation: none; }
+  .ik-field-popover[data-state='closed'] { visibility: hidden; }
 }
