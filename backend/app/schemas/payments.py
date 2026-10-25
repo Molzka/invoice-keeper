@@ -110,6 +110,35 @@ class AmountCurrencyUpdate(BaseModel):
     currency: Currency
 
 
+class RecurringPaymentUpdate(AmountCurrencyUpdate):
+    title: Title | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def reject_null_title(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("Название не может быть null")
+        return value
+
+
+class PaymentDetailsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    title: Title
+    amount: Amount | None = None
+    currency: Currency | None = None
+    periodicity: Literal["monthly"] | None = None
+
+    @model_validator(mode="after")
+    def validate_changes(self) -> "PaymentDetailsUpdate":
+        for field in self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"Поле {field} не может быть null")
+        if (self.amount is None) != (self.currency is None):
+            raise ValueError("Передайте сумму и валюту вместе")
+        return self
+
+
 class PaymentStateUpdate(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

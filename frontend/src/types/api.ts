@@ -43,6 +43,7 @@ export interface OccurrenceFilters extends PaginationParams {
   recurring_payment_id?: string; is_overdue?: boolean; include_cancelled?: boolean
 }
 export interface AmountCurrencyUpdateRequest { amount: Money; currency: Currency }
+export interface PaymentDetailsUpdateRequest { title: string; amount?: Money; currency?: Currency; periodicity?: 'monthly' }
 export interface RecurringAmountUpdateResponse { payment: RecurringPayment; effective_from: CalendarDate; updated_periods: number; preserved_custom_periods: number }
 export type UpdateOccurrenceRequest = { status: 'paid'; paid_on: CalendarDate } | { status: 'unpaid'; paid_on: null }
 export interface CurrencyTotals { planned: Money; paid: Money; unpaid: Money; overdue: Money }

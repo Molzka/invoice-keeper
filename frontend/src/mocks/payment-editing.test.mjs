@@ -16,6 +16,25 @@ const FIGMA_ID = 'f0000000-1111-4111-8111-000000000003'
 let sequence = 0
 const cents = value => BigInt(value.replace('.', ''))
 
+test('editing renames a payment and converts a paid one-time expense without duplicates or lost history', async context => {
+  const { request, occurrences } = await fixture(context)
+  const item = await (await request('/one-time-payments', 'POST', { title: 'Server', amount: '10.00', currency: 'USD', due_date: '2026-08-31' })).json()
+  const path = '/payment-occurrences/' + item.id
+  await request(path, 'PATCH', { status: 'paid', paid_on: '2026-08-30' })
+  for (let i = 0; i < 2; i++) assert.equal((await request(path + '/details', 'PATCH', { title: 'Hosting', periodicity: 'monthly' })).status, 200)
+  const rows = (await occurrences()).filter(row => row.recurring_payment_id === item.recurring_payment_id)
+  assert.deepEqual(rows.map(row => row.due_date), ['2026-08-31', '2026-09-30', '2026-10-31'])
+  assert.ok(rows.every(row => row.title === 'Hosting' && row.periodicity === 'monthly'))
+  assert.equal(rows[0].id, item.id)
+  assert.equal(rows[0].paid_on, '2026-08-30')
+  assert.equal((await request(path + '/details', 'PATCH', { title: 'Must not save', amount: '20.00', currency: 'EUR' })).status, 409)
+  assert.equal((await (await request(path)).json()).title, 'Hosting')
+  assert.equal((await request(path + '/details', 'PATCH', { title: 'x', amount: '1.00' })).status, 422)
+  const renamed = await request('/recurring-payments/' + item.recurring_payment_id, 'PATCH', { title: 'Subscription', amount: '10.00', currency: 'USD' })
+  assert.equal(renamed.status, 200)
+  assert.equal((await renamed.json()).payment.title, 'Subscription')
+})
+
 test('one-time payments are single periods and deletion preserves a read-only history outside totals', async context => {
   const { request, occurrences } = await fixture(context)
   const before = (await (await request('/payments/summary')).json()).totals.RUB.planned

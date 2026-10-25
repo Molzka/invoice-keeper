@@ -64,6 +64,7 @@ AUDIT_ACTION_LABELS: dict[str, str] = {
 SAFE_CHANGE_FIELDS = frozenset(
     {
         "title",
+        "periodicity",
         "amount",
         "currency",
         "first_due_date",

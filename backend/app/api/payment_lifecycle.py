@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, Request, Response
 from app.api.dependencies import AdminUser, DbSession, require_json_request
 from app.api.payments import Csrf
 from app.schemas.lifecycle import OneTimePaymentCreate
-from app.schemas.payments import PaymentOccurrenceRead
+from app.schemas.payments import PaymentDetailsUpdate, PaymentOccurrenceRead
 from app.services.payment_lifecycle import (
     archive_payment,
     cancel_occurrence,
     create_one_time_payment,
+    update_payment_details,
 )
 from app.services.payments import today_in_timezone
 
@@ -42,6 +43,31 @@ async def remove_occurrence(
 ) -> Response:
     await cancel_occurrence(db, occurrence_id, actor=admin)
     return Response(status_code=204)
+
+
+@router.patch(
+    "/payment-occurrences/{occurrence_id}/details",
+    response_model=PaymentOccurrenceRead,
+    dependencies=[Depends(require_json_request)],
+    summary="Изменить название, условия периода и включить ежемесячное повторение",
+)
+async def edit_payment_details(
+    occurrence_id: UUID,
+    payload: PaymentDetailsUpdate,
+    admin: AdminUser,
+    _csrf: Csrf,
+    db: DbSession,
+    request: Request,
+) -> dict:
+    timezone = request.app.state.settings.app_timezone
+    return await update_payment_details(
+        db,
+        occurrence_id,
+        payload,
+        today_in_timezone(timezone),
+        actor=admin,
+        timezone_name=timezone,
+    )
 
 
 @router.post(

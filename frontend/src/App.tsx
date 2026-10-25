@@ -16,7 +16,7 @@ import {
 } from './components/BrandIcons'
 import { BudgetView } from './components/BudgetView'
 import { ReceiptsView } from './components/ReceiptsView'
-import { OneTimePaymentDrawer } from './components/OneTimePaymentDrawer'
+import { CreatePaymentDrawer } from './components/CreatePaymentDrawer'
 import { api, API_MODE, ApiError } from './api/client'
 import type { AuthResponse, User } from './types/api'
 import { businessToday } from './config/demo'
@@ -46,7 +46,7 @@ export default function App() {
   const [revision, setRevision] = useState(0)
   const [toast, setToast] = useState('')
   const [logoutBusy, setLogoutBusy] = useState(false)
-  const [creatingOnce, setCreatingOnce] = useState(false)
+  const [creatingPayment, setCreatingPayment] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
   const [securityOffer, setSecurityOffer] = useState(false)
@@ -100,7 +100,7 @@ export default function App() {
       if (message) setToast(message)
       else if (userRef.current)
         setToast(passwordOpenRef.current ? 'Сессия завершилась. Войдите снова. Если вы меняли пароль, попробуйте новый.' : 'Сессия завершилась. Войдите снова.')
-      setCreatingOnce(false)
+      setCreatingPayment(false)
       setPasswordOpen(false)
       setSecurityOpen(false)
       setSecurityOffer(false)
@@ -367,7 +367,7 @@ export default function App() {
             }
           >
             {view === 'payments' && admin && (
-              <button className="btn btn-primary" type="button" onClick={() => setCreatingOnce(true)}>
+              <button className="btn btn-primary" type="button" onClick={() => setCreatingPayment(true)}>
                 <Plus size={18} /> Добавить платёж
               </button>
             )}
@@ -422,17 +422,18 @@ export default function App() {
           onChanged={changed}
         />
       )}
-      {creatingOnce && (
-        <OneTimePaymentDrawer
+      {creatingPayment && (
+        <CreatePaymentDrawer
           today={today}
           onClose={() => {
-            setCreatingOnce(false)
+            setCreatingPayment(false)
             changed()
           }}
-          onCreated={() => {
-            setCreatingOnce(false)
+          onCreated={(payment) => {
+            setCreatingPayment(false)
             changed()
-            notify('Разовый платёж добавлен.')
+            showHistory(payment.id, payment.title)
+            notify(payment.periodicity === 'monthly' ? 'Ежемесячный платёж добавлен.' : 'Разовый платёж добавлен.')
           }}
         />
       )}{' '}

@@ -64,6 +64,7 @@ test('календарь и журнал используют реальные �
       const day = page.getByRole('complementary', { name: 'Платежи выбранного дня' });
       await responseAfter(page, 'GET', `/payment-occurrences/${occurrenceId}`, 200,
         () => day.getByRole('button', { name: new RegExp(`^${title},`) }).click());
+      await page.getByRole('dialog', { name: 'Карточка платежа', exact: true }).getByRole('button', { name: 'Отметить оплату', exact: true }).click();
       const drawer = page.getByRole('dialog', { name: 'Отметить оплату', exact: true });
       await expect(drawer).toBeVisible();
       const paid = await responseAfter(page, 'PATCH', `/payment-occurrences/${occurrenceId}`, 200,

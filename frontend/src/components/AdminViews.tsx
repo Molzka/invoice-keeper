@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { CalendarDays, PencilLine, Plus, Square, Trash2 } from './BrandIcons';
+import { Plus, Square, Trash2 } from './BrandIcons';
 import { moveCalendarMonth } from '../lib/payment-calendar';
 import { DeletePaymentDrawer } from './DeletePaymentDrawer';
-import { PaymentAmountDrawer } from './PaymentAmountDrawer';
+import { PaymentEditDrawer } from './PaymentEditDrawer';
+import { CreatePaymentDrawer } from './CreatePaymentDrawer';
 import { api, ApiError } from '../api/client';
-import { isCalendarDate, normalizeRecurringAmount, previewMonthlyDueDates } from '../lib/recurring-inputs';
 import type { RecurringPayment, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
 import { PageHeader } from './PageHeader';
-import { DatePicker } from './DatePicker';
-import { SelectField } from './SelectField';
 import { RegistrationRequests } from './RegistrationRequests';
 
 export type AdminViewProps = {
@@ -25,7 +23,6 @@ export type AdminViewProps = {
 
 type Page<T> = { items: T[]; total: number; limit: number; offset: number };
 type FieldErrors = Record<string, string>;
-type Currency = 'RUB' | 'USD' | 'EUR';
 const PAGE_SIZE = 10;
 
 function money(amount: string, currency: string) {
@@ -138,78 +135,22 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
           <td className={`money ${payment.amount.split('.')[0].length > 9 ? 'money-large' : ''}`} data-label="Сумма в месяц">{money(payment.amount, payment.currency)}{payment.amount_effective_from && <span className="muted table-caption">С {calendarDate(payment.amount_effective_from)}</span>}</td>
           <td className="date-cell" data-label="Следующий срок">{calendarDate(payment.next_due_date)}<span className="muted table-caption">{payment.is_active ? 'Плановая дата' : 'Повторение остановлено'}</span></td>
           <td data-label="Состояние"><span className={`status ${payment.is_active ? 'status-success' : 'status-neutral'}`}><span className="status-dot" />{payment.is_active ? 'Активен' : 'Прекращён'}</span></td>
-          <td><div className="inline-actions"><button className="btn btn-secondary btn-small" onClick={() => onHistory(payment.id, payment.title)} aria-label={`История платежа «${payment.title}»`}>История <span aria-hidden="true">↗</span></button>{isAdmin && payment.is_active && <button className="icon-button" type="button" aria-label={`Изменить сумму и валюту: ${payment.title}`} title="Изменить условия следующих периодов" onClick={() => setEditing(payment)}><PencilLine size={16}/></button>}{isAdmin && payment.is_active && <button className="icon-button danger-text" title="Прекратить повторение" aria-label={`Прекратить повторение «${payment.title}»`} onClick={() => { setStopError(null); setStopping(payment); }}><Square size={12}/></button>}{isAdmin && <button type="button" className="icon-button danger-text" aria-label={`Удалить платёж «${payment.title}»`} title="Удалить платёж" onClick={() => setDeletingPayment(payment)}><Trash2 size={17}/></button>}</div></td>
+          <td><div className="inline-actions"><button className="btn btn-secondary btn-small" onClick={() => onHistory(payment.id, payment.title)} aria-label={`История платежа «${payment.title}»`}>История <span aria-hidden="true">↗</span></button>{isAdmin && payment.is_active && <button className="btn btn-secondary btn-small" type="button" aria-label={`Редактировать платёж: ${payment.title}`} onClick={() => setEditing(payment)}>Редактировать</button>}{isAdmin && payment.is_active && <button className="icon-button danger-text" title="Прекратить повторение" aria-label={`Прекратить повторение «${payment.title}»`} onClick={() => { setStopError(null); setStopping(payment); }}><Square size={12}/></button>}{isAdmin && <button type="button" className="icon-button danger-text" aria-label={`Удалить платёж «${payment.title}»`} title="Удалить платёж" onClick={() => setDeletingPayment(payment)}><Trash2 size={17}/></button>}</div></td>
         </tr>)}</tbody></table></div>
         <Pagination total={page.total} limit={page.limit} offset={page.offset} onPage={setOffset} />
       </>}
     </div>
     <p className="section-note">Прекращение повторения сохраняет историю. Уже созданные периоды остаются в списке платежей и в сводке.</p>
-    {editing && <PaymentAmountDrawer key={`recurring:${editing.id}`} target={{ ...editing, kind: 'recurring', effectiveFrom: nextMonth ? `${nextMonth}-01` : undefined }} available onSave={async values => { const result = await api.updateRecurringAmount(editing.id, values); notify(`Новые условия регулярного платежа действуют с ${calendarDate(result.effective_from)}.`) }} onSaved={() => { setEditing(null); changed() }} onClose={() => { setEditing(null); changed() }}/>}
-    {creating && <RecurringForm today={today} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); setOffset(0); notify('Регулярный платёж добавлен. Периоды оплаты уже созданы.'); changed(); }} onCheck={() => { setCreating(false); setActiveFilter('all'); setOffset(0); reload(); }} />}
+    {editing && <PaymentEditDrawer key={`recurring:${editing.id}`} target={{ ...editing, kind: 'recurring', effectiveFrom: nextMonth ? `${nextMonth}-01` : undefined }} onSave={async values => { await api.updateRecurringPayment(editing.id, { amount: editing.amount, currency: editing.currency, ...values }) }} onSaved={() => { setEditing(null); changed(); notify('Изменения платежа сохранены.') }} onClose={() => { setEditing(null); changed() }}/>}
+    {creating && <CreatePaymentDrawer today={today} initialPeriodicity="monthly" onClose={() => { setCreating(false); changed() }} onCreated={payment => { setCreating(false); setOffset(0); setActiveFilter('active'); notify('Платёж добавлен.'); changed(); if (payment.periodicity === 'once') onHistory(payment.id, payment.title) }} />}
     {deletingPayment && <DeletePaymentDrawer target={{ kind: "recurring", item: deletingPayment }} onClose={() => { setDeletingPayment(null); changed() }} onDeleted={() => { setDeletingPayment(null); changed(); notify("Платёж удалён из списка. История сохранена.") }}/>}
     {stopping && <Drawer canClose={!busyStop} title="Прекратить повторение?" subtitle={stopping.title} onClose={() => { if (!busyStop) setStopping(null); }}>
       <div className="notice"><strong>История сохранится.</strong><p>Новые периоды и напоминания по этому правилу больше не будут создаваться. Уже созданные периоды останутся в истории и сводке; их оплату по-прежнему можно исправлять.</p></div>
-      <p className="muted">Прекращение повторения не списывает существующие обязательства. Возобновить это правило через интерфейс v1 нельзя.</p>
+      <p className="muted">Прекращение повторения не списывает существующие обязательства. Чтобы снова повторять платёж, понадобится создать новый.</p>
       {stopError != null && <ErrorNotice error={stopError} />}
       <div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busyStop} onClick={() => setStopping(null)}>Отмена</button><button className="btn btn-danger" disabled={busyStop} onClick={confirmStop}>{busyStop ? 'Прекращаем…' : 'Прекратить повторение'}</button></div>
     </Drawer>}
   </section>;
-}
-
-function RecurringForm({ today, onClose, onCreated, onCheck }: { today: string; onClose: () => void; onCreated: () => void; onCheck: () => void }) {
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState<Currency>('RUB');
-  const [firstDueDate, setFirstDueDate] = useState(today);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [error, setError] = useState<unknown>(null);
-  const [uncertain, setUncertain] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const guard = useRef(false);
-  const dueDates = previewMonthlyDueDates(firstDueDate);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (guard.current || uncertain) return;
-    const nextErrors: FieldErrors = {};
-    if (!title.trim() || Array.from(title.trim()).length > 200) nextErrors.title = 'Введите название от 1 до 200 символов.';
-    const normalizedAmount = normalizeRecurringAmount(amount);
-    if (normalizedAmount === null) nextErrors.amount = 'Введите сумму от 0,01 до 999999999999,99. Например: 45000, 45000,50 или 45000.50; не более двух знаков после разделителя.';
-    if (!isCalendarDate(firstDueDate)) nextErrors.first_due_date = 'Выберите действительную дату первого срока.';
-    setErrors(nextErrors);
-    setError(null);
-    if (Object.keys(nextErrors).length || normalizedAmount === null) return;
-    guard.current = true;
-    setBusy(true);
-    try {
-      await api.createRecurringPayment({ title: title.trim(), amount: normalizedAmount, currency, first_due_date: firstDueDate, periodicity: 'monthly' });
-      onCreated();
-    } catch (caught) {
-      setErrors(fieldsFromError(caught));
-      setError(caught);
-      setUncertain(resultUncertain(caught));
-    } finally { guard.current = false; setBusy(false); }
-  }
-
-  return <Drawer canClose={!busy} title="Новый регулярный платёж" subtitle="Добавьте обязательство один раз — дальше каждый месяц." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
-    <form onSubmit={submit} noValidate className="form-grid">
-      <label className="field" htmlFor="recurring-title"><span>Название платежа</span><input id="recurring-title" name="title" value={title} onChange={event => setTitle(event.target.value)} placeholder="Например, аренда офиса" disabled={busy || uncertain} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? 'recurring-title-error' : undefined} required /><FieldMessage id="recurring-title-error" message={errors.title} /></label>
-      <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000 или 45000,50" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Например: 45000, 45000,50 или 45000.50</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><SelectField id="recurring-currency" value={currency} onChange={value => setCurrency(value as Currency)} options={[{value: "RUB", label: "RUB · рубль"}, {value: "USD", label: "USD · доллар"}, {value: "EUR", label: "EUR · евро"}]} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}/><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
-      <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><DatePicker id="recurring-date" today={today} aria-label="Первый срок оплаты" value={firstDueDate} onChange={setFirstDueDate} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
-      <div className="field"><span>Периодичность</span><div className="static-field">↻ Каждый месяц</div><span className="field-hint">Если в месяце нет выбранного числа, сроком станет его последний день.</span><FieldMessage id="recurring-periodicity-error" message={errors.periodicity} /></div>
-      <section className="recurring-preview" aria-labelledby="recurring-preview-title">
-        <div className="recurring-preview-heading"><CalendarDays size={18}/><h3 id="recurring-preview-title">Предварительные сроки</h3><span>3 месяца</span></div>
-        <div className="recurring-preview-dates" aria-live="polite" aria-atomic="true">
-          {dueDates.length ? <ol>{dueDates.map((date, index) => <li key={index}><span className="recurring-preview-step">{String(index + 1).padStart(2, '0')}</span><time dateTime={date}>{calendarDate(date)}</time></li>)}</ol> : <p className="recurring-preview-empty">Выберите первый срок — покажем три ближайшие даты.</p>}
-          {dueDates.length > 0 && dueDates.length < 3 && <p className="recurring-preview-empty">Дальнейшие даты выходят за поддерживаемый диапазон до 9999 года.</p>}
-        </div>
-        <p className="recurring-preview-note">Это предварительный расчёт. Окончательные сроки рассчитывает сервер.</p>
-      </section>
-      <div className="notice"><strong>Напоминания в Telegram</strong><p>Неоплаченные периоды будут напоминать о себе за 3 дня до срока. Для уже близкого или прошедшего срока напоминание готовится сразу.</p></div>
-      {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}
-      <div className="form-actions"><button data-drawer-close className="btn btn-secondary" type="button" disabled={busy} onClick={() => uncertain ? onCheck() : onClose()}>Отмена</button><button className="btn btn-primary" type="submit" disabled={busy || uncertain}>{busy ? 'Создаём…' : 'Добавить платёж'}</button></div>
-    </form>
-  </Drawer>;
 }
 
 export function UsersView({ onChanged, notify, isAdmin, timezone }: AdminViewProps) {

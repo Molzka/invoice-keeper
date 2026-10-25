@@ -60,7 +60,7 @@ export function Drawer({ title, subtitle, children, onClose, canClose = true }: 
       event.stopPropagation()
       requestClose()
     }}>
-      <div className="drawer-head"><div><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="icon-button" type="button" aria-label="Закрыть панель" disabled={!canClose || closing} onClick={requestClose}><X size={18}/></button></div>
+      <div className="drawer-head"><div><h2 id={titleId} tabIndex={-1}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="icon-button" type="button" aria-label="Закрыть панель" disabled={!canClose || closing} onClick={requestClose}><X size={18}/></button></div>
       <div className="drawer-body">{children}</div>
     </div>
     <div className="drawer-popover-root" data-drawer-popover-root=""/>
