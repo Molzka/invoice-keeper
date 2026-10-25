@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.delivery.locking import lock_payments
 from app.models import PaymentOccurrence, RecurringPayment
 from app.services.errors import api_error
-from app.services.payment_calendar import monthly_due_dates
+from app.services.payment_calendar import recurring_due_dates
 
 CURRENCIES = ("RUB", "USD", "EUR")
 ZERO = Decimal("0.00")
@@ -37,9 +37,15 @@ async def _assert_active_history_complete(
     date_to: date,
 ) -> None:
     expected: dict[UUID, set[date]] = {
-        rule.id: ({rule.first_due_date} if rule.first_due_date <= date_to else set())
-        if rule.periodicity == "once"
-        else set(monthly_due_dates(rule.first_due_date, rule.anchor_day, date_to))
+        rule.id: set(
+            recurring_due_dates(
+                rule.first_due_date,
+                rule.anchor_day,
+                date_to,
+                rule.periodicity,
+                rule.recurrence_interval,
+            )
+        )
         for rule in rules
     }
     expected = {payment_id: dates for payment_id, dates in expected.items() if dates}

@@ -4,8 +4,8 @@ import { moveCalendarMonth } from '../lib/payment-calendar';
 import { DeletePaymentDrawer } from './DeletePaymentDrawer';
 import { PaymentAmountDrawer } from './PaymentAmountDrawer';
 import { api, ApiError } from '../api/client';
-import { isCalendarDate, normalizeRecurringAmount, previewMonthlyDueDates } from '../lib/recurring-inputs';
-import type { RecurringPayment, User } from '../types/api';
+import { isCalendarDate, normalizeRecurringAmount, previewRecurringDueDates, recurrenceLabel } from '../lib/recurring-inputs';
+import type { RecurringPayment, RecurringPeriodicity, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
 import { PageHeader } from './PageHeader';
 import { DatePicker } from './DatePicker';
@@ -89,7 +89,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
     let alive = true;
     setLoading(true);
     setLoadError(null);
-    api.listRecurringPayments({ periodicity: 'monthly',
+    api.listRecurringPayments({ periodicity: 'recurring',
       limit: PAGE_SIZE, offset,
       ...(activeFilter !== 'all' ? { is_active: activeFilter === 'active' } : {}),
     }).then(result => {
@@ -122,7 +122,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
   }
 
   return <section aria-labelledby="recurring-heading">
-    <PageHeader kind="recurring" id="recurring-heading" title="Регулярные платежи" eyebrow="Повторения под контролем" description="Правила ежемесячных обязательств и их полная история.">
+    <PageHeader kind="recurring" id="recurring-heading" title="Регулярные платежи" eyebrow="Повторения под контролем" description="Расписание повторяющихся обязательств и их полная история.">
       {isAdmin && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}
     </PageHeader>
     <div className="panel">
@@ -130,12 +130,12 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
         <div className="segmented" role="group" aria-label="Состояние регулярных платежей">
           {([['active', 'Активные'], ['all', 'Все платежи'], ['stopped', 'Прекращённые']] as const).map(([value, label]) => <button key={value} type="button" className={activeFilter === value ? 'segment active' : 'segment'} aria-pressed={activeFilter === value} onClick={() => { setOffset(0); setActiveFilter(value); }}>{label}</button>)}
         </div>
-        <span className="muted">Ежемесячно · {timezone}</span>
+        <span className="muted">{timezone}</span>
       </div>
-      {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем регулярные платежи…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">↻</span><h2>{activeFilter === 'stopped' ? 'Прекращённых платежей пока нет' : 'Здесь появятся регулярные платежи'}</h2><p className="muted">{activeFilter === 'stopped' ? 'Когда повторение будет прекращено, его история останется доступна.' : isAdmin ? 'Добавьте аренду, сервер или подписку — система создаст отдельные периоды оплаты.' : 'Администратор может добавить ежемесячные обязательства команды.'}</p>{isAdmin && activeFilter !== 'stopped' && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}</div> : <>
-        <div className="table-wrap"><table className="data-table recurring-table"><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма в месяц</th><th scope="col">Следующий срок</th><th scope="col">Состояние</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(payment => <tr key={payment.id}>
-          <td><div className="payment-title">{payment.title}</div><span className="muted table-caption">С {calendarDate(payment.first_due_date)} · {payment.anchor_day}-го числа</span></td>
-          <td className={`money ${payment.amount.split('.')[0].length > 9 ? 'money-large' : ''}`} data-label="Сумма в месяц">{money(payment.amount, payment.currency)}{payment.amount_effective_from && <span className="muted table-caption">С {calendarDate(payment.amount_effective_from)}</span>}</td>
+      {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем регулярные платежи…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">↻</span><h2>{activeFilter === 'stopped' ? 'Прекращённых платежей пока нет' : 'Здесь появятся регулярные платежи'}</h2><p className="muted">{activeFilter === 'stopped' ? 'Когда повторение будет прекращено, его история останется доступна.' : isAdmin ? 'Добавьте аренду, сервер или подписку — система создаст отдельные периоды оплаты.' : 'Администратор может добавить повторяющиеся обязательства команды.'}</p>{isAdmin && activeFilter !== 'stopped' && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}</div> : <>
+        <div className="table-wrap"><table className="data-table recurring-table"><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма за период</th><th scope="col">Следующий срок</th><th scope="col">Состояние</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(payment => <tr key={payment.id}>
+          <td><div className="payment-title">{payment.title}</div><span className="muted table-caption">{recurrenceLabel(payment.periodicity, payment.recurrence_interval)} · с {calendarDate(payment.first_due_date)}</span></td>
+          <td className={`money ${payment.amount.split('.')[0].length > 9 ? 'money-large' : ''}`} data-label="Сумма за период">{money(payment.amount, payment.currency)}{payment.amount_effective_from && <span className="muted table-caption">С {calendarDate(payment.amount_effective_from)}</span>}</td>
           <td className="date-cell" data-label="Следующий срок">{calendarDate(payment.next_due_date)}<span className="muted table-caption">{payment.is_active ? 'Плановая дата' : 'Повторение остановлено'}</span></td>
           <td data-label="Состояние"><span className={`status ${payment.is_active ? 'status-success' : 'status-neutral'}`}><span className="status-dot" />{payment.is_active ? 'Активен' : 'Прекращён'}</span></td>
           <td><div className="inline-actions"><button className="btn btn-secondary btn-small" onClick={() => onHistory(payment.id, payment.title)} aria-label={`История платежа «${payment.title}»`}>История <span aria-hidden="true">↗</span></button>{isAdmin && payment.is_active && <button className="icon-button" type="button" aria-label={`Изменить сумму и валюту: ${payment.title}`} title="Изменить условия следующих периодов" onClick={() => setEditing(payment)}><PencilLine size={16}/></button>}{isAdmin && payment.is_active && <button className="icon-button danger-text" title="Прекратить повторение" aria-label={`Прекратить повторение «${payment.title}»`} onClick={() => { setStopError(null); setStopping(payment); }}><Square size={12}/></button>}{isAdmin && <button type="button" className="icon-button danger-text" aria-label={`Удалить платёж «${payment.title}»`} title="Удалить платёж" onClick={() => setDeletingPayment(payment)}><Trash2 size={17}/></button>}</div></td>
@@ -161,12 +161,14 @@ function RecurringForm({ today, onClose, onCreated, onCheck }: { today: string; 
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<Currency>('RUB');
   const [firstDueDate, setFirstDueDate] = useState(today);
+  const [periodicity, setPeriodicity] = useState<RecurringPeriodicity>('monthly');
+  const [interval, setInterval] = useState('1');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<unknown>(null);
   const [uncertain, setUncertain] = useState(false);
   const [busy, setBusy] = useState(false);
   const guard = useRef(false);
-  const dueDates = previewMonthlyDueDates(firstDueDate);
+  const dueDates = previewRecurringDueDates(firstDueDate, periodicity, Number(interval));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -176,13 +178,14 @@ function RecurringForm({ today, onClose, onCreated, onCheck }: { today: string; 
     const normalizedAmount = normalizeRecurringAmount(amount);
     if (normalizedAmount === null) nextErrors.amount = 'Введите сумму от 0,01 до 999999999999,99. Например: 45000, 45000,50 или 45000.50; не более двух знаков после разделителя.';
     if (!isCalendarDate(firstDueDate)) nextErrors.first_due_date = 'Выберите действительную дату первого срока.';
+    if (!Number.isInteger(Number(interval)) || Number(interval) < 1 || Number(interval) > 365) nextErrors.recurrence_interval = 'Введите целое число от 1 до 365.';
     setErrors(nextErrors);
     setError(null);
     if (Object.keys(nextErrors).length || normalizedAmount === null) return;
     guard.current = true;
     setBusy(true);
     try {
-      await api.createRecurringPayment({ title: title.trim(), amount: normalizedAmount, currency, first_due_date: firstDueDate, periodicity: 'monthly' });
+      await api.createRecurringPayment({ title: title.trim(), amount: normalizedAmount, currency, first_due_date: firstDueDate, periodicity, recurrence_interval: Number(interval) });
       onCreated();
     } catch (caught) {
       setErrors(fieldsFromError(caught));
@@ -191,19 +194,22 @@ function RecurringForm({ today, onClose, onCreated, onCheck }: { today: string; 
     } finally { guard.current = false; setBusy(false); }
   }
 
-  return <Drawer canClose={!busy} title="Новый регулярный платёж" subtitle="Добавьте обязательство один раз — дальше каждый месяц." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
+  return <Drawer canClose={!busy} title="Новый регулярный платёж" subtitle="Укажите первый срок и частоту повторения." onClose={() => { if (!busy) { if (uncertain) onCheck(); else onClose(); } }}>
     <form onSubmit={submit} noValidate className="form-grid">
       <label className="field" htmlFor="recurring-title"><span>Название платежа</span><input id="recurring-title" name="title" value={title} onChange={event => setTitle(event.target.value)} placeholder="Например, аренда офиса" disabled={busy || uncertain} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? 'recurring-title-error' : undefined} required /><FieldMessage id="recurring-title-error" message={errors.title} /></label>
       <div className="form-row"><label className="field" htmlFor="recurring-amount"><span>Сумма</span><input id="recurring-amount" name="amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="45000 или 45000,50" disabled={busy || uncertain} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? 'recurring-amount-error' : 'recurring-amount-hint'} required /><span id="recurring-amount-hint" className="field-hint">Например: 45000, 45000,50 или 45000.50</span><FieldMessage id="recurring-amount-error" message={errors.amount} /></label><label className="field" htmlFor="recurring-currency"><span>Валюта</span><SelectField id="recurring-currency" value={currency} onChange={value => setCurrency(value as Currency)} options={[{value: "RUB", label: "RUB · рубль"}, {value: "USD", label: "USD · доллар"}, {value: "EUR", label: "EUR · евро"}]} disabled={busy || uncertain} aria-invalid={Boolean(errors.currency)} aria-describedby={errors.currency ? 'recurring-currency-error' : undefined}/><FieldMessage id="recurring-currency-error" message={errors.currency} /></label></div>
       <label className="field" htmlFor="recurring-date"><span>Первый срок оплаты</span><DatePicker id="recurring-date" today={today} aria-label="Первый срок оплаты" value={firstDueDate} onChange={setFirstDueDate} disabled={busy || uncertain} aria-invalid={Boolean(errors.first_due_date)} aria-describedby={errors.first_due_date ? 'recurring-date-error' : 'recurring-date-hint'} required /><span id="recurring-date-hint" className="field-hint">Можно выбрать прошедшую дату для учёта старых обязательств.</span><FieldMessage id="recurring-date-error" message={errors.first_due_date} /></label>
-      <div className="field"><span>Периодичность</span><div className="static-field">↻ Каждый месяц</div><span className="field-hint">Если в месяце нет выбранного числа, сроком станет его последний день.</span><FieldMessage id="recurring-periodicity-error" message={errors.periodicity} /></div>
+      <div className="form-row recurring-frequency-fields">
+        <label className="field" htmlFor="recurring-interval"><span>Повторять раз в</span><input id="recurring-interval" name="recurrence_interval" type="number" min="1" max="365" step="1" value={interval} onChange={event => { setInterval(event.target.value); setErrors(current => ({ ...current, recurrence_interval: '' })); }} disabled={busy || uncertain} required aria-invalid={Boolean(errors.recurrence_interval)} aria-describedby={errors.recurrence_interval ? 'recurring-interval-error' : undefined}/><FieldMessage id="recurring-interval-error" message={errors.recurrence_interval}/></label>
+        <label className="field" htmlFor="recurring-periodicity"><span>Периодичность</span><SelectField id="recurring-periodicity" value={periodicity} onChange={value => setPeriodicity(value as RecurringPeriodicity)} options={[{ value: 'daily', label: 'Дни' }, { value: 'weekly', label: 'Недели' }, { value: 'monthly', label: 'Месяцы' }, { value: 'yearly', label: 'Годы' }]} disabled={busy || uncertain} aria-invalid={Boolean(errors.periodicity)} aria-describedby={errors.periodicity ? 'recurring-periodicity-error' : undefined}/><FieldMessage id="recurring-periodicity-error" message={errors.periodicity}/></label>
+      </div>
       <section className="recurring-preview" aria-labelledby="recurring-preview-title">
-        <div className="recurring-preview-heading"><CalendarDays size={18}/><h3 id="recurring-preview-title">Предварительные сроки</h3><span>3 месяца</span></div>
+        <div className="recurring-preview-heading"><CalendarDays size={18}/><h3 id="recurring-preview-title">Предварительные сроки</h3><span>3 платежа</span></div>
         <div className="recurring-preview-dates" aria-live="polite" aria-atomic="true">
-          {dueDates.length ? <ol>{dueDates.map((date, index) => <li key={index}><span className="recurring-preview-step">{String(index + 1).padStart(2, '0')}</span><time dateTime={date}>{calendarDate(date)}</time></li>)}</ol> : <p className="recurring-preview-empty">Выберите первый срок — покажем три ближайшие даты.</p>}
+          {dueDates.length ? <ol>{dueDates.map((date, index) => <li key={index}><span className="recurring-preview-step">{String(index + 1).padStart(2, '0')}</span><time dateTime={date}>{calendarDate(date)}</time></li>)}</ol> : <p className="recurring-preview-empty">Укажите первый срок и интервал от 1 до 365 — покажем ближайшие даты.</p>}
           {dueDates.length > 0 && dueDates.length < 3 && <p className="recurring-preview-empty">Дальнейшие даты выходят за поддерживаемый диапазон до 9999 года.</p>}
         </div>
-        <p className="recurring-preview-note">Это предварительный расчёт. Окончательные сроки рассчитывает сервер.</p>
+        <p className="recurring-preview-note">{periodicity === 'monthly' || periodicity === 'yearly' ? 'Если нужного числа нет, сроком станет последний день месяца. ' : ''}Окончательные сроки рассчитывает сервер.</p>
       </section>
       <div className="notice"><strong>Напоминания в Telegram</strong><p>Неоплаченные периоды будут напоминать о себе за 3 дня до срока. Для уже близкого или прошедшего срока напоминание готовится сразу.</p></div>
       {uncertain ? <UncertainCreate onCheck={onCheck} /> : error != null && <ErrorNotice error={error} />}

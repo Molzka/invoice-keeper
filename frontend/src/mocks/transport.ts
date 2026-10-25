@@ -2,7 +2,8 @@ import { AUDIT_ACTIONS } from '../types/activity'
 import type { AuditAction } from '../types/activity'
 import { createAuditFixtures, createAuditStore } from './activity'
 import type { PaymentReceipt } from '../types/extras'
-import type { Currency, ErrorDetail, Page, PaymentOccurrence, RecurringPayment, User } from '../types/api'
+import type { Currency, ErrorDetail, Page, PaymentOccurrence, RecurringPayment, RecurringPeriodicity, User } from '../types/api'
+import { recurringDueDates } from '../lib/recurring-inputs'
 import { ADMIN_ID, createFixtures } from './fixtures'
 import { APP_TIMEZONE, businessNowIso, calendarMonthBounds, calendarMonthDate, DEMO_TODAY } from '../config/demo'
 export { DEMO_TODAY } from '../config/demo'
@@ -118,14 +119,15 @@ function recordPasswordChangeAttempt(userId: string) {
   }
   passwordChangeAttempts.set(userId, [...attempts, now])
 }
-function advanceMonth(value: string, anchor: number): string { return calendarMonthDate(value, anchor, 1) }
 function addOccurrences(rule: RecurringPayment) {
-  let due = rule.first_due_date
   const dates: string[] = []
-  while (due <= demoMonth.date_to) { dates.push(due); due = advanceMonth(due, rule.anchor_day) }
-  if (!dates.some(item => item >= DEMO_TODAY)) dates.push(due)
-  rule.next_due_date = dates.find(item => item >= DEMO_TODAY) || due
+  for (const due of recurringDueDates(rule.first_due_date, rule.periodicity, rule.recurrence_interval)) {
+    if (due > demoMonth.date_to) { if (!dates.some(item => item >= DEMO_TODAY)) dates.push(due); break }
+    dates.push(due)
+  }
+  rule.next_due_date = dates.find(item => item >= DEMO_TODAY) || null
   dates.forEach(due_date => db.occurrences.push({ id: crypto.randomUUID(), recurring_payment_id: rule.id, title: rule.title,
+    periodicity: rule.periodicity, recurrence_interval: rule.recurrence_interval,
     amount: rule.amount, currency: rule.currency, due_date, status: 'unpaid', paid_on: null, is_overdue: due_date < DEMO_TODAY,
     paid_late: false, days_late: countDays(due_date, DEMO_TODAY), recurring_payment_is_active: true, amount_is_custom: false }))
 }
@@ -207,10 +209,13 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
           total.planned += value; total[item.status] += value
           if (item.status === 'unpaid' && item.due_date < DEMO_TODAY) total.overdue += value
         }
-        for (const rule of db.recurring.filter(rule => rule.is_active && !rule.is_archived && rule.periodicity === 'monthly')) {
-          const due = calendarMonthDate(`${prefix}-01`, rule.anchor_day)
-          if (due >= rule.first_due_date && due > demoMonth.date_to && !db.occurrences.some(item => item.recurring_payment_id === rule.id && item.due_date === due)) {
-            const value = BigInt(rule.amount.replace('.','')); totals[rule.currency].planned += value; totals[rule.currency].forecast += value
+        for (const rule of db.recurring.filter(rule => rule.is_active && !rule.is_archived)) {
+          const end = calendarMonthBounds(`${prefix}-01`).date_to
+          for (const due of recurringDueDates(rule.first_due_date, rule.periodicity, rule.recurrence_interval, `${prefix}-01`)) {
+            if (due > end) break
+            if (due > demoMonth.date_to && !db.occurrences.some(item => item.recurring_payment_id === rule.id && item.due_date === due)) {
+              const value = BigInt(rule.amount.replace('.','')); totals[rule.currency].planned += value; totals[rule.currency].forecast += value
+            }
           }
         }
         return { month: number, totals }
@@ -374,16 +379,20 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       if (method === 'GET') {
         queryAllowed(url.searchParams, ['limit', 'offset', 'is_active', 'periodicity', 'include_archived'])
         const active = booleanQuery(url.searchParams, 'is_active')
-        return json(page(db.recurring.filter(item => (booleanQuery(url.searchParams, 'include_archived') || !item.is_archived) && (!url.searchParams.get('periodicity') || item.periodicity === url.searchParams.get('periodicity')) && active === undefined || item.is_active === active).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)), url.searchParams))
+        const periodicity = url.searchParams.get('periodicity')
+        if (periodicity && !['daily', 'weekly', 'monthly', 'yearly', 'once', 'recurring'].includes(periodicity)) invalid('query.periodicity', 'Выберите периодичность')
+        return json(page(db.recurring.filter(item => (booleanQuery(url.searchParams, 'include_archived') || !item.is_archived) && (!periodicity || (periodicity === 'recurring' ? item.periodicity !== 'once' : item.periodicity === periodicity)) && (active === undefined || item.is_active === active)).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)), url.searchParams))
       }
       if (method === 'POST') {
         requireAdmin(user); queryAllowed(url.searchParams, [])
-        const body = bodyObject(init, ['title', 'amount', 'currency', 'first_due_date', 'periodicity'], ['title', 'amount', 'currency', 'first_due_date', 'periodicity'])
+        const body = bodyObject(init, ['title', 'amount', 'currency', 'first_due_date', 'periodicity', 'recurrence_interval'], ['title', 'amount', 'currency', 'first_due_date', 'periodicity'])
         if (typeof body.title !== 'string' || body.title.trim().length < 1 || Array.from(body.title.trim()).length > 200) invalid('title', 'Название должно содержать от 1 до 200 символов')
         const amount = money(body.amount), firstDue = date(body.first_due_date, 'first_due_date')
         if (typeof body.currency !== 'string' || !['RUB', 'USD', 'EUR'].includes(body.currency)) invalid('currency', 'Выберите RUB, USD или EUR')
-        if (body.periodicity !== 'monthly') invalid('periodicity', 'Поддерживается ежемесячное повторение')
-        const item: RecurringPayment = { id: crypto.randomUUID(), title: (body.title as string).trim(), amount, currency: body.currency as Currency, first_due_date: firstDue, next_due_date: firstDue, periodicity: 'monthly', anchor_day: Number(firstDue.slice(-2)), is_active: true, amount_effective_from: null, created_at: businessNowIso('mock') }
+        if (typeof body.periodicity !== 'string' || !['daily', 'weekly', 'monthly', 'yearly'].includes(body.periodicity)) invalid('periodicity', 'Выберите периодичность')
+        const interval = body.recurrence_interval === undefined ? 1 : body.recurrence_interval
+        if (typeof interval !== 'number' || !Number.isInteger(interval) || interval < 1 || interval > 365) invalid('recurrence_interval', 'Введите целое число от 1 до 365')
+        const item: RecurringPayment = { id: crypto.randomUUID(), title: (body.title as string).trim(), amount, currency: body.currency as Currency, first_due_date: firstDue, next_due_date: firstDue, periodicity: body.periodicity as RecurringPeriodicity, recurrence_interval: interval, anchor_day: Number(firstDue.slice(-2)), is_active: true, amount_effective_from: null, created_at: businessNowIso('mock') }
         addOccurrences(item); db.recurring.push(item)
         audit.append({ actor: user, action: 'payment.created', entity: { type: 'payment', id: item.id, title: item.title }, changes: [
           { field: 'amount', label: 'Сумма', before: null, after: `${item.amount} ${item.currency}` },
@@ -411,7 +420,7 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       for (const item of updated) { item.amount = amount; item.currency = currency }
       payment.amount = amount; payment.currency = currency; payment.amount_effective_from = effective_from
       audit.append({ actor: user, action: 'payment.terms_changed', entity: { type: 'payment', id: payment.id, title: payment.title }, changes: [
-        { field: 'amount', label: 'Сумма в месяц', before: `${oldAmount} ${oldCurrency}`, after: `${amount} ${currency}` },
+        { field: 'amount', label: 'Сумма за период', before: `${oldAmount} ${oldCurrency}`, after: `${amount} ${currency}` },
         { field: 'currency', label: 'Валюта', before: oldCurrency, after: currency },
         { field: 'amount_effective_from', label: 'Новые условия с', before: oldEffective, after: effective_from },
       ] })

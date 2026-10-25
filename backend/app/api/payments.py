@@ -18,6 +18,7 @@ from app.schemas.payments import (
     PaymentOccurrenceRead,
     PaymentsSummary,
     PaymentStateUpdate,
+    Periodicity,
     RecurringAmountUpdateResponse,
     RecurringPaymentCreate,
     RecurringPaymentList,
@@ -100,7 +101,7 @@ async def get_recurring_payments(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     is_active: bool | None = None,
-    periodicity: Literal["monthly", "once"] | None = None,
+    periodicity: Literal[Periodicity, "recurring"] | None = None,
     include_archived: bool = False,
 ) -> dict:
     today = today_in_timezone(request.app.state.settings.app_timezone)

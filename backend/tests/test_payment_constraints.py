@@ -44,7 +44,9 @@ async def test_payment_database_constraints_reject_invalid_rules_and_states(app)
             _rule(title="\t\n"),
             _rule(amount=Decimal("0.00")),
             _rule(currency="CAD"),
-            _rule(periodicity="weekly"),
+            _rule(periodicity="hourly"),
+            _rule(recurrence_interval=0),
+            _rule(recurrence_interval=366),
             _rule(anchor_day=28),
         ):
             await _assert_rejected(db, invalid_rule)
