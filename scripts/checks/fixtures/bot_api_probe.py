@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.request import urlopen
+from urllib.parse import urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -107,6 +108,11 @@ class LocalTelegram(BaseSession):
         if method.reply_markup:
             for row in method.reply_markup.inline_keyboard:
                 for button in row:
+                    # TDLib LinkManager rejects HTTP URL buttons without a dotted host or IPv6.
+                    if button.url:
+                        host = urlsplit(button.url).hostname or ""
+                        if "." not in host and ":" not in host:
+                            raise TelegramBadRequest(method=method, message="Inline keyboard button URL is invalid: Wrong HTTP URL")
                     if button.callback_data:
                         require(
                             len(button.callback_data.encode()) <= 64,
@@ -181,6 +187,7 @@ def smoke_and_environment():
             "reminders.py",
             "formatting.py",
             "features.py",
+            "links.py",
             "texts.json",
         ):
             shutil.copyfile(Path("/app") / name, target / name)

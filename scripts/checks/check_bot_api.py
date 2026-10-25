@@ -40,7 +40,7 @@ def check(image, bot_image, timezone):
         BOT_INTERNAL_BASE_URL="http://backend:8000",
         MFA_ENCRYPTION_KEY="",
         CHAT_ID="-1001234567890",
-        PANEL_URL="",
+        PANEL_URL="http://localhost:8080",
         APP_ENV="test",
         APP_TIMEZONE=timezone,
         SESSION_COOKIE_SECURE="false",
@@ -196,6 +196,7 @@ def check(image, bot_image, timezone):
                 ),
                 flush=True,
             )
+            print(compose("run", "--rm", "--no-deps", "-T", "bot", "python", "/harness/bot_links_probe.py"), flush=True)
         except BaseException:
             if override.exists():
                 try:

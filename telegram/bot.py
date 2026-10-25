@@ -5,7 +5,6 @@ import logging
 import os
 from decimal import InvalidOperation
 from pathlib import Path
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -40,6 +39,7 @@ from bridge import BridgeError
 from dotenv import load_dotenv
 from features import payment_card, payment_list_item, summary_text
 from formatting import format_date
+from links import http_url, keyboard_url
 from mfa import LINK_TOKEN, MfaBridgeError, claim_telegram
 from payment_actions import claim_payment_link, decide_payment, prepare_payment
 
@@ -69,27 +69,13 @@ def load_chat_id():
 
 
 def load_panel_url():
-    """PANEL_URL необязателен. Принимаются только http(s)-адреса."""
-    url = os.environ.get("PANEL_URL", "").strip()
-    if not url:
-        return None
-    try:
-        parsed = urlsplit(url)
-        valid = (
-            parsed.scheme in {"http", "https"}
-            and parsed.hostname
-            and parsed.username is None
-            and parsed.password is None
-            and not any(char.isspace() for char in url)
-        )
-        _ = parsed.port
-    except ValueError:
-        valid = False
-    if not valid:
+    """A local panel remains usable as text, but must never become a URL button."""
+    raw = os.environ.get("PANEL_URL", "").strip()
+    url = http_url(raw)
+    if raw and url is None:
         log.error(
             "PANEL_URL должен быть полным http(s)-адресом без учётных данных. Ссылка отключена"
         )
-        return None
     return url
 
 
@@ -118,7 +104,11 @@ public = Router()
 
 def panel_button():
     url = load_panel_url()
-    return InlineKeyboardButton(text=T["BTN_PANEL"], url=url) if url else None
+    if not url:
+        return None
+    direct = keyboard_url(url)
+    return (InlineKeyboardButton(text=T["BTN_PANEL"], url=direct) if direct
+            else InlineKeyboardButton(text=T["BTN_PANEL_LOCAL"], callback_data="cmd:site"))
 
 
 def help_keyboard(chat_id) -> InlineKeyboardMarkup:
@@ -166,7 +156,7 @@ def support_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=T["BTN_CHAT_ID"], callback_data="cmd:id")],
-            [InlineKeyboardButton(text=T["BTN_PANEL"], callback_data="cmd:site")],
+            [InlineKeyboardButton(text=T["BTN_PANEL_LOCAL"], callback_data="cmd:site")],
             [InlineKeyboardButton(text=T["BTN_MENU"], callback_data="cmd:start")],
         ]
     )
@@ -202,7 +192,9 @@ async def acknowledge(callback, text=None, *, show_alert=False):
 
 def panel_text() -> str:
     url = load_panel_url()
-    return T["PANEL"].format(url=html.escape(url, quote=False)) if url else T["PANEL_NOT_SET"]
+    if not url:
+        return T["PANEL_NOT_SET"]
+    return T["PANEL" if keyboard_url(url) else "PANEL_LOCAL"].format(url=html.escape(url, quote=False))
 
 
 def chat_id_text(chat_id: int) -> str:
@@ -614,6 +606,19 @@ async def cb_confirm_payment(callback: CallbackQuery):
 
 async def on_error(event: ErrorEvent) -> bool:
     """Ошибка в обработчике не должна останавливать бота. Содержимое сообщений не логируется."""
+    if isinstance(event.exception, TelegramBadRequest):
+        description = event.exception.message.lower()
+        reason = next((kind for needle, kind in (
+            ("wrong http url", "invalid_button_url"),
+            ("button_url_invalid", "invalid_button_url"),
+            ("button_data_invalid", "invalid_callback_data"),
+            ("can't parse entities", "invalid_message_html"),
+            ("message is too long", "message_too_long"),
+            ("message can't be edited", "message_not_editable"),
+        ) if needle in description), "unclassified_bad_request")
+        log.error("ошибка в обработчике: TelegramBadRequest method=%s reason=%s",
+                  getattr(event.exception.method, "__api_method__", "unknown"), reason)
+        return True
     log.error(
         "ошибка в обработчике: %s",
         type(event.exception).__name__,
@@ -626,10 +631,11 @@ async def main():
     if not token:
         raise SystemExit("BOT_TOKEN не задан: укажите его в .env или в environment Compose")
 
+    panel_url = load_panel_url()
     log.info(
         "конфигурация: CHAT_ID %s, PANEL_URL %s",
         "задан" if ALLOWED_CHAT is not None else "не задан",
-        load_panel_url() or "не задан",
+        "сетевая ссылка" if keyboard_url(panel_url) else "локальный адрес" if panel_url else "не задан",
     )
 
     dp = Dispatcher()
