@@ -26,7 +26,10 @@ class RecurringPayment(Base):
         CheckConstraint("title ~ '[^[:space:]]'", name="title"),
         CheckConstraint("amount BETWEEN 0.01 AND 999999999999.99", name="amount"),
         CheckConstraint("currency IN ('RUB', 'USD', 'EUR')", name="currency"),
-        CheckConstraint("periodicity IN ('monthly', 'once')", name="periodicity"),
+        CheckConstraint(
+            "periodicity IN ('daily', 'weekly', 'monthly', 'yearly', 'once')", name="periodicity"
+        ),
+        CheckConstraint("recurrence_interval BETWEEN 1 AND 365", name="recurrence_interval"),
         CheckConstraint("anchor_day BETWEEN 1 AND 31", name="anchor_day"),
         CheckConstraint(
             "anchor_day = EXTRACT(DAY FROM first_due_date)::integer",
@@ -42,6 +45,9 @@ class RecurringPayment(Base):
     amount_effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     first_due_date: Mapped[date] = mapped_column(Date, nullable=False)
     periodicity: Mapped[str] = mapped_column(String(16), nullable=False)
+    recurrence_interval: Mapped[int] = mapped_column(
+        SmallInteger, default=1, server_default=text("1"), nullable=False
+    )
     anchor_day: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true"), nullable=False

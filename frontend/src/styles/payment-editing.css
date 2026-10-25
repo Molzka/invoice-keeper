@@ -12,6 +12,7 @@
 .payment-frequency:disabled { opacity: .65; }
 .payment-frequency > .field-hint { margin: var(--workspace-space-sm) 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .payment-frequency + .notice { margin-top: var(--workspace-space); }
+.payment-frequency .recurring-frequency-fields { margin-top: var(--workspace-space); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .payment-schedule-preview { margin-top: var(--workspace-space); padding-top: var(--workspace-space); border-top: var(--workspace-border); font-size: 12px; }
 .payment-schedule-preview > span { color: var(--muted); }
 .payment-schedule-preview ol { display: flex; flex-wrap: wrap; gap: var(--workspace-space-sm) var(--workspace-space); list-style: none; padding: 0; margin: var(--workspace-space-sm) 0 0; font-variant-numeric: tabular-nums; font-weight: 600; }

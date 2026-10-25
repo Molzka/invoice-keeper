@@ -2524,8 +2524,12 @@
               "anyOf": [
                 {
                   "enum": [
+                    "daily",
+                    "weekly",
                     "monthly",
-                    "once"
+                    "yearly",
+                    "once",
+                    "recurring"
                   ],
                   "type": "string"
                 },
@@ -4406,11 +4410,19 @@
           "periodicity": {
             "type": "string",
             "enum": [
+              "daily",
+              "weekly",
               "monthly",
+              "yearly",
               "once"
             ],
             "title": "Periodicity",
             "default": "monthly"
+          },
+          "recurrence_interval": {
+            "type": "integer",
+            "title": "Recurrence Interval",
+            "default": 1
           },
           "is_cancelled": {
             "type": "boolean",
@@ -4907,8 +4919,20 @@
           },
           "periodicity": {
             "type": "string",
-            "const": "monthly",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              "yearly"
+            ],
             "title": "Periodicity"
+          },
+          "recurrence_interval": {
+            "type": "integer",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Recurrence Interval",
+            "default": 1
           }
         },
         "additionalProperties": false,
@@ -5059,10 +5083,18 @@
           "periodicity": {
             "type": "string",
             "enum": [
+              "daily",
+              "weekly",
               "monthly",
+              "yearly",
               "once"
             ],
             "title": "Periodicity"
+          },
+          "recurrence_interval": {
+            "type": "integer",
+            "title": "Recurrence Interval",
+            "default": 1
           },
           "is_archived": {
             "type": "boolean",

@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError } from '../api/client'
-import type { Currency, PaymentDetailsUpdateRequest } from '../types/api'
+import type { Currency, PaymentDetailsUpdateRequest, Periodicity } from '../types/api'
 import { dateLabel } from '../lib/format'
 import { normalizeRecurringAmount } from '../lib/recurring-inputs'
 import { SelectField } from './SelectField'
@@ -10,12 +10,12 @@ import { Drawer, ErrorNotice } from './UI'
 
 interface PaymentEditTarget {
   id: string; title: string; amount: string; currency: Currency; kind: 'period' | 'recurring'
-  dueDate?: string; effectiveFrom?: string; periodicity?: 'once' | 'monthly'
+  dueDate?: string; effectiveFrom?: string; periodicity?: Periodicity
   status?: 'paid' | 'unpaid'; recurring_payment_is_active?: boolean
 }
 
 export function PaymentEditDrawer({ target, onSave, onSaved, onClose }: {
-  target: PaymentEditTarget; onSave: (values: PaymentDetailsUpdateRequest) => Promise<void>; onSaved: () => void; onClose: () => void
+  target: PaymentEditTarget; onSave: (values: PaymentDetailsUpdateRequest) => Promise<void>; onSaved: () => void; onClose: (refresh?: boolean) => void
 }) {
   const id = useId()
   const form = useRef<HTMLFormElement>(null)
@@ -60,7 +60,7 @@ export function PaymentEditDrawer({ target, onSave, onSaved, onClose }: {
     } finally { guard.current = false; setBusy(false) }
   }
 
-  return <Drawer title="Редактировать платёж" subtitle={target.kind === 'recurring' ? 'Название и условия ежемесячного платежа.' : target.dueDate ? `Период со сроком ${dateLabel(target.dueDate)}.` : undefined} canClose={!busy} onClose={onClose}>
+  return <Drawer title="Редактировать платёж" subtitle={target.kind === 'recurring' ? 'Название и условия регулярного платежа.' : target.dueDate ? `Период со сроком ${dateLabel(target.dueDate)}.` : undefined} canClose={!busy} onClose={() => onClose(uncertain)}>
     <form ref={form} className="form-grid" onSubmit={submit} noValidate aria-busy={busy}>
       <div className="field"><label htmlFor={`${id}-title`}>Название платежа</label><input id={`${id}-title`} name="title" value={title} onChange={event => setTitle(event.target.value)} required disabled={disabled} aria-invalid={Boolean(fields.title)} aria-describedby={`${id}-title-hint`}/><small id={`${id}-title-hint`} className={fields.title ? 'field-error' : undefined} role={fields.title ? 'alert' : undefined}>{fields.title || (target.periodicity === 'once' ? 'Название будет видно в списке, истории и напоминаниях.' : 'Название общее для всех периодов этого платежа.')}</small></div>
       <div className="form-row"><div className="field"><label htmlFor={`${id}-amount`}>Сумма</label><input id={`${id}-amount`} name="amount" inputMode="decimal" autoComplete="off" value={amount} onChange={event => setAmount(event.target.value)} required disabled={disabled || paid} aria-invalid={Boolean(fields.amount)} aria-describedby={fields.amount ? `${id}-amount-error` : undefined}/>{fields.amount && <span className="field-error" role="alert" id={`${id}-amount-error`}>{fields.amount}</span>}</div>

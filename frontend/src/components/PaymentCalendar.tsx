@@ -118,7 +118,7 @@ export function PaymentCalendar({ isAdmin, today, timezone, revision, onChanged,
       </>}
     </section>
     {deleteTarget && <DeletePaymentDrawer target={{ kind:"period", item:deleteTarget }} onClose={() => { setDeleteTarget(null); onChanged() }} onDeleted={() => { setDeleteTarget(null); onChanged(); notify("Платёж удалён из обязательств.") }}/>}
-    {editTarget && <PaymentEditDrawer key={`period:${editTarget.id}`} target={{ ...editTarget, kind: 'period', dueDate: editTarget.due_date }} onSave={async values => { await api.updateOccurrenceDetails(editTarget.id, values) }} onSaved={() => { setEditTarget(null); onChanged(); notify('Изменения платежа сохранены. Календарь обновлён.') }} onClose={() => { setEditTarget(null); onChanged() }}/>}
+    {editTarget && <PaymentEditDrawer key={`period:${editTarget.id}`} target={{ ...editTarget, kind: 'period', dueDate: editTarget.due_date }} onSave={async values => { await api.updateOccurrenceDetails(editTarget.id, values) }} onSaved={() => { setEditTarget(null); onChanged(); notify('Изменения платежа сохранены. Календарь обновлён.') }} onClose={refresh => { setEditTarget(null); if (refresh) onChanged() }}/>}
     {selected && <PaymentDrawer key={selected.id} initial={selected} today={today} timezone={timezone} onAttachmentsChanged={onChanged} onDelete={isAdmin ? item => { setSelected(null); setDeleteTarget(item) } : undefined} onEdit={isAdmin ? item => { setSelected(null); setEditTarget(item) } : undefined} onClose={() => setSelected(null)} onSaved={saved} onHistory={() => { const item = selected; setSelected(null); onHistory(item.recurring_payment_id, item.title) }}/>}
   </section>
 }

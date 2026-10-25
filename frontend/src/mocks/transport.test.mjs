@@ -27,6 +27,7 @@ async function fixture(context, username = 'ivan', scenario = '') {
   source = replaceModule(source, '../config/demo', demoUrl)
   source = replaceModule(source, '../types/activity', activityTypesUrl)
   source = replaceModule(source, './activity', activityUrl)
+  source = replaceModule(source, '../lib/recurring-inputs', encodeModule(tsSource('../lib/recurring-inputs.ts')))
   const { mockFetch } = await import(encodeModule(source) + '#fixture-' + ++fixtureId)
   async function request(path, init = {}) {
     const pending = mockFetch('/api/v1' + path, init)

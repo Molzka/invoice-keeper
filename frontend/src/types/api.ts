@@ -2,6 +2,8 @@ export type Currency = 'RUB' | 'USD' | 'EUR'
 export type Role = 'admin' | 'user'
 export type CalendarDate = string
 export type Money = string
+export type RecurringPeriodicity = 'daily' | 'weekly' | 'monthly' | 'yearly'
+export type Periodicity = RecurringPeriodicity | 'once'
 export interface User { id: string; username: string; role: Role; created_at: string }
 export interface LoginRequest { username: string; password: string }
 export interface ChangePasswordRequest { current_password: string; new_password: string }
@@ -26,17 +28,17 @@ export interface PaginationParams { limit?: number; offset?: number }
 export interface Page<T> { items: T[]; total: number; limit: number; offset: number }
 export interface RecurringPayment {
   id: string; title: string; amount: Money; currency: Currency; first_due_date: CalendarDate
-  next_due_date: CalendarDate | null; periodicity: 'monthly' | 'once'; is_archived?: boolean; anchor_day: number
+  next_due_date: CalendarDate | null; periodicity: Periodicity; recurrence_interval?: number; is_archived?: boolean; anchor_day: number
   is_active: boolean; created_at: string; amount_effective_from: CalendarDate | null
 }
 export interface CreateRecurringPaymentRequest {
-  title: string; amount: Money; currency: Currency; first_due_date: CalendarDate; periodicity: 'monthly'
+  title: string; amount: Money; currency: Currency; first_due_date: CalendarDate; periodicity: RecurringPeriodicity; recurrence_interval?: number
 }
-export interface RecurringPaymentFilters extends PaginationParams { is_active?: boolean; periodicity?: 'monthly' | 'once'; include_archived?: boolean }
+export interface RecurringPaymentFilters extends PaginationParams { is_active?: boolean; periodicity?: Periodicity | 'recurring'; include_archived?: boolean }
 export interface PaymentOccurrence {
   id: string; recurring_payment_id: string; title: string; amount: Money; currency: Currency
   due_date: CalendarDate; status: 'unpaid' | 'paid'; paid_on: CalendarDate | null
-  periodicity?: 'monthly' | 'once'; is_cancelled?: boolean; is_overdue: boolean; paid_late: boolean; days_late: number; recurring_payment_is_active: boolean; amount_is_custom: boolean
+  periodicity?: Periodicity; recurrence_interval?: number; is_cancelled?: boolean; is_overdue: boolean; paid_late: boolean; days_late: number; recurring_payment_is_active: boolean; amount_is_custom: boolean
 }
 export interface OccurrenceFilters extends PaginationParams {
   date_from?: CalendarDate; date_to?: CalendarDate; status?: 'paid' | 'unpaid'; currency?: Currency

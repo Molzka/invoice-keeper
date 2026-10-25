@@ -5,6 +5,7 @@ import { DeletePaymentDrawer } from './DeletePaymentDrawer';
 import { PaymentEditDrawer } from './PaymentEditDrawer';
 import { CreatePaymentDrawer } from './CreatePaymentDrawer';
 import { api, ApiError } from '../api/client';
+import { recurrenceLabel } from '../lib/recurring-inputs';
 import type { RecurringPayment, User } from '../types/api';
 import { Drawer, ErrorNotice, Pagination } from './UI';
 import { PageHeader } from './PageHeader';
@@ -86,7 +87,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
     let alive = true;
     setLoading(true);
     setLoadError(null);
-    api.listRecurringPayments({ periodicity: 'monthly',
+    api.listRecurringPayments({ periodicity: 'recurring',
       limit: PAGE_SIZE, offset,
       ...(activeFilter !== 'all' ? { is_active: activeFilter === 'active' } : {}),
     }).then(result => {
@@ -119,7 +120,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
   }
 
   return <section aria-labelledby="recurring-heading">
-    <PageHeader kind="recurring" id="recurring-heading" title="Регулярные платежи" eyebrow="Повторения под контролем" description="Правила ежемесячных обязательств и их полная история.">
+    <PageHeader kind="recurring" id="recurring-heading" title="Регулярные платежи" eyebrow="Повторения под контролем" description="Расписание повторяющихся обязательств и их полная история.">
       {isAdmin && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}
     </PageHeader>
     <div className="panel">
@@ -127,12 +128,12 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
         <div className="segmented" role="group" aria-label="Состояние регулярных платежей">
           {([['active', 'Активные'], ['all', 'Все платежи'], ['stopped', 'Прекращённые']] as const).map(([value, label]) => <button key={value} type="button" className={activeFilter === value ? 'segment active' : 'segment'} aria-pressed={activeFilter === value} onClick={() => { setOffset(0); setActiveFilter(value); }}>{label}</button>)}
         </div>
-        <span className="muted">Ежемесячно · {timezone}</span>
+        <span className="muted">{timezone}</span>
       </div>
-      {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем регулярные платежи…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">↻</span><h2>{activeFilter === 'stopped' ? 'Прекращённых платежей пока нет' : 'Здесь появятся регулярные платежи'}</h2><p className="muted">{activeFilter === 'stopped' ? 'Когда повторение будет прекращено, его история останется доступна.' : isAdmin ? 'Добавьте аренду, сервер или подписку — система создаст отдельные периоды оплаты.' : 'Администратор может добавить ежемесячные обязательства команды.'}</p>{isAdmin && activeFilter !== 'stopped' && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}</div> : <>
-        <div className="table-wrap"><table className="data-table recurring-table"><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма в месяц</th><th scope="col">Следующий срок</th><th scope="col">Состояние</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(payment => <tr key={payment.id}>
-          <td><div className="payment-title">{payment.title}</div><span className="muted table-caption">С {calendarDate(payment.first_due_date)} · {payment.anchor_day}-го числа</span></td>
-          <td className={`money ${payment.amount.split('.')[0].length > 9 ? 'money-large' : ''}`} data-label="Сумма в месяц">{money(payment.amount, payment.currency)}{payment.amount_effective_from && <span className="muted table-caption">С {calendarDate(payment.amount_effective_from)}</span>}</td>
+      {loadError ? <ErrorNotice error={loadError} onRetry={reload} /> : loading ? <div className="loading-state" role="status"><span className="spinner" />Загружаем регулярные платежи…</div> : !page?.items.length ? <div className="empty-state"><span className="empty-symbol" aria-hidden="true">↻</span><h2>{activeFilter === 'stopped' ? 'Прекращённых платежей пока нет' : 'Здесь появятся регулярные платежи'}</h2><p className="muted">{activeFilter === 'stopped' ? 'Когда повторение будет прекращено, его история останется доступна.' : isAdmin ? 'Добавьте аренду, сервер или подписку — система создаст отдельные периоды оплаты.' : 'Администратор может добавить повторяющиеся обязательства команды.'}</p>{isAdmin && activeFilter !== 'stopped' && <button className="btn btn-primary" onClick={() => setCreating(true)}><PlusIcon />Добавить платёж</button>}</div> : <>
+        <div className="table-wrap"><table className="data-table recurring-table"><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма за период</th><th scope="col">Следующий срок</th><th scope="col">Состояние</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead><tbody>{page.items.map(payment => <tr key={payment.id}>
+          <td><div className="payment-title">{payment.title}</div><span className="muted table-caption">{recurrenceLabel(payment.periodicity, payment.recurrence_interval)} · с {calendarDate(payment.first_due_date)}</span></td>
+          <td className={`money ${payment.amount.split('.')[0].length > 9 ? 'money-large' : ''}`} data-label="Сумма за период">{money(payment.amount, payment.currency)}{payment.amount_effective_from && <span className="muted table-caption">С {calendarDate(payment.amount_effective_from)}</span>}</td>
           <td className="date-cell" data-label="Следующий срок">{calendarDate(payment.next_due_date)}<span className="muted table-caption">{payment.is_active ? 'Плановая дата' : 'Повторение остановлено'}</span></td>
           <td data-label="Состояние"><span className={`status ${payment.is_active ? 'status-success' : 'status-neutral'}`}><span className="status-dot" />{payment.is_active ? 'Активен' : 'Прекращён'}</span></td>
           <td><div className="inline-actions"><button className="btn btn-secondary btn-small" onClick={() => onHistory(payment.id, payment.title)} aria-label={`История платежа «${payment.title}»`}>История <span aria-hidden="true">↗</span></button>{isAdmin && payment.is_active && <button className="btn btn-secondary btn-small" type="button" aria-label={`Редактировать платёж: ${payment.title}`} onClick={() => setEditing(payment)}>Редактировать</button>}{isAdmin && payment.is_active && <button className="icon-button danger-text" title="Прекратить повторение" aria-label={`Прекратить повторение «${payment.title}»`} onClick={() => { setStopError(null); setStopping(payment); }}><Square size={12}/></button>}{isAdmin && <button type="button" className="icon-button danger-text" aria-label={`Удалить платёж «${payment.title}»`} title="Удалить платёж" onClick={() => setDeletingPayment(payment)}><Trash2 size={17}/></button>}</div></td>
@@ -141,7 +142,7 @@ export function RecurringView({ onChanged, onHistory, notify, isAdmin, today, ti
       </>}
     </div>
     <p className="section-note">Прекращение повторения сохраняет историю. Уже созданные периоды остаются в списке платежей и в сводке.</p>
-    {editing && <PaymentEditDrawer key={`recurring:${editing.id}`} target={{ ...editing, kind: 'recurring', effectiveFrom: nextMonth ? `${nextMonth}-01` : undefined }} onSave={async values => { await api.updateRecurringPayment(editing.id, { amount: editing.amount, currency: editing.currency, ...values }) }} onSaved={() => { setEditing(null); changed(); notify('Изменения платежа сохранены.') }} onClose={() => { setEditing(null); changed() }}/>}
+    {editing && <PaymentEditDrawer key={`recurring:${editing.id}`} target={{ ...editing, kind: 'recurring', effectiveFrom: nextMonth ? `${nextMonth}-01` : undefined }} onSave={async values => { await api.updateRecurringPayment(editing.id, { amount: editing.amount, currency: editing.currency, ...values }) }} onSaved={() => { setEditing(null); changed(); notify('Изменения платежа сохранены.') }} onClose={refresh => { setEditing(null); if (refresh) changed() }}/>}
     {creating && <CreatePaymentDrawer today={today} initialPeriodicity="monthly" onClose={() => { setCreating(false); changed() }} onCreated={payment => { setCreating(false); setOffset(0); setActiveFilter('active'); notify('Платёж добавлен.'); changed(); if (payment.periodicity === 'once') onHistory(payment.id, payment.title) }} />}
     {deletingPayment && <DeletePaymentDrawer target={{ kind: "recurring", item: deletingPayment }} onClose={() => { setDeletingPayment(null); changed() }} onDeleted={() => { setDeletingPayment(null); changed(); notify("Платёж удалён из списка. История сохранена.") }}/>}
     {stopping && <Drawer canClose={!busyStop} title="Прекратить повторение?" subtitle={stopping.title} onClose={() => { if (!busyStop) setStopping(null); }}>

@@ -16,6 +16,8 @@ from pydantic import (
 from pydantic_core import PydanticCustomError
 
 Currency = Literal["RUB", "USD", "EUR"]
+RecurringPeriodicity = Literal["daily", "weekly", "monthly", "yearly"]
+Periodicity = Literal[RecurringPeriodicity, "once"]
 PaymentStatus = Literal["paid", "unpaid"]
 MAX_PAYMENT_AMOUNT = Decimal("999999999999.99")
 MIN_PAYMENT_AMOUNT = Decimal("0.01")
@@ -96,7 +98,8 @@ class RecurringPaymentCreate(BaseModel):
     amount: Amount = Field(description="Строка с точкой и ровно двумя десятичными знаками")
     currency: Currency
     first_due_date: IsoDate
-    periodicity: Literal["monthly"]
+    periodicity: RecurringPeriodicity
+    recurrence_interval: int = Field(default=1, ge=1, le=365, strict=True)
 
 
 class AmountCurrencyUpdate(BaseModel):
@@ -174,7 +177,8 @@ class RecurringPaymentRead(BaseModel):
     amount_effective_from: date | None = None
     first_due_date: date
     next_due_date: date | None
-    periodicity: Literal["monthly", "once"]
+    periodicity: Periodicity
+    recurrence_interval: int = 1
     is_archived: bool = False
     anchor_day: int
     is_active: bool
@@ -201,7 +205,8 @@ class PaymentOccurrenceRead(BaseModel):
     currency: Currency
     due_date: date
     amount_is_custom: bool
-    periodicity: Literal["monthly", "once"] = "monthly"
+    periodicity: Periodicity = "monthly"
+    recurrence_interval: int = 1
     is_cancelled: bool = False
     status: PaymentStatus
     paid_on: date | None

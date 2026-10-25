@@ -36,7 +36,7 @@ test('создание, редактирование, повторение и у
   await create.getByLabel('Сумма', { exact: true }).fill('1250,50')
   await create.getByRole('radio', { name: /Разовый/ }).focus()
   await page.keyboard.press('ArrowRight')
-  await expect(create.getByRole('radio', { name: /Ежемесячный/ })).toBeChecked()
+  await expect(create.getByRole('radio', { name: /Регулярный/ })).toBeChecked()
   await expect(create.getByRole('button', { name: 'Первый срок оплаты', exact: true })).toBeVisible()
   await expect(create.locator('.payment-schedule-preview time')).toHaveCount(3)
   await capture(page, info, 'create-monthly')
@@ -94,7 +94,7 @@ test('создание, редактирование, повторение и у
   const monthly = `${title} — подписка`
   await create.getByLabel('Название платежа', { exact: true }).fill(monthly)
   await create.getByLabel('Сумма', { exact: true }).fill('1200')
-  await create.getByRole('radio', { name: /Ежемесячный/ }).check()
+  await create.getByRole('radio', { name: /Регулярный/ }).check()
   await create.getByRole('button', { name: 'Добавить платёж', exact: true }).click()
   await expect(page.getByRole('row').filter({ hasText: monthly })).toContainText('ежемесячный')
   await page.getByRole('link', { name: 'Регулярные', exact: true }).click()

@@ -6,7 +6,7 @@ import test from 'node:test'
 import { URL } from 'node:url'
 
 const source = stripTypeScriptTypes(readFileSync(new URL('./recurring-inputs.ts', import.meta.url), 'utf8'), { mode: 'transform' })
-const { normalizeRecurringAmount, isCalendarDate, previewMonthlyDueDates } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'))
+const { normalizeRecurringAmount, isCalendarDate, previewMonthlyDueDates, previewRecurringDueDates, recurringDueDates, recurrenceLabel } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'))
 
 test('amount accepts whole units and either decimal separator as exact API strings', () => {
   for (const [input, expected] of [
@@ -53,4 +53,20 @@ test('invalid calendar values have no preview and dates stay in the supported ye
   assert.deepEqual(previewMonthlyDueDates('9999-11-30'), ['9999-11-30', '9999-12-30'])
   assert.deepEqual(previewMonthlyDueDates('9999-12-31'), ['9999-12-31'])
   for (const count of [0, -1, 1.5, NaN, Infinity]) assert.deepEqual(previewMonthlyDueDates('2027-01-31', count), [])
+})
+
+test('custom intervals keep daily, weekly and calendar anchors across boundaries', () => {
+  for (const [first, unit, interval, expected] of [
+    ['2028-02-27', 'daily', 2, ['2028-02-27', '2028-02-29', '2028-03-02']],
+    ['2027-12-24', 'weekly', 2, ['2027-12-24', '2028-01-07', '2028-01-21']],
+    ['2027-12-31', 'monthly', 2, ['2027-12-31', '2028-02-29', '2028-04-30']],
+    ['2028-02-29', 'yearly', 2, ['2028-02-29', '2030-02-28', '2032-02-29']],
+  ]) {
+    assert.deepEqual(previewRecurringDueDates(first, unit, interval), expected)
+    assert.equal(recurringDueDates(first, unit, interval, expected[2]).next().value, expected[2])
+  }
+  for (const interval of [0, -1, 366, 1.5, NaN]) assert.deepEqual(previewRecurringDueDates('2026-10-23', 'weekly', interval), [])
+  for (const unit of ['daily', 'weekly', 'monthly', 'yearly']) assert.deepEqual(previewRecurringDueDates('9999-12-30', unit, 2), ['9999-12-30'])
+  assert.equal(recurrenceLabel('weekly', 2), 'Раз в 2 недели')
+  assert.equal(recurrenceLabel('monthly', 12), 'Раз в 12 месяцев')
 })

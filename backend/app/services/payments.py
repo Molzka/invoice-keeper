@@ -43,15 +43,18 @@ def recurring_payment_data(
         "amount_effective_from": payment.amount_effective_from,
         "first_due_date": payment.first_due_date,
         "next_due_date": (
-            (
-                (payment.first_due_date if payment.first_due_date >= today else None)
-                if payment.periodicity == "once"
-                else next_due_date(payment.first_due_date, payment.anchor_day, today)
+            next_due_date(
+                payment.first_due_date,
+                payment.anchor_day,
+                today,
+                payment.periodicity,
+                payment.recurrence_interval,
             )
             if payment.is_active
             else None
         ),
         "periodicity": payment.periodicity,
+        "recurrence_interval": payment.recurrence_interval,
         "anchor_day": payment.anchor_day,
         "is_active": payment.is_active,
         "is_archived": payment.is_archived,
@@ -77,6 +80,7 @@ def occurrence_data(
         "amount_is_custom": occurrence.amount_is_custom,
         "is_cancelled": occurrence.is_cancelled,
         "periodicity": payment.periodicity,
+        "recurrence_interval": payment.recurrence_interval,
         "status": occurrence.status,
         "paid_on": occurrence.paid_on,
         "is_overdue": not paid and today > occurrence.due_date,
@@ -101,6 +105,7 @@ async def create_recurring_payment(
         currency=payload.currency,
         first_due_date=payload.first_due_date,
         periodicity=payload.periodicity,
+        recurrence_interval=payload.recurrence_interval,
         anchor_day=payload.first_due_date.day,
     )
     db.add(payment)
@@ -153,7 +158,9 @@ async def list_recurring_payments(
     filters = [] if is_active is None else [RecurringPayment.is_active.is_(is_active)]
     if not include_archived:
         filters.append(RecurringPayment.is_archived.is_(False))
-    if periodicity is not None:
+    if periodicity == "recurring":
+        filters.append(RecurringPayment.periodicity != "once")
+    elif periodicity is not None:
         filters.append(RecurringPayment.periodicity == periodicity)
     total = await db.scalar(select(func.count()).select_from(RecurringPayment).where(*filters))
     result = await db.scalars(
@@ -464,7 +471,7 @@ async def update_recurring_amount(
     payment = await ensure_payment_periods(db, payment_id, today, timezone_name=timezone_name)
     if payment is None:
         raise api_error(404, "RECURRING_PAYMENT_NOT_FOUND", "Регулярный платёж не найден")
-    if not payment.is_active or payment.periodicity != "monthly":
+    if not payment.is_active or payment.periodicity == "once":
         raise api_error(
             409,
             "RECURRING_PAYMENT_STOPPED",
