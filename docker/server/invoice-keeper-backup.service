@@ -1,0 +1,10 @@
+[Unit]
+Description=Invoice Keeper daily PostgreSQL backup
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/invoice-keeper
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/invoice-keeper/scripts/ops/db_backup.py backup --output-dir /opt/invoice-keeper/backups/daily --keep-days 14
+TimeoutStartSec=1h

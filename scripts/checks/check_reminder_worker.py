@@ -206,7 +206,7 @@ def check(image=None, timezone="Europe/Moscow"):
                 "backend",
             )
             future = probe("prepare-future")
-            compose("up", "-d", "--no-build", "--no-deps", "worker")
+            compose("up", "-d", "--no-build", "--no-deps", "--wait", "--wait-timeout", "90", "worker")
             native = inspect_worker()
             if native["command"] != command:
                 raise RuntimeError("Native worker command differs from the Compose configuration")
