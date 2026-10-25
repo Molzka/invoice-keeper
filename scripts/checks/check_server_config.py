@@ -19,13 +19,17 @@ def main():
     proxy = services["caddy"]
     assert {(str(port["published"]), port["protocol"]) for port in proxy["ports"]} == {("80", "tcp"), ("443", "tcp")}
     assert proxy["read_only"] and "no-new-privileges:true" in proxy["security_opt"]
-    subprocess.run(
-        ["docker", "run", "--rm", "--network", "none", "-e", "PUBLIC_HOST=invoice-check.example",
-         "-v", f"{root / 'docker/server/Caddyfile'}:/etc/caddy/Caddyfile:ro", proxy["image"],
-         "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"],
-        check=True,
-    )
-    print("PASS: only HTTP/HTTPS are published; isolated Caddy configuration is valid")
+    for alias, tls_default in (("", "invoice-check.example"), ("https://192.0.2.1", "192.0.2.1")):
+        docker = ["docker", "run", "--rm", "--network", "none", "-e", "PUBLIC_HOST=invoice-check.example",
+                  "-e", f"HTTPS_ALIASES={alias}", "-e", f"TLS_DEFAULT_NAME={tls_default}",
+                  "-v", f"{root / 'docker/server/Caddyfile'}:/etc/caddy/Caddyfile:ro", proxy["image"], "caddy"]
+        subprocess.run(docker + ["validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"], check=True)
+        adapted = subprocess.check_output(docker + ["adapt", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"], text=True)
+        server = json.loads(adapted)["apps"]["http"]["servers"]["srv0"]
+        hosts = server["routes"][0]["match"][0]["host"]
+        assert set(hosts) == ({"invoice-check.example", "192.0.2.1"} if alias else {"invoice-check.example"})
+        assert all(policy.get("default_sni") == tls_default for policy in server["tls_connection_policies"])
+    print("PASS: private service ports and Caddy with/without an HTTPS alias and IP certificate fallback")
 
 
 if __name__ == "__main__":

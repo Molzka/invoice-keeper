@@ -1,16 +1,19 @@
 {
-	default_sni {$PUBLIC_HOST}
+	default_sni {$TLS_DEFAULT_NAME}
 	servers {
 		protocols h1 h2
 	}
 }
 
-https://{$PUBLIC_HOST} {
+https://{$PUBLIC_HOST} {$HTTPS_ALIASES} {
 	tls {
 		issuer acme {
 			profile shortlived
 		}
 	}
+
+	@alias not host {$PUBLIC_HOST}
+	redir @alias https://{$PUBLIC_HOST}{uri} permanent
 
 	header {
 		X-Content-Type-Options nosniff
