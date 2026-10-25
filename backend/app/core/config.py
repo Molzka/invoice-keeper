@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str | None = Field(default=None, repr=False)
     admin_username: str | None = None
+    admin_telegram_id: int | None = Field(default=None, gt=0, le=2**63 - 1)
     admin_password: SecretStr | None = Field(default=None, repr=False)
     bot_token: SecretStr | None = Field(default=None, repr=False)
     chat_id: str | None = None
@@ -31,6 +32,11 @@ class Settings(BaseSettings):
     mfa_resend_seconds: int = Field(default=60, ge=30, le=300)
     mfa_send_limit: int = Field(default=5, ge=1, le=10)
     mfa_rate_window_seconds: int = Field(default=900, ge=60, le=3600)
+
+    @field_validator("admin_telegram_id", mode="before")
+    @classmethod
+    def optional_telegram_id(cls, value):
+        return None if value == "" else value
 
     @field_validator("mfa_encryption_key", "bot_internal_token", mode="before")
     @classmethod

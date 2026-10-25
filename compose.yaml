@@ -32,6 +32,8 @@ services:
       PASSWORD_CHANGE_RATE_LIMIT_WINDOW_SECONDS: ${PASSWORD_CHANGE_RATE_LIMIT_WINDOW_SECONDS:-900}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_TELEGRAM_ID: ${ADMIN_TELEGRAM_ID:-}
+      CHAT_ID: ${CHAT_ID:-}
       # Personal MFA delivery is independent of the payment worker's CHAT_ID.
       BOT_TOKEN: ${BOT_TOKEN:-}
       BOT_USERNAME: ${BOT_USERNAME:-}

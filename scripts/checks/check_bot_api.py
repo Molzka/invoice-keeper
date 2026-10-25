@@ -25,6 +25,7 @@ def check(image, bot_image, timezone):
         POSTGRES_USER="bot_check",
         POSTGRES_PASSWORD=secrets.token_urlsafe(30),
         ADMIN_USERNAME="fixture_admin",
+        ADMIN_TELEGRAM_ID="",
         ADMIN_PASSWORD=secrets.token_urlsafe(30),
         API_USERNAME="fixture_bot",
         API_PASSWORD=secrets.token_urlsafe(30),

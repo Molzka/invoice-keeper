@@ -1006,6 +1006,228 @@
         }
       }
     },
+    "/api/v1/auth/telegram-payments": {
+      "get": {
+        "tags": [
+          "telegram-payments"
+        ],
+        "summary": "Status",
+        "operationId": "status_api_v1_auth_telegram_payments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramPaymentStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "telegram-payments"
+        ],
+        "summary": "Unlink",
+        "operationId": "unlink_api_v1_auth_telegram_payments_delete",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/telegram-payments/setup": {
+      "post": {
+        "tags": [
+          "telegram-payments"
+        ],
+        "summary": "Setup",
+        "operationId": "setup_api_v1_auth_telegram_payments_setup_post",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramSetupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/telegram-payments/setup/{setup_id}": {
+      "get": {
+        "tags": [
+          "telegram-payments"
+        ],
+        "summary": "Setup Status",
+        "operationId": "setup_status_api_v1_auth_telegram_payments_setup__setup_id__get",
+        "parameters": [
+          {
+            "name": "setup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Setup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramSetupStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/telegram-payments/confirm": {
+      "post": {
+        "tags": [
+          "telegram-payments"
+        ],
+        "summary": "Confirm Link",
+        "operationId": "confirm_link_api_v1_auth_telegram_payments_confirm_post",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPaymentLink"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramPaymentStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-events": {
       "get": {
         "tags": [
@@ -1074,6 +1296,8 @@
               "anyOf": [
                 {
                   "enum": [
+                    "account.telegram_linked",
+                    "account.telegram_unlinked",
                     "account.login",
                     "account.login_failed",
                     "account.logout",
@@ -3570,6 +3794,8 @@
           "action": {
             "type": "string",
             "enum": [
+              "account.telegram_linked",
+              "account.telegram_unlinked",
               "account.login",
               "account.login_failed",
               "account.logout",
@@ -3732,6 +3958,27 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest"
+      },
+      "ConfirmPaymentLink": {
+        "properties": {
+          "setup_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Setup Id"
+          },
+          "telegram_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "title": "Telegram Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "setup_id",
+          "telegram_id"
+        ],
+        "title": "ConfirmPaymentLink"
       },
       "ConfirmRequest": {
         "properties": {
@@ -5053,6 +5300,36 @@
           "display_name"
         ],
         "title": "TelegramAccount"
+      },
+      "TelegramPaymentStatus": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TelegramAccount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "available",
+          "can_manage",
+          "account"
+        ],
+        "title": "TelegramPaymentStatus"
       },
       "TelegramSetupResponse": {
         "properties": {

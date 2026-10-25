@@ -19,7 +19,8 @@ class AuditEvent(Base):
             "'user.deleted', 'password.changed', 'payment.receipt_updated', 'payment.receipt_deleted', "
             "'registration.approved', 'registration.rejected', 'account.mfa_enabled', "
             "'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated', "
-            "'account.login', 'account.login_failed', 'account.logout')",
+            "'account.login', 'account.login_failed', 'account.logout', "
+            "'account.telegram_linked', 'account.telegram_unlinked')",
             name="action",
         ),
         CheckConstraint(

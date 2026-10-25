@@ -175,6 +175,8 @@ def smoke_and_environment():
             "bot.py",
             "api.py",
             "mfa.py",
+            "bridge.py",
+            "payment_actions.py",
             "smoke.py",
             "reminders.py",
             "formatting.py",

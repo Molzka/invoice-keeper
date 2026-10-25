@@ -35,7 +35,7 @@ class MfaChallenge(Base):
     __tablename__ = "mfa_challenges"
     __table_args__ = (
         CheckConstraint(
-            "purpose IN ('login', 'grant', 'totp_setup', 'telegram_setup', 'telegram_reauth', 'reauth_attempt')",
+            "purpose IN ('login', 'grant', 'totp_setup', 'telegram_setup', 'telegram_reauth', 'reauth_attempt', 'payment_telegram_setup')",
             name="purpose",
         ),
         CheckConstraint("attempts >= 0", name="attempts"),

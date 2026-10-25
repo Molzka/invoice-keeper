@@ -15,6 +15,8 @@ import { PageHeader } from './PageHeader'
 
 type Props = { isAdmin: boolean; revision: number; today: string; timezone: string; onHistory: (id: string, title: string) => void }
 const actionVisuals = {
+  'account.telegram_linked': { icon: ShieldCheck, tone: 'cyan' },
+  'account.telegram_unlinked': { icon: ShieldCheck, tone: 'muted' },
   'account.login': { icon: ShieldCheck, tone: 'green' },
   'account.login_failed': { icon: ShieldCheck, tone: 'amber' },
   'account.logout': { icon: UserRound, tone: 'muted' },

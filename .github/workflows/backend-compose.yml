@@ -29,6 +29,8 @@ jobs:
       FRONTEND_PORT: "0"
       APP_ENV: test
       ADMIN_USERNAME: compose_admin
+      BOT_USERNAME: invoice_keeper_fixture_bot
+      CHAT_ID: "-1001234567890"
 
     steps:
       - name: Checkout
@@ -45,12 +47,15 @@ jobs:
           database_password="$(openssl rand -hex 24)@:/#%"
           admin_password=$(openssl rand -hex 24)
           mfa_key=$(python3 -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())')
+          bridge_token=$(openssl rand -hex 32)
           echo "::add-mask::$database_password"
           echo "::add-mask::$admin_password"
           echo "::add-mask::$mfa_key"
+          echo "::add-mask::$bridge_token"
           echo "POSTGRES_PASSWORD=$database_password" >> "$GITHUB_ENV"
           echo "ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
           echo "MFA_ENCRYPTION_KEY=$mfa_key" >> "$GITHUB_ENV"
+          echo "BOT_INTERNAL_TOKEN=$bridge_token" >> "$GITHUB_ENV"
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -133,6 +138,7 @@ jobs:
         working-directory: frontend
         run: |
           E2E_BASE_URL="$FRONTEND_URL" \
+          E2E_BACKEND_CONTAINER="$(docker compose --env-file ../.env.example -f ../compose.yaml ps -q backend)" \
           E2E_ADMIN_USERNAME=browser_admin \
           E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
           npm run test:e2e

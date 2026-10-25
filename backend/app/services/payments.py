@@ -313,6 +313,7 @@ async def update_payment_state(
     today: date,
     *,
     actor: User | None = None,
+    commit: bool = True,
 ) -> dict:
     payment, occurrence = await _lock_occurrence(db, occurrence_id)
     require_live_occurrence(occurrence)
@@ -369,7 +370,8 @@ async def update_payment_state(
                 },
             ],
         )
-    await db.commit()
+    if commit:
+        await db.commit()
     return occurrence_data(payment, occurrence, today)
 
 

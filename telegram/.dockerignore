@@ -3,6 +3,8 @@
 !bot.py
 !api.py
 !mfa.py
+!bridge.py
+!payment_actions.py
 !smoke.py
 !reminders.py
 !Dockerfile

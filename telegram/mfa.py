@@ -1,12 +1,8 @@
 """Narrow service-authenticated bridge for personal Telegram enrollment."""
 
-import asyncio
-import json
-import os
 import re
-from urllib.parse import urlsplit
 
-import aiohttp
+from bridge import BridgeError, post_internal
 
 LINK_TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 
@@ -30,56 +26,25 @@ async def claim_telegram(token, *, telegram_id, chat_id, username, display_name)
     ):
         raise MfaBridgeError("invalid")
 
-    base = os.environ.get("BOT_INTERNAL_BASE_URL", "http://backend:8000").rstrip("/")
-    secret = os.environ.get("BOT_INTERNAL_TOKEN", "").strip()
     try:
-        parsed = urlsplit(base)
-        valid = (
-            parsed.scheme in {"http", "https"}
-            and parsed.hostname
-            and parsed.username is None
-            and parsed.password is None
-            and not parsed.query
-            and not parsed.fragment
-            and not parsed.path
-            and not any(char.isspace() for char in base)
+        result = await post_internal(
+            "/telegram-auth/claim",
+            {
+                "token": token,
+                "telegram_id": telegram_id,
+                "chat_id": chat_id,
+                "username": username,
+                "display_name": display_name,
+            },
         )
-        _ = parsed.port
-    except ValueError:
-        valid = False
-    if not valid or not secret:
-        raise MfaBridgeError("unavailable")
-
-    try:
-        async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=10), cookie_jar=aiohttp.DummyCookieJar()
-        ) as session:
-            async with session.post(
-                base + "/internal/v1/telegram-auth/claim",
-                json={
-                    "token": token,
-                    "telegram_id": telegram_id,
-                    "chat_id": chat_id,
-                    "username": username,
-                    "display_name": display_name,
-                },
-                headers={"Authorization": "Bearer " + secret},
-                allow_redirects=False,
-            ) as response:
-                if response.status in {400, 404, 409, 410, 422}:
-                    raise MfaBridgeError("invalid")
-                if response.status == 429:
-                    raise MfaBridgeError("limited")
-                if response.status != 200:
-                    raise MfaBridgeError("unavailable")
-                if response.content_length is not None and response.content_length > 4096:
-                    raise MfaBridgeError("unavailable")
-                body = bytearray()
-                async for chunk in response.content.iter_chunked(1024):
-                    body.extend(chunk)
-                    if len(body) > 4096:
-                        raise MfaBridgeError("unavailable")
-                if json.loads(body) != {"accepted": True}:
-                    raise MfaBridgeError("unavailable")
-    except (asyncio.TimeoutError, aiohttp.ClientError, ValueError):
-        raise MfaBridgeError("unavailable") from None
+        if result != {"accepted": True}:
+            raise MfaBridgeError("unavailable")
+    except BridgeError as error:
+        reason = (
+            "invalid"
+            if error.status in {400, 404, 409, 410, 422}
+            else "limited"
+            if error.status == 429
+            else "unavailable"
+        )
+        raise MfaBridgeError(reason) from None
