@@ -197,6 +197,7 @@ def check(image, bot_image, timezone):
                 flush=True,
             )
             print(compose("run", "--rm", "--no-deps", "-T", "bot", "python", "/harness/bot_links_probe.py"), flush=True)
+            print(compose("run", "--rm", "--no-deps", "-T", "bot", "python", "/harness/bot_ip_cookie_probe.py"), flush=True)
         except BaseException:
             if override.exists():
                 try:

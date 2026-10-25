@@ -42,6 +42,10 @@ jobs:
         timeout-minutes: 1
         run: python3 -m unittest discover -s scripts/checks -p test_frontend_http_check.py -v
 
+      - name: Validate server proxy and private service ports
+        timeout-minutes: 3
+        run: python3 scripts/checks/check_server_config.py
+
       - name: Generate temporary credentials
         run: |
           database_password="$(openssl rand -hex 24)@:/#%"

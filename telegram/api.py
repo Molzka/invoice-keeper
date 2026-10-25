@@ -181,13 +181,14 @@ class PaymentsClient:
         if not math.isfinite(timeout) or not 1 <= timeout <= 60:
             raise ApiNotConfigured("API_TIMEOUT должен быть числом от 1 до 60")
         try:
-            address = ipaddress.ip_address(urlsplit(self._base).hostname)
-            local_ip = address.is_loopback or address.is_private
+            ipaddress.ip_address(urlsplit(self._base).hostname)
+            ip_host = True
         except ValueError:
-            local_ip = False
+            ip_host = False
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=timeout),
-            cookie_jar=aiohttp.CookieJar(unsafe=local_ip),
+            # The administrator configures this origin; IP cookies still obey host and Secure rules.
+            cookie_jar=aiohttp.CookieJar(unsafe=ip_host),
             headers={"Accept": "application/json"},
         )
 

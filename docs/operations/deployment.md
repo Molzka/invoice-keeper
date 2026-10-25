@@ -9,6 +9,9 @@
 
 ## Локальный запуск
 
+Для публичного Linux-сервера, включая HTTPS без домена, используйте
+[серверную инструкцию](server.md) и `compose.server.yaml`.
+
 Нужен запущенный Docker Desktop с Linux containers и Docker Compose v2. Команды выполняются в корне репозитория.
 
 1. Если `.env` ещё нет, создайте его: `Copy-Item .env.example .env` в PowerShell или `cp .env.example .env` в Linux / macOS.
@@ -46,7 +49,7 @@ docker compose ps
 
 Работайте из каталога, из которого запущен рабочий Compose-проект, с прежними `.env` и именем проекта. Другая копия репозитория или другое имя проекта могут создать новый пустой том. Не меняйте пароль PostgreSQL и не запускайте `create-admin` для существующей базы.
 
-1. Проверьте `git status --short`. В чистой рабочей копии на ветке `main` выполните `git fetch origin main`, затем `git merge --ff-only origin/main`. Запишите `git rev-parse HEAD` и текущую ревизию БД: `docker compose exec -T backend alembic current`.
+1. Проверьте `git status --short`. В чистой рабочей копии на ветке `main` выполните `git fetch origin main`, затем `git merge --ff-only origin/main`. Запишите `git rev-parse HEAD` и текущую ревизию БД: `docker compose exec -T backend python /app/docker-entrypoint.py alembic current`. При `exec` entrypoint контейнера не вызывается автоматически; здесь он собирает `DATABASE_URL` из настроек PostgreSQL.
 2. Сохраните ID и отдельные теги прежних образов до сборки. Например, в PowerShell для backend: `docker image tag (docker inspect --format '{{.Image}}' invoice-keeper-backend-1) invoice-keeper-backend:before-update`. Повторите для frontend, worker и bot; для каждого обновления используйте новый тег. Сверьте имена через `docker compose ps -a`.
 3. Соберите все четыре приложения, пока прежние контейнеры продолжают работать:
 
