@@ -1,0 +1,36 @@
+{
+	default_sni {$PUBLIC_HOST}
+	servers {
+		protocols h1 h2
+	}
+}
+
+https://{$PUBLIC_HOST} {
+	tls {
+		issuer acme {
+			profile shortlived
+		}
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	# Caddy is the public API proxy: it sets the actual client address and HTTPS scheme.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:8080
+	}
+
+	handle_errors {
+		header Content-Type application/json
+		header Cache-Control no-store
+		respond "{\"error\":{\"code\":\"API_NOT_AVAILABLE\",\"message\":\"Service temporarily unavailable\",\"details\":[]}}" 503
+	}
+}
