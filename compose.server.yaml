@@ -12,6 +12,8 @@ services:
     init: true
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST to the public IP or hostname}
+      HTTPS_ALIASES: ${HTTPS_ALIASES:-}
+      TLS_DEFAULT_NAME: ${TLS_DEFAULT_NAME:-${PUBLIC_HOST}}
     ports:
       - "80:80"
       - "443:443"
