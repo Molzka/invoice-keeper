@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaymentOccurrence, RecurringPayment
 from app.services.errors import api_error
-from app.services.payment_calendar import due_date_in_month
+from app.services.payment_calendar import recurring_due_dates
 
 CURRENCIES = ("RUB", "USD", "EUR")
 FIELDS = ("planned", "paid", "unpaid", "overdue", "forecast")
@@ -75,11 +75,15 @@ async def get_payments_budget(
     for rule in rules.values():
         if not rule.is_active:
             continue
-        for number in months:
-            due_date = due_date_in_month(rule.anchor_day, year, number)
-            if rule.periodicity == "once" and due_date != rule.first_due_date:
-                continue
-            if due_date < rule.first_due_date or due_date in existing_dates[rule.id]:
+        for due_date in recurring_due_dates(
+            rule.first_due_date,
+            rule.anchor_day,
+            date_to,
+            rule.periodicity,
+            rule.recurrence_interval,
+            start=date_from,
+        ):
+            if due_date in existing_dates[rule.id]:
                 continue
             if due_date <= complete_through:
                 raise api_error(
@@ -87,7 +91,7 @@ async def get_payments_budget(
                     "PERIODS_NOT_READY",
                     "История периодов ещё восстанавливается",
                 )
-            totals = monthly[number][rule.currency]
+            totals = monthly[due_date.month][rule.currency]
             totals["planned"] += rule.amount
             totals["forecast"] += rule.amount
 

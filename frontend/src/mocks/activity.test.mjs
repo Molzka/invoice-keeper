@@ -25,6 +25,7 @@ async function fixture(context, username = 'admin', scenario = '') {
   globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storageWrites.push([key, value]); storage.set(key, value) }, removeItem: key => storage.delete(key) }
   globalThis.window = { location: { origin: 'http://localhost', search: scenario ? '?scenario=' + scenario : '' } }
   let source = replace(ts('./transport.ts'), './fixtures', fixturesUrl)
+  source = replace(source, '../lib/recurring-inputs', encode(ts('../lib/recurring-inputs.ts')))
   for (const [path, url] of [['../config/demo', demoUrl], ['../types/activity', typesUrl], ['./activity', activityUrl]]) source = replace(source, path, url)
   const { mockFetch } = await import(encode(source) + '#audit-' + ++sequence)
   async function request(path, method = 'GET', body, token) {

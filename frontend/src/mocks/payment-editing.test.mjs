@@ -16,6 +16,26 @@ const FIGMA_ID = 'f0000000-1111-4111-8111-000000000003'
 let sequence = 0
 const cents = value => BigInt(value.replace('.', ''))
 
+test('custom schedules create only matching periods and recurring filter excludes one-time payments', async context => {
+  const { request } = await fixture(context)
+  for (const [periodicity, recurrence_interval, expected] of [
+    ['daily', 10, ['2026-10-01', '2026-10-11', '2026-10-21', '2026-10-31']],
+    ['weekly', 2, ['2026-10-01', '2026-10-15', '2026-10-29']],
+    ['monthly', 3, ['2026-10-01', '2027-01-01']],
+    ['yearly', 1, ['2026-10-01', '2027-10-01']],
+  ]) {
+    const response = await request('/recurring-payments', 'POST', { title: periodicity, amount: '10.00', currency: 'RUB', first_due_date: '2026-10-01', periodicity, recurrence_interval })
+    assert.equal(response.status, 201)
+    const rule = await response.json()
+    assert.equal(rule.recurrence_interval, recurrence_interval)
+    const rows = await (await request('/payment-occurrences?recurring_payment_id=' + rule.id)).json()
+    assert.deepEqual(rows.items.map(item => item.due_date), expected)
+  }
+  await request('/one-time-payments', 'POST', { title: 'Once', amount: '1.00', currency: 'RUB', due_date: '2026-10-23' })
+  const rules = await (await request('/recurring-payments?periodicity=recurring&is_active=true&limit=100')).json()
+  assert.ok(rules.items.every(item => item.periodicity !== 'once' && item.is_active))
+})
+
 test('one-time payments are single periods and deletion preserves a read-only history outside totals', async context => {
   const { request, occurrences } = await fixture(context)
   const before = (await (await request('/payments/summary')).json()).totals.RUB.planned
@@ -73,6 +93,7 @@ async function fixture(context, options = {}) {
     export function createFixtures(stress) { const db = base(stress); const next = db.occurrences.find(item => item.recurring_payment_id === '${FIGMA_ID}' && item.due_date === '2026-11-12');
       db.occurrences.push({ ...next, id: 'b0000000-2222-4222-8222-000000000001', due_date: '2026-12-12' }, { ...next, id: 'b0000000-2222-4222-8222-000000000002', due_date: '2027-01-12' }); return db; }`) : baseFixturesUrl
   let source = replace(ts('./transport.ts'), './fixtures', fixturesUrl)
+  source = replace(source, '../lib/recurring-inputs', encode(ts('../lib/recurring-inputs.ts')))
   for (const [path, url] of [['../config/demo', demoUrl], ['../types/activity', typesUrl], ['./activity', activityUrl]]) source = replace(source, path, url)
   const { mockFetch } = await import(encode(source) + '#payment-edit-' + ++sequence)
   let token = ''

@@ -10,14 +10,21 @@ from app.core.config import DEFAULT_TIMEZONE
 from app.delivery.locking import lock_payments
 from app.delivery.queue import enqueue_payment_reminder
 from app.models import PaymentOccurrence, RecurringPayment
-from app.services.payment_calendar import monthly_due_dates, next_due_date
+from app.services.payment_calendar import next_due_date, recurring_due_dates
 
 
 def active_generation_end(payment: RecurringPayment, today: date) -> date:
     if payment.periodicity == "once":
         return payment.first_due_date
     month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
-    return max(month_end, next_due_date(payment.first_due_date, payment.anchor_day, today))
+    upcoming = next_due_date(
+        payment.first_due_date,
+        payment.anchor_day,
+        today,
+        payment.periodicity,
+        payment.recurrence_interval,
+    )
+    return max(month_end, upcoming or month_end)
 
 
 async def create_missing_periods(
@@ -26,10 +33,12 @@ async def create_missing_periods(
     through: date,
     timezone_name: str = DEFAULT_TIMEZONE,
 ) -> None:
-    due_dates = (
-        ([payment.first_due_date] if through >= payment.first_due_date else [])
-        if payment.periodicity == "once"
-        else monthly_due_dates(payment.first_due_date, payment.anchor_day, through)
+    due_dates = recurring_due_dates(
+        payment.first_due_date,
+        payment.anchor_day,
+        through,
+        payment.periodicity,
+        payment.recurrence_interval,
     )
     if not due_dates:
         return
