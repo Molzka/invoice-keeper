@@ -47,6 +47,7 @@ export function DatePicker({ id, name, value, onChange, today, min = '0001-01-01
 
   const positionPopup = useCallback(() => {
     if (!trigger.current || !popup.current) return
+    if (!trigger.current.getClientRects().length) { setOpen(false); return }
     const anchor = trigger.current.getBoundingClientRect()
     const viewportWidth = document.documentElement.clientWidth
     const viewportHeight = window.visualViewport?.height ?? window.innerHeight

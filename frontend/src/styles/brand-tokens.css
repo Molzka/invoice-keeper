@@ -16,6 +16,8 @@
   --amber: color-mix(in srgb, var(--orange) 60%, var(--tone-depth)); --amber-bg: color-mix(in srgb, var(--orange) 10%, var(--surface));
   --red: #a52936; --red-bg: color-mix(in srgb, var(--red) 8%, var(--surface));
   --shadow: 0 7px 26px #00000004;
+  --workspace-space-sm: 8px; --workspace-space: 16px; --workspace-space-lg: 24px;
+  --workspace-radius: 12px; --workspace-border: 1px solid var(--line);
 }
 .page-title, .section-head h2, .drawer-head h2 { font-family: 'Exo 2', sans-serif; font-weight: 800; }
 .page-title { letter-spacing: -.045em; }
@@ -41,6 +43,13 @@
 .topbar .nav-link { flex: 0 0 auto; padding: 12px 16px; color: var(--muted); }
 .topbar .nav-link.active { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 15%, var(--surface)); }
 .topbar .nav-link:hover { color: var(--ink); background: var(--bg); }
+.mobile-nav { display: none; }
+@media (max-width: 1000px) {
+ .topbar .main-nav { display: none; }
+ .topbar .mobile-nav { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--workspace-space); order: 3; flex: 1 0 100%; padding-bottom: var(--workspace-space); }
+ .mobile-nav > label { font-family: Inter, sans-serif; font-size: 12px; color: var(--muted); }
+ .mobile-nav .ik-field-trigger { min-height: 44px; }
+}
 .user-avatar, .avatar { color: var(--accent-ink); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }
 .status-success { color: var(--accent-ink); border-color: color-mix(in srgb, var(--cyan) 30%, var(--surface)); background: color-mix(in srgb, var(--cyan) 11%, var(--surface)); }
 .status.status-late { color: var(--accent-ink); border-color: color-mix(in srgb, var(--orange) 24%, var(--surface)); background: color-mix(in srgb, var(--orange) 8%, var(--surface)); }
@@ -57,7 +66,7 @@
 .calendar-status-legend [data-status='status-warning']::before { background: var(--orange); }
 @media (max-width: 1000px) { .topbar .user-menu > div:not(.user-avatar) { display: flex; } }
 @media (max-width: 760px) {
- .topbar { gap: 30px 12px; padding: 30px 30px 0; }
+ .topbar { gap: var(--workspace-space) 12px; padding: 30px 30px 0; }
  .topbar .brand-slot { flex: 1 1 52px; width: auto; }
  .topbar .user-menu { gap: 8px; }
  .topbar .user-menu > div:not(.user-avatar) { display: none; }

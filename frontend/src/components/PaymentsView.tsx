@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
-import { ArrowUpRight, PencilLine, Check, Clock3, History, Info, RefreshCw, Send } from './BrandIcons'
+import { ArrowUpRight, ChevronDown, PencilLine, Check, Clock3, History, Info, RefreshCw, Send } from './BrandIcons'
 import { api, ApiError } from '../api/client'
 import type { Currency, OccurrenceFilters, Page, PaymentOccurrence, PaymentSummary } from '../types/api'
 import { dateLabel, money, monthLabel, monthRange } from '../lib/format'
@@ -13,6 +13,7 @@ import { Paperclip, Trash2 } from './BrandIcons'
 import { PaymentAmountDrawer } from './PaymentAmountDrawer'
 import { DatePicker } from './DatePicker'
 import { SelectField } from './SelectField'
+import { OverdueNotice } from './OverdueNotice'
 import { defaultPaymentFilters, paymentHash } from '../lib/payment-route'
 import type { PaymentFilters, PaymentPageSize, PaymentRoute, PaymentTab } from '../lib/payment-route'
 
@@ -41,27 +42,35 @@ function Summary({ dates, revision, filters, limit, today, timezone }: { dates: 
     return () => { alive = false }
   }, [dates, revision, retry, today, timezone])
   if (error) return <ErrorNotice error={error} onRetry={() => setRetry(value => value + 1)}/>
-  if (!summary) return <div className="summary-grid" aria-label="Загрузка сводки" aria-busy="true">{currencies.map(currency => <div className="currency-card" key={currency}><div className="skeleton" style={{ height: 23, marginBottom: 20 }}/><div className="skeleton" style={{ height: 35, marginBottom: 20 }}/><div className="skeleton" style={{ height: 80 }}/></div>)}</div>
+  if (!summary) return <section className="payment-summary" aria-label="Загрузка сводки" aria-busy="true"><div className="summary-grid">{currencies.map(currency => <div className="currency-card" key={currency}><div className="skeleton" style={{ height: 23, marginBottom: 20 }}/><div className="skeleton" style={{ height: 35, marginBottom: 20 }}/><div className="skeleton" style={{ height: 80 }}/></div>)}</div><div className="currency-compact-list compact-loading">{currencies.map(currency => <div className="currency-compact-placeholder" key={currency}><span>{currencyNames[currency]}</span><span className="skeleton"/></div>)}</div></section>
   function amountLink(currency: Currency, tab: PaymentTab, amount: string, label: string) {
     // The server's summary dates define the drill-down; unsaved toolbar changes do not.
     const href = paymentHash('payments', { date_from: summary!.date_from, date_to: summary!.date_to, currency, tab }, { limit, offset: 0 })
     return <a className="summary-amount-link" href={href} onClick={focusPaymentResults} aria-label={`${label} в ${currency}: ${money(amount, currency)}`} aria-current={filters.currency === currency && filters.tab === tab ? 'true' : undefined}><span>{money(amount, currency)}</span><ArrowUpRight size={13} aria-hidden="true"/></a>
   }
-  return <section aria-label="Сводка обязательств по валютам">
-    <p className="summary-caption">По срокам {dateLabel(summary.date_from)}–{dateLabel(summary.date_to)} · состояние на {dateLabel(summary.as_of_date)}, {summary.timezone} · все статусы и валюты</p>
+  function breakdown(currency: Currency) {
+    const total = summary!.totals[currency]
+    return <dl className="currency-breakdown">
+      <div><dt>Оплачено</dt><dd>{amountLink(currency, 'paid', total.paid, 'Оплачено')}</dd></div>
+      <div><dt>Не оплачено</dt><dd>{amountLink(currency, 'unpaid', total.unpaid, 'Не оплачено')}</dd></div>
+      <div className="overdue"><dt>Из них просрочено</dt><dd>{amountLink(currency, 'overdue', total.overdue, 'Просрочено')}</dd></div>
+    </dl>
+  }
+  return <section className="payment-summary" aria-label="Сводка обязательств по валютам">
+    <p className="summary-caption">По срокам {dateLabel(summary.date_from)}–{dateLabel(summary.date_to)} · состояние на {dateLabel(summary.as_of_date)}<span className="summary-context">, {summary.timezone} · все статусы и валюты</span></p>
     <p className="summary-navigation-hint"><ArrowUpRight size={13} aria-hidden="true"/> Нажмите на сумму, чтобы посмотреть соответствующие платежи</p>
     <div className="summary-grid">{currencies.map(currency => {
       const total = summary.totals[currency]
       return <article className="currency-card" data-currency={currency} key={currency}>
         <CurrencyArt currency={currency}/><div className="currency-label"><strong>{currencyNames[currency]}</strong><span className="pill">{currency}</span></div>
-        <span className="muted">Всего по срокам</span><strong className="currency-amount">{amountLink(currency, 'all', total.planned, 'Все платежи')}</strong>
-        <dl className="currency-breakdown">
-          <div><dt>Оплачено</dt><dd>{amountLink(currency, 'paid', total.paid, 'Оплачено')}</dd></div>
-          <div><dt>Не оплачено</dt><dd>{amountLink(currency, 'unpaid', total.unpaid, 'Не оплачено')}</dd></div>
-          <div className="overdue"><dt>Из них просрочено</dt><dd>{amountLink(currency, 'overdue', total.overdue, 'Просрочено')}</dd></div>
-        </dl>
+        <span className="muted">Всего по срокам</span><strong className="currency-amount" data-large={total.planned.split('.')[0].length > 9}>{amountLink(currency, 'all', total.planned, 'Все платежи')}</strong>
+        {breakdown(currency)}
       </article>
     })}</div>
+    <div className="currency-compact-list">{currencies.map(currency => <details className="currency-compact" key={currency}>
+      <summary data-large={summary.totals[currency].unpaid.split('.')[0].length > 9}><span className="compact-currency-name"><strong>{currencyNames[currency]}</strong><small>{currency}</small></span><span className="compact-currency-amount"><small>К оплате</small><strong>{money(summary.totals[currency].unpaid, currency)}</strong></span><ChevronDown size={16} aria-hidden="true"/></summary>
+      <div className="compact-currency-detail"><div className="compact-currency-total"><span>Всего по срокам</span>{amountLink(currency, 'all', summary.totals[currency].planned, 'Все платежи')}</div>{breakdown(currency)}</div>
+    </details>)}</div>
   </section>
 }
 
@@ -179,6 +188,7 @@ export function PaymentsView({ isAdmin, mode, route, onRouteChange, revision, to
   const [selected, setSelected] = useState<PaymentOccurrence | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PaymentOccurrence | null>(null)
   const [amountTarget, setAmountTarget] = useState<PaymentOccurrence | null>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const lastQuery = useRef('')
   const query = useMemo<OccurrenceFilters>(() => ({ date_from: filters.date_from || undefined, date_to: filters.date_to || undefined, currency: filters.currency as Currency || undefined, status: filters.tab === 'paid' ? 'paid' : ['unpaid','overdue'].includes(filters.tab) ? 'unpaid' : undefined, is_overdue: filters.tab === 'overdue' ? true : undefined, recurring_payment_id: route.ruleId || undefined,
     include_cancelled: history && filters.include_cancelled || undefined, limit, offset }), [filters, route.ruleId, limit, offset, history])
@@ -208,12 +218,14 @@ export function PaymentsView({ isAdmin, mode, route, onRouteChange, revision, to
     setSelected(null); onChanged(); notify(item.status === 'unpaid' ? 'Отметка оплаты отменена. Дата оплаты очищена.' : item.paid_late ? 'Оплата сохранена. Период оплачен с опозданием.' : 'Оплата сохранена. Срок не изменился.')
   }
   return <>
+    {!history && <OverdueNotice revision={revision} today={today} timezone={timezone} limit={limit}/>}
     {!history && <Summary dates={summaryDates} revision={revision} filters={filters} limit={limit} today={today} timezone={timezone}/>}
     <section id="payment-results" className="panel" aria-label={history ? 'История периодов' : 'Периоды оплаты'} aria-busy={loading}>
       <div className="section-head"><div><h2 id="payment-results-heading" tabIndex={-1}>{history ? 'Все периоды' : 'Периоды оплаты'}{page && <span className="pill">{page.total}</span>}</h2><p>{history ? 'Сохраняем прошлые оплаты и периоды прекращённых платежей.' : 'Сначала ближайшие сроки. Статусы и итоговые суммы рассчитывает сервер.'}</p></div><button className="icon-button" type="button" aria-label="Обновить список и сводку" disabled={loading} onClick={() => { setRetry(value => value + 1); onChanged() }}><RefreshCw size={17}/></button></div>
       {selectedRule && <div className="history-chip"><History size={16}/><strong>{selectedRule.title === 'История выбранного платежа' ? page?.items[0]?.title || selectedRule.title : selectedRule.title}</strong><button type="button" className="btn btn-secondary btn-small" onClick={() => onRouteChange({ ...route, ruleId: null, offset: 0 })}>Все платежи</button></div>}
       <div className="status-tabs" role="group" aria-label="Фильтр статуса">{([['all','Все'],['unpaid','К оплате'],['overdue','Просрочено'],['paid','Оплачено']] as const).map(([value,label]) => <button className={`status-tab ${filters.tab === value ? 'active' : ''}`} type="button" aria-pressed={filters.tab === value} key={value} onClick={() => tab(value)}>{label}</button>)}</div>
-      <PaymentFilterToolbar key={JSON.stringify(filters)} filters={filters} today={today} history={history} onApply={applyFilters} onReset={resetFilters}/>
+      <div className="mobile-filter-control"><button className="btn btn-secondary payment-filter-toggle" type="button" aria-label="Фильтры периода и валюты" aria-expanded={filtersOpen} aria-controls="payment-filters" onClick={() => setFiltersOpen(value => !value)}>Период и валюта<ChevronDown size={16} aria-hidden="true"/></button><p>{[filters.date_from && `С ${dateLabel(filters.date_from)}`, filters.date_to && `по ${dateLabel(filters.date_to)}`].filter(Boolean).join(' ') || 'За всё время'} · {filters.currency || 'Все валюты'}</p></div>
+      <div id="payment-filters" className="payment-filters" data-open={filtersOpen}><PaymentFilterToolbar key={JSON.stringify(filters)} filters={filters} today={today} history={history} onApply={applyFilters} onReset={resetFilters}/></div>
       {error ? <ErrorNotice error={error} onRetry={() => setRetry(value => value + 1)}/> : null}
       {loading && !page ? <LoadingRows/> : !error && page?.items.length === 0 ? <EmptyState title="Платежей не найдено">Попробуйте изменить даты или сбросить фильтры. Прекращённые платежи остаются в истории.</EmptyState> : page && <div className="table-wrap"><table className="data-table payments-table"><caption className="sr-only">{history ? 'История платежных периодов' : 'Платежи за выбранный период'}</caption><colgroup><col className="payment-name-column"/><col className="payment-money-column"/><col className="payment-due-column"/><col className="payment-status-column"/><col className="payment-paid-column"/><col className="payment-actions-column"/></colgroup><thead><tr><th scope="col">Платёж</th><th scope="col">Сумма</th><th scope="col">Срок</th><th scope="col">Статус</th><th scope="col">Дата оплаты</th><th scope="col">Действия</th></tr></thead><tbody>{page.items.map(item => {
         return <tr key={item.id}><td data-label="Платёж"><button className="payment-title" type="button" onClick={() => setSelected(item)}>{item.title}</button><span className="payment-period">{monthLabel(item.due_date.slice(0,7))}{item.periodicity === 'once' ? ' · разовый' : !item.recurring_payment_is_active ? ' · прекращён' : ''}{item.is_cancelled && ' · удалён'}</span></td><td data-label="Сумма" className={item.amount.split('.')[0].length > 9 ? 'money-large' : ''}><span className="money">{money(item.amount, item.currency)}</span></td><td data-label="Срок" className="date-cell">{dateLabel(item.due_date)}</td><td data-label="Статус" className="payment-status-cell"><PaymentStatus item={item}/>{!item.is_cancelled && item.days_late > 0 && <span className="payment-period">Опоздание: {item.days_late} дн.</span>}</td><td data-label="Дата оплаты" className="date-cell payment-paid-cell">{dateLabel(item.paid_on)}</td><td data-label="Действия"><div className="inline-actions payment-row-actions"><button className={`btn btn-small ${item.status === 'unpaid' ? 'btn-primary' : 'btn-secondary'}`} type="button" onClick={() => setSelected(item)}>{item.is_cancelled ? 'Посмотреть' : item.status === 'paid' ? 'Изменить' : 'Отметить оплату'}</button>{isAdmin && !item.is_cancelled && item.status === 'unpaid' && <button className="icon-button" type="button" aria-label={`Изменить сумму и валюту: ${item.title}`} title="Изменить сумму и валюту периода" onClick={() => editAmount(item)}><PencilLine size={16}/></button>}<button className="icon-button" type="button" aria-label={`История: ${item.title}`} onClick={() => onHistory(item.recurring_payment_id, item.title)}><History size={16}/></button></div></td></tr>

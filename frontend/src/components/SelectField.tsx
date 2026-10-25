@@ -69,6 +69,7 @@ export function SelectField({ value, onChange, options, id, name, disabled, requ
       const trigger = triggerRef.current
       const menu = menuRef.current
       if (!trigger || !menu) return
+      if (!trigger.getClientRects().length) { closeMenu(); return }
       const rect = trigger.getBoundingClientRect()
       const viewportWidth = document.documentElement.clientWidth
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight
