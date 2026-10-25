@@ -12,6 +12,7 @@ from sqlalchemy import select, text
 
 from app.core.config import settings
 from app.db.session import Database
+from app.delivery.health import HEARTBEAT_FILE, record_success
 from app.delivery.queue import requeue_failed, resolve_unknown
 from app.delivery.schema import deliveries
 from app.delivery.telegram import TelegramSender
@@ -60,6 +61,7 @@ async def run(args) -> None:
                 )
                 print(json.dumps([dict(row) for row in rows], default=str))
         else:
+            HEARTBEAT_FILE.unlink(missing_ok=True)
             if not settings.bot_token or not settings.chat_id:
                 raise ValueError("Set BOT_TOKEN and CHAT_ID for the worker")
             module, separator, name = args.adapter.partition(":")
@@ -77,10 +79,12 @@ async def run(args) -> None:
                 while True:
                     try:
                         result = await worker.run_once()
+                        record_success()
                         if args.once:
                             print(json.dumps(result))
                             break
                     except Exception as exc:
+                        HEARTBEAT_FILE.unlink(missing_ok=True)
                         if args.once:
                             raise
                         logging.error("Delivery cycle failed (%s)", type(exc).__name__)

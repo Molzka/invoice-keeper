@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,11 +29,13 @@ def container(env_file, command, *args, **kwargs):
     )
 
 
-def backup(env_file):
-    BACKUPS.mkdir(exist_ok=True)
+def backup(env_file, *, output_dir=BACKUPS, keep_days=None):
+    if keep_days is not None and (keep_days < 1 or output_dir.resolve() == BACKUPS.resolve()):
+        raise ValueError("Retention requires a separate output directory and positive keep_days")
+    output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     with tempfile.NamedTemporaryFile(
-        dir=BACKUPS, prefix=f"postgres_{stamp}_", suffix=".dump.partial", delete=False
+        dir=output_dir, prefix=f"postgres_{stamp}_", suffix=".dump.partial", delete=False
     ) as archive:
         partial = Path(archive.name)
     try:
@@ -47,6 +50,11 @@ def backup(env_file):
         destination = partial.with_suffix("")
         partial.rename(destination)
         print(destination)
+        if keep_days is not None:
+            cutoff = time.time() - keep_days * 86400
+            for previous in output_dir.glob("postgres_*.dump"):
+                if previous != destination and previous.is_file() and previous.stat().st_mtime < cutoff:
+                    previous.unlink()
     finally:
         partial.unlink(missing_ok=True)
 
@@ -106,18 +114,20 @@ def main():
         help="Compose environment file (default: repository .env)",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("backup", help="Save a custom-format archive to backups/")
+    create_backup = commands.add_parser("backup", help="Save a custom-format database archive")
+    create_backup.add_argument("--output-dir", type=Path, default=BACKUPS)
+    create_backup.add_argument("--keep-days", type=int, help="Prune old automatic dumps only after a successful backup; use a separate output directory")
     restore_parser = commands.add_parser("restore", help="Restore into a NEW database")
     restore_parser.add_argument("archive", type=Path)
     restore_parser.add_argument("database", type=database_name)
     args = parser.parse_args()
     try:
         if args.command == "backup":
-            backup(args.env_file.resolve())
+            backup(args.env_file.resolve(), output_dir=args.output_dir.resolve(), keep_days=args.keep_days)
         else:
             restore(args.env_file.resolve(), args.archive, args.database)
-    except (OSError, subprocess.CalledProcessError) as error:
-        message = str(error) if isinstance(error, OSError) else "Docker/PostgreSQL command failed; see the error above."
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        message = str(error) if isinstance(error, (ValueError, OSError)) else "Docker/PostgreSQL command failed; see the error above."
         print(f"Error: {message}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

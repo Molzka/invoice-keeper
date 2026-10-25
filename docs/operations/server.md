@@ -107,3 +107,53 @@ IP-сертификат использует профиль `shortlived` и де
 Caddy продлевает его автоматически. Основание:
 [Let's Encrypt](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability/),
 [ACME profile в Caddy](https://caddyserver.com/docs/caddyfile/directives/tls#issuers).
+
+## Ежедневные резервные копии
+
+Для установки штатного таймера systemd на сервере:
+
+```sh
+install -m 644 docker/server/invoice-keeper-backup.service /etc/systemd/system/
+install -m 644 docker/server/invoice-keeper-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now invoice-keeper-backup.timer
+systemctl start invoice-keeper-backup.service
+systemctl list-timers invoice-keeper-backup.timer
+```
+
+Копия создаётся ежедневно около 03:00 UTC (06:00 Europe/Moscow), с разбросом
+до пяти минут. Пропущенный из-за выключения сервера запуск выполняется после
+старта таймера. Автоматические архивы хранятся в `backups/daily` 14 дней;
+устаревшие `postgres_*.dump` удаляются только после успешной новой копии.
+Ручные архивы в `backups/` сохраняются. Каталог `daily` предназначен только
+для автоматических копий. `UMask=0077` ограничивает доступ к файлам.
+
+Проверка результата: `systemctl status invoice-keeper-backup.service` и
+`journalctl -u invoice-keeper-backup.service`. При ошибке проверьте журнал и
+повторите запуск; таймер не отправляет уведомления во внешние каналы.
+Копии на этом VPS не защищают от потери самого VPS: внешнее хранилище
+подключается отдельно. Проверять восстановление нужно в новой отдельной БД,
+не поверх рабочей.
+
+## Контроль worker
+
+`docker compose ps` показывает health worker. Обработчик атомарно сохраняет
+время последнего завершённого цикла в своём временном каталоге. Ошибка цикла
+удаляет отметку; зависание обнаруживается по её возрасту. Docker проверяет
+её каждые 30 секунд и после трёх неуспешных проверок показывает `unhealthy`.
+В начале работы есть льготный период 60 секунд.
+
+По умолчанию успешный цикл должен завершаться не реже раза в 300 секунд.
+Для большого количества заданий/долгой отправки увеличьте
+`WORKER_HEALTH_MAX_AGE_SECONDS` в `.env` и пересоздайте worker. Это контроль
+завершения цикла: длительный, но работающий цикл тоже может превысить порог.
+Статус health не перезапускает контейнер и не доказывает доставку каждого
+сообщения. Проверяйте `failed` и `unknown` штатной CLI очереди; неизвестный
+результат нельзя автоматически повторять. Публичный `/ready` по-прежнему
+проверяет API/БД; состояние worker смотрите отдельно:
+
+```sh
+docker compose ps worker
+docker compose exec -T worker python -m app.delivery.health
+docker compose logs --tail=50 worker
+```

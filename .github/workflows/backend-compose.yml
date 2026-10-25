@@ -46,6 +46,9 @@ jobs:
         timeout-minutes: 3
         run: python3 scripts/checks/check_server_config.py
 
+      - name: Check backup retention preserves archives on failure
+        run: python3 -m unittest scripts.checks.test_backup_retention -v
+
       - name: Generate temporary credentials
         run: |
           database_password="$(openssl rand -hex 24)@:/#%"
