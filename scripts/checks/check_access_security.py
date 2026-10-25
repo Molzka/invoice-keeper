@@ -25,6 +25,7 @@ def check(image, bot_image, timezone):
         POSTGRES_USER="access_check",
         POSTGRES_PASSWORD=secrets.token_urlsafe(30),
         ADMIN_USERNAME="access_admin",
+        ADMIN_TELEGRAM_ID="",
         ADMIN_PASSWORD=secrets.token_urlsafe(30),
         POSTGRES_PORT="0",
         FRONTEND_PORT="0",
@@ -218,6 +219,18 @@ def check(image, bot_image, timezone):
                     ),
                     flush=True,
                 )
+            print(
+                compose(
+                    "run",
+                    "--rm",
+                    "--no-deps",
+                    "-T",
+                    "bot",
+                    "python",
+                    "/harness/telegram_payment_probe.py",
+                ),
+                flush=True,
+            )
         finally:
             run(
                 (stack if override.exists() else base)

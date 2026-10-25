@@ -4,7 +4,7 @@ import type {
   AmountCurrencyUpdateRequest, RecurringAmountUpdateResponse, AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
   RecurringPayment, RecurringPaymentFilters, SummaryParams, UpdateOccurrenceRequest, UpdateUserRequest, User,
-  LoginResponse, MfaMethod, MfaFactor, SecurityState, SecurityMutation, TotpSetup, TelegramSetup, TelegramSetupStatus, ReauthRequest, RegistrationRequest, RegistrationStatus, RegistrationPayload,
+  LoginResponse, MfaMethod, MfaFactor, SecurityState, SecurityMutation, TotpSetup, TelegramSetup, TelegramSetupStatus, TelegramPaymentStatus, ReauthRequest, RegistrationRequest, RegistrationStatus, RegistrationPayload,
 } from '../types/api'
 import { mockFetch } from '../mocks/transport'
 
@@ -135,6 +135,11 @@ export const api = {
   approveRegistration: (id: string) => request<RegistrationRequest>('/registration/requests/' + encodeURIComponent(id) + '/approve', 'POST', {}),
   rejectRegistration: (id: string, note?: string) => request<RegistrationRequest>('/registration/requests/' + encodeURIComponent(id) + '/reject', 'POST', { note }),
   security: () => request<SecurityState>('/auth/security'),
+  paymentTelegramStatus: () => request<TelegramPaymentStatus>('/auth/telegram-payments'),
+  setupPaymentTelegram: () => request<TelegramSetup>('/auth/telegram-payments/setup', 'POST', {}),
+  paymentTelegramSetupStatus: (id: string) => request<TelegramSetupStatus>('/auth/telegram-payments/setup/' + encodeURIComponent(id)),
+  confirmPaymentTelegram: (setup_id: string, telegram_id: string) => request<TelegramPaymentStatus>('/auth/telegram-payments/confirm', 'POST', { setup_id, telegram_id }),
+  unlinkPaymentTelegram: () => request<void>('/auth/telegram-payments', 'DELETE'),
   reauth: (payload: ReauthRequest) => request<{ expires_at: string }>('/auth/security/reauth', 'POST', payload),
   sendSecurityTelegram: (password: string) => request<{ sent: boolean; retry_after: number }>('/auth/security/telegram/send-code', 'POST', { password }),
   setupTotp: () => request<TotpSetup>('/auth/security/totp/setup', 'POST', {}),

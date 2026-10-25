@@ -223,11 +223,15 @@ def test_lifecycle_audit_migration_preserves_registration_and_security_actions()
     auth_actions = {"account.login", "account.login_failed", "account.logout"}
     assert actions(authentication["OLD_ACTIONS"]) == previous | added
     assert actions(authentication["AUTH_ACTIONS"]) == auth_actions
-    assert set(get_args(AuditAction)) == previous | added | auth_actions
+    telegram = runpy.run_path(str(versions / "0012_telegram_payments.py"))
+    telegram_actions = {"account.telegram_linked", "account.telegram_unlinked"}
+    assert actions(telegram["OLD_ACTIONS"]) == previous | added | auth_actions
+    assert actions(telegram["NEW_ACTIONS"]) == telegram_actions
+    assert set(get_args(AuditAction)) == previous | added | auth_actions | telegram_actions
     constraint = next(
         item for item in AuditEvent.__table__.constraints if item.name == "ck_audit_events_action"
     )
-    assert actions(str(constraint.sqltext)) == previous | added | auth_actions
+    assert actions(str(constraint.sqltext)) == previous | added | auth_actions | telegram_actions
 
 
 @pytest.mark.asyncio
@@ -261,6 +265,7 @@ async def test_auth_audit_migration_preserves_old_events_and_refuses_lossy_downg
         )
         before = await connection.fetchrow("SELECT * FROM audit_events WHERE id=$1", old_id)
         assert migrate("upgrade", "head").returncode == 0
+        original_revision = await connection.fetchval("SELECT version_num FROM alembic_version")
         assert await connection.fetchrow("SELECT * FROM audit_events WHERE id=$1", old_id) == before
         await connection.execute(
             "INSERT INTO audit_events(id, actor_username, action, entity_type, entity_title) "
@@ -270,9 +275,71 @@ async def test_auth_audit_migration_preserves_old_events_and_refuses_lossy_downg
         refused = migrate("downgrade", "0010")
         assert refused.returncode != 0
         assert b"authentication history exists" in refused.stderr
-        assert await connection.fetchval("SELECT version_num FROM alembic_version") == "0011"
+        assert (
+            await connection.fetchval("SELECT version_num FROM alembic_version")
+            == original_revision
+        )
         assert await connection.fetchval("SELECT count(*) FROM audit_events") == 2
     finally:
         await connection.execute("DELETE FROM audit_events WHERE id IN ($1, $2)", old_id, new_id)
+        await connection.close()
+        assert migrate("upgrade", "head").returncode == 0
+
+
+@pytest.mark.asyncio
+async def test_telegram_upgrade_preserves_mfa_without_granting_payment_access(
+    app, migrated_database_url
+):
+    env = {**os.environ, "DATABASE_URL": migrated_database_url}
+
+    def migrate(direction, target):
+        return subprocess.run(
+            [sys.executable, "-m", "alembic", direction, target],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            check=False,
+        )
+
+    connection = await asyncpg.connect(
+        make_url(migrated_database_url)
+        .set(drivername="postgresql")
+        .render_as_string(hide_password=False)
+    )
+    user_id = uuid4()
+    try:
+        assert migrate("downgrade", "0011").returncode == 0
+        await connection.execute(
+            "INSERT INTO users(id, username, password_hash, role) VALUES ($1, $2, 'fixture-hash', 'user')",
+            user_id,
+            "legacy_tg_" + uuid4().hex[:10],
+        )
+        await connection.execute(
+            "INSERT INTO user_mfa(user_id, telegram_id, telegram_display_name) VALUES ($1, 123456789, 'Existing MFA')",
+            user_id,
+        )
+        before = await connection.fetchrow("SELECT * FROM user_mfa WHERE user_id=$1", user_id)
+        assert migrate("upgrade", "head").returncode == 0
+        assert (
+            await connection.fetchrow("SELECT * FROM user_mfa WHERE user_id=$1", user_id) == before
+        )
+        assert await connection.fetchval("SELECT count(*) FROM telegram_payment_accounts") == 0
+        await connection.execute(
+            "INSERT INTO telegram_payment_accounts(user_id, telegram_id, display_name) VALUES ($1, 123456789, 'Explicit payment account')",
+            user_id,
+        )
+        refused = migrate("downgrade", "0011")
+        assert refused.returncode != 0 and b"Telegram payment data exists" in refused.stderr
+        assert (
+            await connection.fetchval(
+                "SELECT telegram_id FROM telegram_payment_accounts WHERE user_id=$1", user_id
+            )
+            == 123456789
+        )
+        assert (
+            await connection.fetchrow("SELECT * FROM user_mfa WHERE user_id=$1", user_id) == before
+        )
+    finally:
+        await connection.execute("DELETE FROM users WHERE id=$1", user_id)
         await connection.close()
         assert migrate("upgrade", "head").returncode == 0

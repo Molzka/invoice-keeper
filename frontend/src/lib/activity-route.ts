@@ -1,6 +1,8 @@
 import type { AuditAction, AuditFilters } from '../types/activity'
 
 export const auditActionLabels: Record<AuditAction, string> = {
+  'account.telegram_linked': 'Подключена оплата в Telegram',
+  'account.telegram_unlinked': 'Отключена оплата в Telegram',
   'account.login': 'Вход в систему',
   'account.login_failed': 'Неудачная попытка входа',
   'account.logout': 'Выход из системы',

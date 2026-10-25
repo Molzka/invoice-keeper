@@ -10,7 +10,9 @@ def escaped(value):
 
 
 def payment_status(payment, texts):
-    if payment["status"] == "paid":
+    if payment.get("is_cancelled") is True:
+        status = "cancelled"
+    elif payment["status"] == "paid":
         status = "paid_late" if payment["paid_late"] else "paid"
     elif payment["status"] == "unpaid":
         status = "overdue" if payment["is_overdue"] else "unpaid"

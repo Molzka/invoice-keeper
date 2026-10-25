@@ -32,3 +32,10 @@
 .security-offer p { margin: 5px 0 0; font-size: 12px; color: var(--muted); }
 .registration-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .security-row { flex-wrap: wrap; gap: 12px; } .security-row .security-actions { justify-content: flex-start; } .security-offer { gap: 14px; padding: 16px; } .security-content .security-actions > .btn { flex: 1 1 auto; } }
+.telegram-payment-link { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; }
+.telegram-payment-link[data-setup="true"] { border-top: 0; padding-top: 0; margin-top: 0; }
+.telegram-payment-link .security-actions { margin-block: 16px; }
+.telegram-payment-link > .access-back { display: block; margin-top: 16px; }
+.telegram-payment-link li { margin-bottom: 8px; }
+.telegram-payment-account { overflow-wrap: anywhere; }
+.telegram-payment-account strong { color: var(--ink); font-size: 15px; }

@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, field_validator
 
 AuditAction = Literal[
+    "account.telegram_linked",
+    "account.telegram_unlinked",
     "account.login",
     "account.login_failed",
     "account.logout",
@@ -32,6 +34,8 @@ AuditAction = Literal[
 ]
 AuditEntityType = Literal["payment", "user", "account", "registration"]
 AUDIT_ACTION_LABELS: dict[str, str] = {
+    "account.telegram_linked": "Подключена оплата в Telegram",
+    "account.telegram_unlinked": "Отключена оплата в Telegram",
     "account.login": "Вход в систему",
     "account.login_failed": "Неудачная попытка входа",
     "account.logout": "Выход из системы",

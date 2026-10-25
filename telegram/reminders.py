@@ -8,8 +8,8 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
 from formatting import format_amount, format_date
+from links import keyboard_url
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,8 @@ def build_text(title, amount, currency, due_date) -> str:
         title = title[: MAX_TITLE_LEN - 1].rstrip() + "…"
 
     # Экранируем все значения: <, > и & в данных не должны ломать HTML-разметку
-    e = lambda v: html.escape(str(v), quote=False)
+    def e(value):
+        return html.escape(str(value), quote=False)
     return T["REMINDER"].format(
         title=e(title),
         amount=e(format_amount(amount, currency)),
@@ -34,13 +35,13 @@ def build_text(title, amount, currency, due_date) -> str:
 
 def build_keyboard(payment_url=None):
     rows = []
-    if payment_url:
-        rows.append([InlineKeyboardButton(text=T["BTN_PAYMENT"], url=payment_url)])
-    panel_url = (os.getenv("PANEL_URL") or "").strip()
-    if panel_url.lower().startswith(("http://", "https://")):
+    if url := keyboard_url(payment_url):
+        rows.append([InlineKeyboardButton(text=T["BTN_PAYMENT"], url=url)])
+    panel_url = keyboard_url(os.getenv("PANEL_URL"))
+    if panel_url:
         rows.append([InlineKeyboardButton(text=T["BTN_PANEL"], url=panel_url)])
-    elif panel_url:
-        log.warning("PANEL_URL должен начинаться с http:// или https://: кнопка пропущена")
+    elif os.getenv("PANEL_URL"):
+        log.warning("PANEL_URL локальный или некорректный: URL-кнопка пропущена")
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 

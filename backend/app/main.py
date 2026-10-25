@@ -18,6 +18,8 @@ from app.api.payment_lifecycle import router as lifecycle_router
 from app.api.payments import router as payments_router
 from app.api.receipts import router as receipts_router
 from app.api.registration import router as registration_router
+from app.api.telegram_payments import internal_router as telegram_payment_bridge
+from app.api.telegram_payments import router as telegram_payments_router
 from app.api.users import router as users_router
 from app.core.config import Settings, settings
 from app.core.exceptions import (
@@ -82,6 +84,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
                 "/api/v1/one-time-payments",
                 "/api/v1/registration",
                 "/internal/v1/telegram-auth",
+                "/internal/v1/telegram-payments",
             )
         ):
             response.headers["Cache-Control"] = "no-store"
@@ -116,6 +119,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
 
     api_router.include_router(auth_router)
     api_router.include_router(mfa_router)
+    api_router.include_router(telegram_payments_router)
     api_router.include_router(audit_router)
     api_router.include_router(budget_router)
     api_router.include_router(receipts_router)
@@ -125,6 +129,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
     api_router.include_router(lifecycle_router)
     app.include_router(api_router)
     app.include_router(telegram_auth_router)
+    app.include_router(telegram_payment_bridge)
     return app
 
 

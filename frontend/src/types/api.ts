@@ -16,6 +16,7 @@ export interface SecurityMutation { security: SecurityState; recovery_codes?: st
 export interface TotpSetup { setup_id: string; secret: string; otpauth_uri: string; expires_at: string }
 export interface TelegramSetup { setup_id: string; link: string; expires_at: string }
 export interface TelegramSetupStatus { status: 'waiting' | 'claimed'; account: TelegramAccount | null; expires_at: string }
+export interface TelegramPaymentStatus { available: boolean; can_manage: boolean; account: TelegramAccount | null }
 export interface ReauthRequest { password: string; method?: MfaMethod; code?: string }
 export type RegistrationStatus = 'pending' | 'approved' | 'rejected'
 export interface RegistrationRequest { id: string; username: string; message: string; status: RegistrationStatus; created_at: string; reviewed_at: string | null; reviewed_by: string | null; decision_note: string | null }

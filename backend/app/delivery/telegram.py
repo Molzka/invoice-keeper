@@ -41,7 +41,11 @@ class TelegramSender:
                             InlineKeyboardButton(
                                 text="Открыть платёж",
                                 callback_data=f"card:{payment.occurrence_id}",
-                            )
+                            ),
+                            InlineKeyboardButton(
+                                text="Оплачено",
+                                callback_data=f"pay:{payment.occurrence_id}",
+                            ),
                         ]
                     ]
                 ),

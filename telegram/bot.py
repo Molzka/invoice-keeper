@@ -5,7 +5,6 @@ import logging
 import os
 from decimal import InvalidOperation
 from pathlib import Path
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -36,9 +35,13 @@ from api import (
     ApiUnavailable,
     PaymentsClient,
 )
+from bridge import BridgeError
 from dotenv import load_dotenv
 from features import payment_card, payment_list_item, summary_text
+from formatting import format_date
+from links import http_url, keyboard_url
 from mfa import LINK_TOKEN, MfaBridgeError, claim_telegram
+from payment_actions import claim_payment_link, decide_payment, prepare_payment
 
 T = json.loads((Path(__file__).parent / "texts.json").read_text(encoding="utf-8"))
 
@@ -66,27 +69,13 @@ def load_chat_id():
 
 
 def load_panel_url():
-    """PANEL_URL необязателен. Принимаются только http(s)-адреса."""
-    url = os.environ.get("PANEL_URL", "").strip()
-    if not url:
-        return None
-    try:
-        parsed = urlsplit(url)
-        valid = (
-            parsed.scheme in {"http", "https"}
-            and parsed.hostname
-            and parsed.username is None
-            and parsed.password is None
-            and not any(char.isspace() for char in url)
-        )
-        _ = parsed.port
-    except ValueError:
-        valid = False
-    if not valid:
+    """A local panel remains usable as text, but must never become a URL button."""
+    raw = os.environ.get("PANEL_URL", "").strip()
+    url = http_url(raw)
+    if raw and url is None:
         log.error(
             "PANEL_URL должен быть полным http(s)-адресом без учётных данных. Ссылка отключена"
         )
-        return None
     return url
 
 
@@ -115,7 +104,11 @@ public = Router()
 
 def panel_button():
     url = load_panel_url()
-    return InlineKeyboardButton(text=T["BTN_PANEL"], url=url) if url else None
+    if not url:
+        return None
+    direct = keyboard_url(url)
+    return (InlineKeyboardButton(text=T["BTN_PANEL"], url=direct) if direct
+            else InlineKeyboardButton(text=T["BTN_PANEL_LOCAL"], callback_data="cmd:site"))
 
 
 def help_keyboard(chat_id) -> InlineKeyboardMarkup:
@@ -163,7 +156,7 @@ def support_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=T["BTN_CHAT_ID"], callback_data="cmd:id")],
-            [InlineKeyboardButton(text=T["BTN_PANEL"], callback_data="cmd:site")],
+            [InlineKeyboardButton(text=T["BTN_PANEL_LOCAL"], callback_data="cmd:site")],
             [InlineKeyboardButton(text=T["BTN_MENU"], callback_data="cmd:start")],
         ]
     )
@@ -199,7 +192,9 @@ async def acknowledge(callback, text=None, *, show_alert=False):
 
 def panel_text() -> str:
     url = load_panel_url()
-    return T["PANEL"].format(url=html.escape(url, quote=False)) if url else T["PANEL_NOT_SET"]
+    if not url:
+        return T["PANEL_NOT_SET"]
+    return T["PANEL" if keyboard_url(url) else "PANEL_LOCAL"].format(url=html.escape(url, quote=False))
 
 
 def chat_id_text(chat_id: int) -> str:
@@ -212,7 +207,12 @@ def chat_id_text(chat_id: int) -> str:
 @public.message(CommandStart())
 @public.message(Command("menu"))
 async def start(message: Message, command: CommandObject):
-    if command.command == "start" and command.args and command.args.startswith("mfa_"):
+    if (
+        command.command == "start"
+        and command.args
+        and command.args.startswith(("mfa_", "paylink_"))
+    ):
+        payment_link = command.args.startswith("paylink_")
         user = message.from_user
         if (
             message.chat.type != "private"
@@ -222,18 +222,21 @@ async def start(message: Message, command: CommandObject):
         ):
             await message.answer(T["MFA_PRIVATE_ONLY"])
             return
-        token = command.args.removeprefix("mfa_")
+        token = command.args.removeprefix("paylink_" if payment_link else "mfa_")
         if LINK_TOKEN.fullmatch(token) is None:
             await message.answer(T["MFA_LINK_INVALID"])
             return
         try:
-            await claim_telegram(
-                token,
-                telegram_id=user.id,
-                chat_id=message.chat.id,
-                username=user.username,
-                display_name=user.full_name[:128],
-            )
+            if payment_link:
+                await claim_payment_link(token, user)
+            else:
+                await claim_telegram(
+                    token,
+                    telegram_id=user.id,
+                    chat_id=message.chat.id,
+                    username=user.username,
+                    display_name=user.full_name[:128],
+                )
         except MfaBridgeError as error:
             key = {
                 "invalid": "MFA_LINK_INVALID",
@@ -241,7 +244,10 @@ async def start(message: Message, command: CommandObject):
             }.get(error.reason, "MFA_UNAVAILABLE")
             await message.answer(T[key])
             return
-        await message.answer(T["MFA_LINK_CLAIMED"])
+        except BridgeError as error:
+            await message.answer(payment_error_text(error))
+            return
+        await message.answer(T["PAYMENT_LINK_CLAIMED" if payment_link else "MFA_LINK_CLAIMED"])
         return
     await message.answer(start_text(message.chat.id), reply_markup=help_keyboard(message.chat.id))
 
@@ -294,7 +300,10 @@ async def msg_denied(message: Message):
 @public.callback_query(
     lambda callback: (
         callback.data in {"cmd:payments", "cmd:overdue", "cmd:all", "cmd:summary"}
-        or bool(callback.data and callback.data.startswith(("pg:", "card:")))
+        or bool(
+            callback.data
+            and callback.data.startswith(("pg:", "card:", "pay:", "paid:", "paycancel:"))
+        )
     )
 )
 async def cb_denied(callback: CallbackQuery):
@@ -384,9 +393,15 @@ async def build_card(payment_id: str, kind="all", page=0):
     retry = f"card:{payment_id}:{kind}:{page}"
     try:
         item = await api_client.fetch_payment(payment_id)
+        markup = view_keyboard(retry, back=(kind, page), panel=True)
+        if item["status"] == "unpaid" and not item.get("is_cancelled", False):
+            markup.inline_keyboard.insert(
+                0,
+                [InlineKeyboardButton(text=T["BTN_PAID"], callback_data=f"pay:{payment_id}")],
+            )
         return (
             T["CARD_HEADER"] + "\n\n" + payment_card(item, T) + T["CARD_HINT"],
-            view_keyboard(retry, back=(kind, page), panel=True),
+            markup,
         )
     except (ApiNotConfigured, ApiUnavailable, ApiDataError) as error:
         return api_error_text(error), error_keyboard(retry, back=(kind, page))
@@ -489,11 +504,121 @@ async def paginate(callback: CallbackQuery):
     await show_callback(callback, text, markup)
 
 
+def payment_error_text(error):
+    if error.status == 429:
+        return T["API_RATE_LIMITED"]
+    return {
+        "TELEGRAM_ACCOUNT_REQUIRED": T["PAYMENT_LINK_REQUIRED"],
+        "TELEGRAM_CHAT_DENIED": T["DENIED"],
+        "TELEGRAM_CONFIRMATION_EXPIRED": T["PAYMENT_CONFIRM_EXPIRED"],
+        "TELEGRAM_PAYMENT_CHANGED": T["PAYMENT_CHANGED"],
+        "PAYMENT_CANCELLED": T["PAYMENT_CANCELLED"],
+        "PAYMENT_ALREADY_PAID": T["PAYMENT_ALREADY_PAID"],
+        "PAYMENT_OCCURRENCE_NOT_FOUND": T["PAYMENT_NOT_FOUND"],
+        "TELEGRAM_LINK_INVALID": T["MFA_LINK_INVALID"],
+        "TELEGRAM_LINK_USED": T["MFA_LINK_INVALID"],
+        "MFA_CHALLENGE_EXPIRED": T["MFA_LINK_INVALID"],
+        "AUTH_REQUIRED": T["MFA_LINK_INVALID"],
+        "ADMIN_ACCOUNT_PROTECTED": T["PAYMENT_ADMIN_CONFIG"],
+        "TELEGRAM_ID_CONFLICT": T["PAYMENT_ID_CONFLICT"],
+    }.get(error.code, T["PAYMENT_RESULT_UNKNOWN"])
+
+
+@secure.callback_query(F.data.startswith("pay:"))
+async def cb_prepare_payment(callback: CallbackQuery):
+    if callback.from_user.is_bot:
+        await acknowledge(callback, T["DENIED"], show_alert=True)
+        return
+    try:
+        occurrence_id = str(UUID(callback.data.removeprefix("pay:")))
+    except ValueError:
+        await acknowledge(callback, T["CALLBACK_EXPIRED"], show_alert=True)
+        return
+    if not await acknowledge(callback):
+        return
+    try:
+        prepared = await prepare_payment(
+            occurrence_id, callback.from_user.id, callback.message.chat.id
+        )
+    except BridgeError as error:
+        await callback.message.answer(payment_error_text(error))
+        return
+    token = prepared["token"]
+    text = T["PAYMENT_CONFIRM"].format(
+        card=payment_card(prepared["payment"], T),
+        paid_on=format_date(prepared["paid_on"]),
+        timezone=html.escape(prepared["timezone"], quote=False),
+        person=html.escape(callback.from_user.full_name, quote=False),
+    )
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=T["PAYMENT_CONFIRM_DATE"].format(date=format_date(prepared["paid_on"])),
+                    callback_data=f"paid:{token}",
+                )
+            ],
+            [InlineKeyboardButton(text="Отмена", callback_data=f"paycancel:{token}")],
+        ]
+    )
+    if button := panel_button():
+        markup.inline_keyboard.append([button])
+    await callback.message.answer(text, reply_markup=markup)
+
+
+@secure.callback_query(F.data.startswith("paid:") | F.data.startswith("paycancel:"))
+async def cb_confirm_payment(callback: CallbackQuery):
+    action, token = callback.data.split(":", 1)
+    if callback.from_user.is_bot or LINK_TOKEN.fullmatch(token) is None:
+        await acknowledge(callback, T["CALLBACK_EXPIRED"], show_alert=True)
+        return
+    if not await acknowledge(callback):
+        return
+    cancel = action == "paycancel"
+    try:
+        result = await decide_payment(
+            token, callback.from_user.id, callback.message.chat.id, cancel=cancel
+        )
+    except BridgeError as error:
+        # Keep the original token: a timeout can be retried without a second payment.
+        await callback.message.answer(payment_error_text(error))
+        return
+    if cancel:
+        await show_callback(
+            callback,
+            T["PAYMENT_CONFIRM_CANCELLED"],
+            help_keyboard(callback.message.chat.id),
+        )
+    else:
+        heading = (
+            T["PAYMENT_SAVED"] if result["outcome"] == "paid" else T["PAYMENT_ALREADY_PROCESSED"]
+        )
+        item = result["payment"]
+        await show_callback(
+            callback,
+            heading + "\n\n" + payment_card(item, T),
+            view_keyboard(f"card:{item['id']}", panel=True),
+        )
+
+
 # ---------- запуск ----------
 
 
 async def on_error(event: ErrorEvent) -> bool:
     """Ошибка в обработчике не должна останавливать бота. Содержимое сообщений не логируется."""
+    if isinstance(event.exception, TelegramBadRequest):
+        description = event.exception.message.lower()
+        reason = next((kind for needle, kind in (
+            ("wrong http url", "invalid_button_url"),
+            ("button_url_invalid", "invalid_button_url"),
+            ("button_data_invalid", "invalid_callback_data"),
+            ("can't parse entities", "invalid_message_html"),
+            ("message is too long", "message_too_long"),
+            ("message can't be edited", "message_not_editable"),
+        ) if needle in description), "unclassified_bad_request")
+        log.error("ошибка в обработчике: TelegramBadRequest method=%s reason=%s",
+                  getattr(event.exception.method, "__api_method__", "unknown"), reason)
+        return True
     log.error(
         "ошибка в обработчике: %s",
         type(event.exception).__name__,
@@ -506,10 +631,11 @@ async def main():
     if not token:
         raise SystemExit("BOT_TOKEN не задан: укажите его в .env или в environment Compose")
 
+    panel_url = load_panel_url()
     log.info(
         "конфигурация: CHAT_ID %s, PANEL_URL %s",
         "задан" if ALLOWED_CHAT is not None else "не задан",
-        load_panel_url() or "не задан",
+        "сетевая ссылка" if keyboard_url(panel_url) else "локальный адрес" if panel_url else "не задан",
     )
 
     dp = Dispatcher()

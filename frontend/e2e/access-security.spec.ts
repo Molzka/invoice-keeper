@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import type { Page, TestInfo } from '@playwright/test';
 import type { AuthResponse, MfaChallenge } from '../src/types/api';
@@ -39,6 +40,28 @@ function totp(secret: string) {
   counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
   const digest = createHmac('sha1', key).update(counter).digest();
   return ((digest.readUInt32BE(digest[19] & 15) & 0x7fffffff) % 1000000).toString().padStart(6, '0');
+}
+
+async function claimPaymentLink(token: string, telegramId: number) {
+  const container = process.env.E2E_BACKEND_CONTAINER;
+  if (!container) throw new Error('Set E2E_BACKEND_CONTAINER to the isolated test backend.');
+  // Exercise the private endpoint inside the test container; never publish it through Nginx.
+  const script = [
+    'import json, os, sys, urllib.request',
+    'if os.environ.get("APP_ENV") != "test": raise SystemExit("Test backend required")',
+    'payload = json.load(sys.stdin)',
+    'request = urllib.request.Request("http://127.0.0.1:8000/internal/v1/telegram-payments/claim", json.dumps(payload).encode(), {"Content-Type": "application/json", "Authorization": "Bearer " + os.environ["BOT_INTERNAL_TOKEN"]}, method="POST")',
+    'with urllib.request.urlopen(request, timeout=10) as response: result = json.load(response)',
+    'if result != {"accepted": True}: raise SystemExit("Claim not accepted")',
+    'print("accepted")',
+  ].join('\n');
+  await new Promise<void>((resolve, reject) => {
+    const child = execFile('docker', ['exec', '-i', container, 'python', '-c', script], { timeout: 20_000 }, (error, output) => {
+      if (error || output.trim() !== 'accepted') reject(new Error('Private payment-link fixture failed. Check the isolated backend settings.'));
+      else resolve();
+    });
+    child.stdin?.end(JSON.stringify({ token, telegram_id: telegramId, chat_id: telegramId, username: 'payment_test_member', display_name: 'Пользователь оплаты' }));
+  });
 }
 
 test('заявка с локальной CAPTCHA, одобрение, добровольная TOTP и одноразовое восстановление', async ({ page, browser, baseURL }, info) => {
@@ -95,6 +118,38 @@ test('заявка с локальной CAPTCHA, одобрение, добро
     const security = page.getByRole('dialog', { name: 'Безопасность', exact: true });
     await expect(security.getByText('Дополнительная защита не подключена', { exact: true })).toBeVisible();
     await capture(page, info, 'security-optional');
+    await test.step('Оплата в Telegram привязывается отдельно от MFA и требует подтверждения аккаунта', async () => {
+      await security.getByRole('button', { name: 'Подключить оплату в Telegram', exact: true }).click();
+      await security.getByLabel('Текущий пароль', { exact: true }).fill(password);
+      const response = await responseAfter(page, 'POST', '/auth/telegram-payments/setup', 200,
+        () => security.getByRole('button', { name: 'Подключить оплату в Telegram', exact: true }).click());
+      const setup = await response.json() as { link: string };
+      await expect(security.getByRole('link', { name: 'Открыть бота для привязки' })).toHaveAttribute('href', setup.link);
+      await claimPaymentLink(setup.link.split('start=paylink_')[1], 987000001);
+      await security.getByRole('button', { name: 'Проверить аккаунт', exact: true }).click();
+      await expect(security.getByText('Пользователь оплаты', { exact: true })).toBeVisible();
+      await capture(page, info, 'telegram-payment-link');
+      await responseAfter(page, 'POST', '/auth/telegram-payments/confirm', 200,
+        () => security.getByRole('button', { name: 'Подтвердить мой Telegram', exact: true }).click());
+      expect((await (await page.request.get('/api/v1/auth/security')).json() as { mfa_enabled: boolean }).mfa_enabled).toBe(false);
+      await expect(security.getByText('Пользователь оплаты', { exact: true })).toBeVisible();
+      await security.getByRole('button', { name: 'Закрыть панель', exact: true }).click();
+      // Simulate temporarily disabled setup, keeping the actual server binding and DELETE route.
+      await page.route('**/api/v1/auth/telegram-payments', async route => {
+        if (route.request().method() !== 'GET') return route.continue();
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...await response.json(), available: false } });
+      });
+      await page.getByRole('button', { name: 'Безопасность', exact: true }).click();
+      await expect(security.getByText('Подключение пока недоступно. Попросите администратора настроить бота.')).toBeVisible();
+      await expect(security.getByRole('button', { name: 'Отключить оплату в Telegram', exact: true })).toBeEnabled();
+      await security.getByRole('button', { name: 'Отключить оплату в Telegram', exact: true }).click();
+      await security.getByLabel('Текущий пароль', { exact: true }).fill(password);
+      await responseAfter(page, 'DELETE', '/auth/telegram-payments', 204,
+        () => security.getByRole('button', { name: 'Отключить оплату в Telegram', exact: true }).click());
+      await expect(security.getByText('Аккаунт для оплаты ещё не подключён.', { exact: true })).toBeVisible();
+      await page.unroute('**/api/v1/auth/telegram-payments');
+    });
     await security.locator('.security-row').filter({ hasText: 'Приложение-аутентификатор' }).getByRole('button', { name: 'Подключить', exact: true }).click();
     await security.getByLabel('Текущий пароль', { exact: true }).fill(password);
     const setup = await responseAfter(page, 'POST', '/auth/security/totp/setup', 200,

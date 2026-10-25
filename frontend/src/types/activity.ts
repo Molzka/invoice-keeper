@@ -1,8 +1,10 @@
 import type { Page } from './api'
 
-export const AUDIT_ACTIONS = ['account.login', 'account.login_failed', 'account.logout', 'payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'payment.receipt_updated', 'payment.receipt_deleted', 'payment.amount_changed', 'payment.terms_changed', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'registration.approved', 'registration.rejected', 'account.mfa_enabled', 'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'] as const
+export const AUDIT_ACTIONS = ['account.telegram_linked', 'account.telegram_unlinked', 'account.login', 'account.login_failed', 'account.logout', 'payment.deleted', 'payment.period_deleted', 'payment.created', 'payment.stopped', 'payment.paid', 'payment.unpaid', 'payment.date_changed', 'payment.receipt_updated', 'payment.receipt_deleted', 'payment.amount_changed', 'payment.terms_changed', 'user.created', 'user.updated', 'user.deleted', 'password.changed', 'registration.approved', 'registration.rejected', 'account.mfa_enabled', 'account.mfa_disabled', 'account.mfa_changed', 'account.recovery_regenerated'] as const
 export type AuditAction = typeof AUDIT_ACTIONS[number]
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  'account.telegram_linked': 'Подключена оплата в Telegram',
+  'account.telegram_unlinked': 'Отключена оплата в Telegram',
   'account.login': 'Вход в систему',
   'account.login_failed': 'Неудачная попытка входа',
   'account.logout': 'Выход из системы',

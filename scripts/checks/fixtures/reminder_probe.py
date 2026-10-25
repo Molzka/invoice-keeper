@@ -235,8 +235,8 @@ async def run(mode, state):
             require(len(markup_values) == 1, "Reminder is missing its payment button")
             keyboard = json.loads(markup_values[0]).get("inline_keyboard", [])
             require(
-                len(keyboard) == 1 and len(keyboard[0]) == 1,
-                "Reminder must have exactly one payment button",
+                len(keyboard) == 1 and len(keyboard[0]) == 2,
+                "Reminder must have both view and payment buttons",
             )
             occurrence_id = next(
                 row["occurrence_id"] for row in sent if str(row["payment_id"]) == state[title]
@@ -245,6 +245,11 @@ async def run(mode, state):
                 keyboard[0][0].get("text") == "Открыть платёж"
                 and keyboard[0][0].get("callback_data") == f"card:{occurrence_id}",
                 "Reminder button does not identify its persisted payment occurrence",
+            )
+            require(
+                keyboard[0][1].get("text") == "Оплачено"
+                and keyboard[0][1].get("callback_data") == f"pay:{occurrence_id}",
+                "Payment button does not identify the reminder period",
             )
         return {"confirmed": sent, "requests": len(requests)}
     finally:

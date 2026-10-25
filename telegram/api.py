@@ -97,6 +97,7 @@ def parse_payment(data):
         or "paid_on" not in data
         or type(data.get("days_late")) is not int
         or data["days_late"] < 0
+        or ("is_cancelled" in data and type(data["is_cancelled"]) is not bool)
         or any(
             type(data.get(key)) is not bool
             for key in ("is_overdue", "paid_late", "recurring_payment_is_active")
