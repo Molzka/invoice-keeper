@@ -92,10 +92,14 @@ function range(params: URLSearchParams, pair = false): { from: string | undefine
 }
 function countDays(from: string, to: string) { return Math.max(0, Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000)) }
 function occurrenceView(item: PaymentOccurrence): PaymentOccurrence {
-  const active = db.recurring.find(rule => rule.id === item.recurring_payment_id)?.is_active ?? false
-  return { ...item, is_overdue: item.status === 'unpaid' && item.due_date < DEMO_TODAY,
+  const rule = db.recurring.find(rule => rule.id === item.recurring_payment_id)
+  return { ...item, title: rule?.title || item.title, periodicity: rule?.periodicity || item.periodicity, is_overdue: item.status === 'unpaid' && item.due_date < DEMO_TODAY,
     paid_late: item.status === 'paid' && item.paid_on !== null && item.paid_on > item.due_date,
-    days_late: countDays(item.due_date, item.paid_on || DEMO_TODAY), recurring_payment_is_active: active }
+    days_late: countDays(item.due_date, item.paid_on || DEMO_TODAY), recurring_payment_is_active: rule?.is_active ?? false }
+}
+function paymentTitle(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim() || Array.from(value.trim()).length > 200 || value.includes('\0')) invalid('title', 'Введите название от 1 до 200 символов.')
+  return value.trim()
 }
 function money(value: unknown): string {
   if (typeof value !== 'string' || !/^\d{1,12}\.\d{2}$/.test(value) || BigInt(value.replace('.', '')) < 1n) invalid('amount', 'Передайте положительную сумму строкой с двумя знаками после точки', 'INVALID_MONEY_FORMAT')
@@ -126,7 +130,7 @@ function addOccurrences(rule: RecurringPayment) {
     dates.push(due)
   }
   rule.next_due_date = dates.find(item => item >= DEMO_TODAY) || null
-  dates.forEach(due_date => db.occurrences.push({ id: crypto.randomUUID(), recurring_payment_id: rule.id, title: rule.title,
+  dates.filter(due => !db.occurrences.some(item => item.recurring_payment_id === rule.id && item.due_date === due)).forEach(due_date => db.occurrences.push({ id: crypto.randomUUID(), recurring_payment_id: rule.id, title: rule.title,
     periodicity: rule.periodicity, recurrence_interval: rule.recurrence_interval,
     amount: rule.amount, currency: rule.currency, due_date, status: 'unpaid', paid_on: null, is_overdue: due_date < DEMO_TODAY,
     paid_late: false, days_late: countDays(due_date, DEMO_TODAY), recurring_payment_is_active: true, amount_is_custom: false }))
@@ -330,6 +334,36 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
       const items = db.occurrences.map(occurrenceView).filter(item => (booleanQuery(url.searchParams, 'include_cancelled') || !item.is_cancelled) && (!from || item.due_date >= from) && (!to || item.due_date <= to) && (!status || item.status === status) && (!currency || item.currency === currency) && (!ruleId || item.recurring_payment_id === ruleId) && (overdue === undefined || item.is_overdue === overdue)).sort((a, b) => a.due_date.localeCompare(b.due_date) || a.id.localeCompare(b.id))
       return json(page(items, url.searchParams))
     }
+    if (/^\/payment-occurrences\/[^/]+\/details$/.test(path) && method === 'PATCH') {
+      requireAdmin(user); queryAllowed(url.searchParams, [])
+      const id = path.split('/')[2]; uuid(id)
+      const body = bodyObject(init, ['title', 'amount', 'currency', 'periodicity'], ['title'])
+      const title = paymentTitle(body.title)
+      const hasAmount = 'amount' in body || 'currency' in body
+      const amount = hasAmount ? money(body.amount) : undefined
+      if (hasAmount && (typeof body.currency !== 'string' || !['RUB', 'USD', 'EUR'].includes(body.currency))) invalid('currency', 'Выберите RUB, USD или EUR')
+      if ('periodicity' in body && body.periodicity !== 'monthly') invalid('periodicity', 'Выберите ежемесячное повторение')
+      const item = db.occurrences.find(row => row.id === id) || fault(404, 'PAYMENT_OCCURRENCE_NOT_FOUND', 'Период не найден')
+      const rule = db.recurring.find(row => row.id === item.recurring_payment_id)!
+      if (item.is_cancelled) fault(409, 'PAYMENT_CANCELLED', 'Период удалён')
+      if (hasAmount && item.status === 'paid') fault(409, 'PAYMENT_ALREADY_PAID', 'Сумму и валюту оплаченного периода изменить нельзя')
+      const converting = body.periodicity === 'monthly' && rule.periodicity === 'once'
+      if (converting && (!rule.is_active || rule.is_archived)) fault(409, 'RECURRING_PAYMENT_STOPPED', 'Удалённый платёж нельзя повторять')
+      const changes = [{ field: 'title', label: 'Название', before: rule.title, after: title }]
+      if (amount !== undefined && (item.amount !== amount || item.currency !== body.currency)) {
+        changes.push({ field: 'amount', label: 'Сумма', before: item.amount, after: amount }, { field: 'currency', label: 'Валюта', before: item.currency, after: body.currency as string })
+        item.amount = amount; item.currency = body.currency as Currency; item.amount_is_custom = true
+      }
+      rule.title = title
+      for (const period of db.occurrences.filter(row => row.recurring_payment_id === rule.id)) period.title = title
+      if (rule.periodicity === 'once') { rule.amount = item.amount; rule.currency = item.currency }
+      if (converting) {
+        rule.periodicity = 'monthly'; addOccurrences(rule)
+        changes.push({ field: 'periodicity', label: 'Повторение', before: 'Разовый', after: 'Ежемесячный' })
+      }
+      if (changes.some(change => change.before !== change.after)) audit.append({ actor: user, action: 'payment.terms_changed', entity: { type: 'payment', id: rule.id, title }, changes })
+      return json(occurrenceView(item))
+    }
     if (/^\/payment-occurrences\/[^/]+\/amount$/.test(path) && method === 'PATCH') {
       requireAdmin(user); queryAllowed(url.searchParams, [])
       const id = path.split('/')[2]; uuid(id)
@@ -404,14 +438,20 @@ export async function mockFetch(input: string, init: RequestInit = {}): Promise<
     if (/^\/recurring-payments\/[^/]+$/.test(path) && method === 'PATCH') {
       requireAdmin(user); queryAllowed(url.searchParams, [])
       const id = path.split('/')[2]; uuid(id)
-      const body = bodyObject(init, ['amount', 'currency'], ['amount', 'currency'])
+      const body = bodyObject(init, ['title', 'amount', 'currency'], ['amount', 'currency'])
+      const title = 'title' in body ? paymentTitle(body.title) : undefined
       const amount = exactAmount(BigInt(money(body.amount).replace('.', '')))
       if (typeof body.currency !== 'string' || !['RUB', 'USD', 'EUR'].includes(body.currency)) invalid('currency', 'Выберите RUB, USD или EUR')
       const currency = body.currency as Currency
       const payment = db.recurring.find(row => row.id === id) || fault(404, 'RECURRING_PAYMENT_NOT_FOUND', 'Регулярный платёж не найден')
-      if (!payment.is_active) fault(409, 'RECURRING_PAYMENT_STOPPED', 'Условия прекращённого платежа изменить нельзя')
+      if (!payment.is_active || payment.periodicity === 'once') fault(409, 'RECURRING_PAYMENT_STOPPED', 'Условия прекращённого платежа изменить нельзя')
       if (DEMO_TODAY.startsWith('9999-12')) fault(422, 'AMOUNT_EFFECTIVE_DATE_OUT_OF_RANGE', 'Следующий месяц выходит за поддерживаемый диапазон дат')
       const effective_from = calendarMonthDate(DEMO_TODAY, 1, 1)
+      if (title !== undefined && title !== payment.title) {
+        audit.append({ actor: user, action: 'payment.terms_changed', entity: { type: 'payment', id: payment.id, title }, changes: [{ field: 'title', label: 'Название', before: payment.title, after: title }] })
+        payment.title = title
+        for (const period of db.occurrences.filter(row => row.recurring_payment_id === payment.id)) period.title = title
+      }
       if (payment.amount === amount && payment.currency === currency) return json({ payment, effective_from: payment.amount_effective_from || effective_from, updated_periods: 0, preserved_custom_periods: 0 })
       const future = db.occurrences.filter(item => item.recurring_payment_id === id && item.due_date >= effective_from && item.status === 'unpaid' && !item.is_cancelled)
       const preserved_custom_periods = future.filter(item => item.amount_is_custom).length

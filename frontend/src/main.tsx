@@ -9,7 +9,6 @@ import './styles/motion.css';
 import './styles/workspace-art.css';
 import './styles/dashboard-detail.css';
 import './styles/button-polish.css';
-import './styles/recurring-preview.css';
 import './styles/summary-links.css';
 import './styles/change-password.css';
 import './styles/payment-calendar.css';

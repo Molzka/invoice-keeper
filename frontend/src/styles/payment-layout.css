@@ -32,18 +32,22 @@
   #payment-results .payments-table .payment-due-column,
   #payment-results .payments-table .payment-paid-column { width: 12%; }
   #payment-results .payments-table .payment-status-column { width: 20%; }
-  #payment-results .payments-table .payment-actions-column { width: 280px; }
+  #payment-results .payments-table .payment-actions-column { width: 310px; }
   #payment-results .payments-table th:first-child,
   #payment-results .payments-table td:first-child { width: auto; }
   #payment-results .payments-table th:last-child,
-  #payment-results .payments-table td:last-child { width: 280px; }
+  #payment-results .payments-table td:last-child { width: 310px; }
   #payment-results .payments-table td { padding-top: 16px; padding-bottom: 16px; }
 }
 @media (max-width: 760px) {
   #payment-results .payments-table colgroup { display: none; }
-  #payment-results .payments-table .payment-row-actions { justify-content: flex-start; gap: 8px; }
+  #payment-results .payments-table .payment-row-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  #payment-results .payment-row-actions > .btn:first-child { grid-column: 1 / -1; }
   #payment-results .payment-row-actions > .btn { flex: 0 1 auto; min-width: 0; height: 44px; min-height: 44px; padding: 8px 10px; font-size: 11px; }
   #payment-results .payment-row-actions > .icon-button { flex-basis: 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  #payment-results .history-chip { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  #payment-results .history-chip > strong { overflow-wrap: anywhere; }
+  #payment-results .history-chip > button { grid-column: 2; justify-self: start; }
 }
 @media (pointer: coarse) {
   #payment-results .payment-row-actions > .btn { min-height: 44px; height: 44px; }
@@ -114,10 +118,10 @@
 .recurring-table .inline-actions > .icon-button { flex:0 0 40px; width:40px; height:40px; min-height:40px; }
 @media (min-width:761px) {
   .recurring-table { min-width:1020px; }
-  .recurring-table th:last-child, .recurring-table td:last-child { width:286px; }
+  .recurring-table th:last-child, .recurring-table td:last-child { width:340px; }
 }
 @media (max-width:760px) {
-  .recurring-table .inline-actions { justify-content:flex-start; }
+  .recurring-table .inline-actions { justify-content:flex-start; flex-wrap:wrap; }
   .recurring-table .inline-actions > .btn { height:44px; min-height:44px; padding:8px 12px; }
   .recurring-table .inline-actions > .icon-button { flex-basis:44px; width:44px; height:44px; min-height:44px; }
 }

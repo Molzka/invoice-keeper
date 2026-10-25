@@ -100,16 +100,16 @@ test('Unicode-пароли и названия сохраняются без о�
     await test.step('Лимит названия считает символы, а не UTF-16; сервер сохраняет название полностью', async () => {
       await page.getByRole('link', { name: 'Регулярные', exact: true }).click();
       await page.getByRole('button', { name: 'Добавить платёж', exact: true }).first().click();
-      const form = page.getByRole('dialog', { name: 'Новый регулярный платёж', exact: true });
-      await form.locator('#recurring-title').fill('🧾'.repeat(201));
-      await form.locator('#recurring-amount').fill('100.50');
+      const form = page.getByRole('dialog', { name: 'Новый платёж', exact: true });
+      await form.getByLabel('Название платежа', { exact: true }).fill('🧾'.repeat(201));
+      await form.getByLabel('Сумма', { exact: true }).fill('100.50');
       await expect(form.getByRole('button', { name: 'Первый срок оплаты', exact: true })).not.toContainText('дд.мм.гггг');
       await form.getByRole('button', { name: 'Добавить платёж', exact: true }).click();
       await expect(form.getByText('Введите название от 1 до 200 символов.', { exact: true })).toBeVisible();
       expect(rulePosts).toBe(0);
       const title = '🧾'.repeat(100) + randomUUID().slice(0, 8);
-      await form.locator('#recurring-title').fill(title);
-      await expect(form.locator('#recurring-title')).toHaveValue(title);
+      await form.getByLabel('Название платежа', { exact: true }).fill(title);
+      await expect(form.getByLabel('Название платежа', { exact: true })).toHaveValue(title);
       const created = await responseAfter(page, 'POST', '/recurring-payments', 201,
         () => form.getByRole('button', { name: 'Добавить платёж', exact: true }).click());
       const rule = await created.json() as { id: string; title: string };
@@ -211,6 +211,7 @@ test('смена рабочего дня обновляет просрочку �
     await page.goto(`/#calendar?month=${today.slice(0, 7)}&day=${today}&status=all`);
     await expect(page.locator('.calendar-explanation')).toContainText(session.timezone);
     await page.getByRole('complementary', { name: 'Платежи выбранного дня' }).getByRole('button', { name: new RegExp(`^${title},`) }).click();
+    await page.getByRole('dialog', { name: 'Карточка платежа', exact: true }).getByRole('button', { name: 'Отметить оплату', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: 'Отметить оплату', exact: true });
     await expect(drawer.getByRole('button', { name: 'Подтвердить оплату', exact: true })).toBeEnabled();
     await drawer.getByRole('button', { name: 'Фактическая дата оплаты', exact: true }).click();

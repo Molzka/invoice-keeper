@@ -1,7 +1,7 @@
 import type { PaymentsBudget, PaymentReceipt, ReceiptListFilters, ReceiptPage, OneTimePaymentRequest } from '../types/extras'
 import type { AuditFilters, AuditPage } from '../types/activity'
 import type {
-  AmountCurrencyUpdateRequest, RecurringAmountUpdateResponse, AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
+  AmountCurrencyUpdateRequest, PaymentDetailsUpdateRequest, RecurringAmountUpdateResponse, AuthResponse, ChangePasswordRequest, CreateRecurringPaymentRequest, CreateUserRequest, ErrorResponse,
   LoginRequest, OccurrenceFilters, Page, PaginationParams, PaymentOccurrence, PaymentSummary,
   RecurringPayment, RecurringPaymentFilters, SummaryParams, UpdateOccurrenceRequest, UpdateUserRequest, User,
   LoginResponse, MfaMethod, MfaFactor, SecurityState, SecurityMutation, TotpSetup, TelegramSetup, TelegramSetupStatus, TelegramPaymentStatus, ReauthRequest, RegistrationRequest, RegistrationStatus, RegistrationPayload,
@@ -157,6 +157,8 @@ export const api = {
   getOccurrence: (id: string) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id)),
   updateOccurrence: (id: string, payload: UpdateOccurrenceRequest) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id), 'PATCH', payload),
   updateOccurrenceAmount: (id: string, payload: AmountCurrencyUpdateRequest) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id) + '/amount', 'PATCH', { amount: payload.amount, currency: payload.currency }),
+  updateOccurrenceDetails: (id: string, payload: PaymentDetailsUpdateRequest) => request<PaymentOccurrence>('/payment-occurrences/' + encodeURIComponent(id) + '/details', 'PATCH', payload),
+  updateRecurringPayment: (id: string, payload: AmountCurrencyUpdateRequest & { title: string }) => request<RecurringAmountUpdateResponse>('/recurring-payments/' + encodeURIComponent(id), 'PATCH', payload),
   updateRecurringAmount: (id: string, payload: AmountCurrencyUpdateRequest) => request<RecurringAmountUpdateResponse>('/recurring-payments/' + encodeURIComponent(id), 'PATCH', { amount: payload.amount, currency: payload.currency }),
   listRecurringPayments: (filters: RecurringPaymentFilters = {}) => request<Page<RecurringPayment>>('/recurring-payments' + query(filters)),
   createRecurringPayment: (payload: CreateRecurringPaymentRequest) => request<RecurringPayment>('/recurring-payments', 'POST', payload),

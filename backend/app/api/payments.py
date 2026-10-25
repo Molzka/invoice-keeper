@@ -23,6 +23,7 @@ from app.schemas.payments import (
     RecurringPaymentCreate,
     RecurringPaymentList,
     RecurringPaymentRead,
+    RecurringPaymentUpdate,
 )
 from app.services.payment_summary import get_payments_summary
 from app.services.payments import (
@@ -260,7 +261,7 @@ async def patch_payment_occurrence_amount(
 @router.patch(
     "/recurring-payments/{payment_id}",
     response_model=RecurringAmountUpdateResponse,
-    summary="Изменить сумму и валюту регулярного платежа со следующего месяца",
+    summary="Изменить название и условия регулярного платежа",
     dependencies=[Depends(require_json_request)],
     responses={
         403: error_response("FORBIDDEN", "Требуются права администратора"),
@@ -270,7 +271,7 @@ async def patch_payment_occurrence_amount(
 )
 async def patch_recurring_payment_amount(
     payment_id: UUID,
-    payload: AmountCurrencyUpdate,
+    payload: RecurringPaymentUpdate,
     admin: AdminUser,
     _csrf: Csrf,
     db: DbSession,

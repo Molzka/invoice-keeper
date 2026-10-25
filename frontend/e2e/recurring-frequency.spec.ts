@@ -11,10 +11,10 @@ test('выбор интервала обновляет даты и сохран�
   await page.getByLabel('Пароль', { exact: true }).fill(process.env.E2E_ADMIN_PASSWORD!);
   await page.getByRole('button', { name: 'Войти', exact: true }).click();
   await page.getByRole('button', { name: 'Добавить платёж', exact: true }).first().click();
-  const form = page.getByRole('dialog', { name: 'Новый регулярный платёж', exact: true });
+  const form = page.getByRole('dialog', { name: 'Новый платёж', exact: true });
   const title = `Сервер команды · ${randomUUID().slice(0, 8)}`;
   await form.getByLabel('Название платежа', { exact: true }).fill(title);
-  await form.locator('#recurring-amount').fill('1500');
+  await form.getByLabel('Сумма', { exact: true }).fill('1500');
   await form.getByRole('spinbutton', { name: /^Повторять раз в/ }).fill('0');
   await form.getByRole('button', { name: 'Добавить платёж', exact: true }).click();
   await expect(form.getByText('Введите целое число от 1 до 365.', { exact: true })).toBeVisible();
@@ -22,9 +22,13 @@ test('выбор интервала обновляет даты и сохран�
   for (const label of ['Дни', 'Месяцы', 'Годы', 'Недели']) {
     await form.getByRole('combobox', { name: 'Периодичность', exact: true }).click();
     await page.getByRole('option', { name: label, exact: true }).click();
-    await expect(form.locator('.recurring-preview time')).toHaveCount(3);
+    await expect(form.locator('.payment-schedule-preview time')).toHaveCount(3);
   }
-  const dates = await form.locator('.recurring-preview time').evaluateAll(elements => elements.map(element => element.getAttribute('datetime')!));
+  await form.getByRole('radio', { name: /Разовый/ }).check();
+  await form.getByRole('radio', { name: /Регулярный/ }).check();
+  await expect(form.getByRole('spinbutton', { name: 'Повторять раз в', exact: true })).toHaveValue('2');
+  await expect(form.getByRole('combobox', { name: 'Периодичность', exact: true })).toContainText('Недели');
+  const dates = await form.locator('.payment-schedule-preview time').evaluateAll(elements => elements.map(element => element.getAttribute('datetime')!));
   expect(Date.parse(dates[1]) - Date.parse(dates[0])).toBe(14 * 86400000);
   expect(Date.parse(dates[2]) - Date.parse(dates[1])).toBe(14 * 86400000);
   // Verify the select can also be operated without a pointer.
@@ -34,7 +38,7 @@ test('выбор интервала обновляет даты и сохран�
   await expect(form.getByRole('combobox', { name: 'Периодичность', exact: true })).toBeFocused();
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
-    await form.locator('.recurring-preview').scrollIntoViewIfNeeded();
+    await form.locator('.payment-schedule-preview').scrollIntoViewIfNeeded();
     expect(await page.locator('html').evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(width);
     expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     const path = info.outputPath(`frequency-${width}.png`);

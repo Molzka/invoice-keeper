@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import DEFAULT_TIMEZONE
 from app.delivery.locking import lock_payments
 from app.models import PaymentOccurrence, RecurringPayment, User
-from app.schemas.payments import AmountCurrencyUpdate, PaymentStateUpdate, RecurringPaymentCreate
+from app.schemas.payments import (
+    AmountCurrencyUpdate,
+    PaymentStateUpdate,
+    RecurringPaymentCreate,
+    RecurringPaymentUpdate,
+)
 from app.services.audit import record_audit_event
 from app.services.errors import api_error
 from app.services.payment_calendar import next_due_date
@@ -389,6 +394,7 @@ async def update_occurrence_amount(
     today: date,
     *,
     actor: User | None = None,
+    commit: bool = True,
 ) -> dict:
     payment, occurrence = await _lock_occurrence(db, occurrence_id)
     require_live_occurrence(occurrence)
@@ -433,7 +439,8 @@ async def update_occurrence_amount(
                 ],
             )
         occurrence.amount_is_custom = True
-    await db.commit()
+    if commit:
+        await db.commit()
     return occurrence_data(payment, occurrence, today)
 
 
@@ -452,7 +459,7 @@ def next_amount_effective_date(today: date) -> date:
 async def update_recurring_amount(
     db: AsyncSession,
     payment_id: UUID,
-    payload: AmountCurrencyUpdate,
+    payload: RecurringPaymentUpdate,
     today: date,
     *,
     actor: User | None = None,
@@ -470,6 +477,25 @@ async def update_recurring_amount(
             "RECURRING_PAYMENT_STOPPED",
             "Нельзя изменить условия прекращённого регулярного платежа",
         )
+    if payload.title is not None and payload.title != payment.title:
+        if actor is not None:
+            record_audit_event(
+                db,
+                actor=actor,
+                action="payment.terms_changed",
+                entity_type="payment",
+                entity_id=payment.id,
+                entity_title=payload.title,
+                changes=[
+                    {
+                        "field": "title",
+                        "label": "Название",
+                        "before": payment.title,
+                        "after": payload.title,
+                    }
+                ],
+            )
+        payment.title = payload.title
     amount = Decimal(payload.amount)
     if payment.amount == amount and payment.currency == payload.currency:
         await db.commit()
